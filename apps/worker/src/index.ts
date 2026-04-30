@@ -131,8 +131,8 @@ const app = new Elysia()
     set.status = set.status === 200 ? 500 : set.status
     return { ok: false, error: error instanceof Error ? error.message : 'Internal error' }
   })
-  .listen(PORT)
+  .listen({ port: PORT, hostname: '0.0.0.0' })
 
-console.log(`🚀 Worker listening on http://localhost:${PORT}`)
+console.log(`🚀 Worker listening on http://0.0.0.0:${PORT}`)
 
 export type Worker = typeof app
