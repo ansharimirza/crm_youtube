@@ -1,0 +1,28 @@
+{
+  "name": "@ytcrm/api",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "bun run --hot src/index.ts",
+    "start": "bun run src/index.ts",
+    "build": "bun build src/index.ts --target=bun --outdir=dist",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "bun run src/db/migrate.ts",
+    "db:studio": "drizzle-kit studio"
+  },
+  "dependencies": {
+    "@elysiajs/cors": "^1.1.1",
+    "@elysiajs/jwt": "^1.1.1",
+    "@elysiajs/static": "^1.1.1",
+    "drizzle-orm": "^0.36.4",
+    "elysia": "^1.1.25",
+    "googleapis": "^144.0.0",
+    "postgres": "^3.4.5"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.1.13",
+    "drizzle-kit": "^0.28.1",
+    "typescript": "^5.6.3"
+  }
+}

@@ -1,0 +1,89 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 240 10% 3.9%;
+    --card: 0 0% 100%;
+    --card-foreground: 240 10% 3.9%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 240 10% 3.9%;
+    --primary: 0 84% 55%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 240 4.8% 95.9%;
+    --secondary-foreground: 240 5.9% 10%;
+    --muted: 240 4.8% 95.9%;
+    --muted-foreground: 240 3.8% 46.1%;
+    --accent: 240 4.8% 95.9%;
+    --accent-foreground: 240 5.9% 10%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 240 5.9% 90%;
+    --input: 240 5.9% 90%;
+    --ring: 0 84% 55%;
+    --radius: 0.75rem;
+  }
+
+  .dark {
+    --background: 240 10% 4%;
+    --foreground: 0 0% 98%;
+    --card: 240 8% 7%;
+    --card-foreground: 0 0% 98%;
+    --popover: 240 10% 6%;
+    --popover-foreground: 0 0% 98%;
+    --primary: 0 84% 60%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 240 5% 12%;
+    --secondary-foreground: 0 0% 98%;
+    --muted: 240 5% 11%;
+    --muted-foreground: 240 5% 65%;
+    --accent: 240 5% 14%;
+    --accent-foreground: 0 0% 98%;
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 240 5% 14%;
+    --input: 240 5% 14%;
+    --ring: 0 84% 60%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  html, body, #root {
+    @apply h-full;
+  }
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', Roboto, sans-serif;
+    font-feature-settings: 'rlig' 1, 'calt' 1;
+  }
+}
+
+/* Status pulse for uploading */
+@layer utilities {
+  .status-pulse {
+    position: relative;
+  }
+  .status-pulse::before {
+    content: '';
+    position: absolute;
+    inset: -2px;
+    border-radius: 9999px;
+    background: hsl(var(--primary) / 0.4);
+    animation: pulse-ring 1.5s ease-out infinite;
+  }
+  @keyframes pulse-ring {
+    0% { transform: scale(0.8); opacity: 1; }
+    100% { transform: scale(1.6); opacity: 0; }
+  }
+
+  .gradient-bg {
+    background:
+      radial-gradient(at 20% 0%, hsl(0 84% 60% / 0.08) 0px, transparent 50%),
+      radial-gradient(at 80% 100%, hsl(280 70% 60% / 0.06) 0px, transparent 50%);
+  }
+}

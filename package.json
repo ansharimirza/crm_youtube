@@ -1,0 +1,16 @@
+{
+  "name": "crm-youtube",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": ["apps/*"],
+  "scripts": {
+    "dev": "docker compose up",
+    "dev:web": "bun --cwd apps/web dev",
+    "dev:api": "bun --cwd apps/api dev",
+    "dev:worker": "bun --cwd apps/worker dev",
+    "build": "bun --cwd apps/web build && bun --cwd apps/api build && bun --cwd apps/worker build",
+    "db:generate": "bun --cwd apps/api db:generate",
+    "db:migrate": "bun --cwd apps/api db:migrate",
+    "db:studio": "bun --cwd apps/api db:studio"
+  }
+}

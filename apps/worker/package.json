@@ -1,0 +1,19 @@
+{
+  "name": "@ytcrm/worker",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "bun run --hot src/index.ts",
+    "start": "bun run src/index.ts",
+    "build": "bun build src/index.ts --target=bun --outdir=dist"
+  },
+  "dependencies": {
+    "elysia": "^1.1.25",
+    "googleapis": "^144.0.0"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.1.13",
+    "typescript": "^5.6.3"
+  }
+}

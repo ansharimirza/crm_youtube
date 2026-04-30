@@ -1,0 +1,78 @@
+name: ytcrm
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-ytcrm}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-ytcrm_dev}
+      POSTGRES_DB: ${POSTGRES_DB:-ytcrm}
+    ports:
+      - "55432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-ytcrm} -d ${POSTGRES_DB:-ytcrm}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  api:
+    build:
+      context: ./apps/api
+      target: dev
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-ytcrm}:${POSTGRES_PASSWORD:-ytcrm_dev}@postgres:5432/${POSTGRES_DB:-ytcrm}
+      JWT_SECRET: ${JWT_SECRET}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
+      GOOGLE_REDIRECT_URI: ${GOOGLE_REDIRECT_URI}
+      WORKER_URL: ${WORKER_URL:-http://worker:3001}
+      WORKER_API_KEY: ${WORKER_API_KEY}
+      API_PORT: 3000
+      UPLOAD_DIR: /app/uploads
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./apps/api/src:/app/src
+      - ./apps/api/drizzle:/app/drizzle
+      - api-uploads:/app/uploads
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  worker:
+    build:
+      context: ./apps/worker
+    restart: unless-stopped
+    environment:
+      WORKER_PORT: 3001
+      WORKER_API_KEY: ${WORKER_API_KEY}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
+    ports:
+      - "3001:3001"
+    volumes:
+      - ./apps/worker/src:/app/src
+
+  web:
+    build:
+      context: ./apps/web
+      target: dev
+    restart: unless-stopped
+    environment:
+      VITE_API_URL: http://api:3000
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./apps/web/src:/app/src
+      - ./apps/web/index.html:/app/index.html
+      - ./apps/web/public:/app/public
+    depends_on:
+      - api
+
+volumes:
+  postgres-data:
+  api-uploads:

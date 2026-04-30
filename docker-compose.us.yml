@@ -1,0 +1,17 @@
+# Production compose untuk VPS US (worker only)
+# Hanya worker, tanpa DB / web. Ringan, cocok untuk 512MB RAM.
+
+name: ytcrm-us
+
+services:
+  worker:
+    build:
+      context: ./apps/worker
+    restart: always
+    environment:
+      WORKER_PORT: 3001
+      WORKER_API_KEY: ${WORKER_API_KEY}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
+    ports:
+      - "3001:3001"

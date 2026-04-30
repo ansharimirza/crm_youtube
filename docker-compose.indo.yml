@@ -1,0 +1,55 @@
+# Production compose untuk VPS Indonesia (web + api + postgres)
+# Worker JANGAN dijalankan di sini, deploy worker terpisah ke VPS US
+
+name: ytcrm-indo
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: always
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  api:
+    build:
+      context: ./apps/api
+      target: prod
+    restart: always
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      JWT_SECRET: ${JWT_SECRET}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
+      GOOGLE_REDIRECT_URI: ${GOOGLE_REDIRECT_URI}
+      WORKER_URL: ${WORKER_URL}
+      WORKER_API_KEY: ${WORKER_API_KEY}
+      API_PORT: 3000
+      UPLOAD_DIR: /app/uploads
+    volumes:
+      - api-uploads:/app/uploads
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  web:
+    build:
+      context: ./apps/web
+      target: prod
+    restart: always
+    ports:
+      - "80:80"
+    depends_on:
+      - api
+
+volumes:
+  postgres-data:
+  api-uploads:
