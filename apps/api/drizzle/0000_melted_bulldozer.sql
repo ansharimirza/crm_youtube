@@ -1,3 +1,14 @@
+CREATE TABLE IF NOT EXISTS "notifications" (
+	"id" serial PRIMARY KEY NOT NULL,
+	"user_id" integer NOT NULL,
+	"video_id" integer,
+	"type" varchar(32) NOT NULL,
+	"title" varchar(200) NOT NULL,
+	"message" text NOT NULL,
+	"is_read" boolean DEFAULT false NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+--> statement-breakpoint
 CREATE TABLE IF NOT EXISTS "upload_logs" (
 	"id" serial PRIMARY KEY NOT NULL,
 	"video_id" integer NOT NULL,
@@ -12,6 +23,7 @@ CREATE TABLE IF NOT EXISTS "users" (
 	"password_hash" text NOT NULL,
 	"name" varchar(255) NOT NULL,
 	"role" varchar(16) DEFAULT 'user' NOT NULL,
+	"is_active" boolean DEFAULT true NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
 	CONSTRAINT "users_email_unique" UNIQUE("email")
@@ -37,6 +49,12 @@ CREATE TABLE IF NOT EXISTS "videos" (
 	"youtube_id" varchar(32),
 	"youtube_url" text,
 	"error_msg" text,
+	"attempts" integer DEFAULT 0 NOT NULL,
+	"last_attempt_at" timestamp with time zone,
+	"view_count" integer DEFAULT 0 NOT NULL,
+	"like_count" integer DEFAULT 0 NOT NULL,
+	"comment_count" integer DEFAULT 0 NOT NULL,
+	"stats_updated_at" timestamp with time zone,
 	"scheduled_at" timestamp with time zone,
 	"uploaded_at" timestamp with time zone,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
@@ -57,6 +75,18 @@ CREATE TABLE IF NOT EXISTS "youtube_accounts" (
 	"token_expiry" timestamp with time zone,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL
 );
+--> statement-breakpoint
+DO $$ BEGIN
+ ALTER TABLE "notifications" ADD CONSTRAINT "notifications_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;
+EXCEPTION
+ WHEN duplicate_object THEN null;
+END $$;
+--> statement-breakpoint
+DO $$ BEGIN
+ ALTER TABLE "notifications" ADD CONSTRAINT "notifications_video_id_videos_id_fk" FOREIGN KEY ("video_id") REFERENCES "public"."videos"("id") ON DELETE cascade ON UPDATE no action;
+EXCEPTION
+ WHEN duplicate_object THEN null;
+END $$;
 --> statement-breakpoint
 DO $$ BEGIN
  ALTER TABLE "upload_logs" ADD CONSTRAINT "upload_logs_video_id_videos_id_fk" FOREIGN KEY ("video_id") REFERENCES "public"."videos"("id") ON DELETE cascade ON UPDATE no action;

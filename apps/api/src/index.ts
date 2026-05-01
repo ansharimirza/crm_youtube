@@ -4,6 +4,8 @@ import { authRoutes } from './routes/auth'
 import { videoRoutes, systemRoutes } from './routes/videos'
 import { metaRoutes } from './routes/meta'
 import { youtubeAccountRoutes } from './routes/youtube-accounts'
+import { notificationRoutes } from './routes/notifications'
+import { adminRoutes } from './routes/admin'
 
 const PORT = Number(process.env.API_PORT ?? 3000)
 
@@ -16,6 +18,8 @@ const app = new Elysia()
   .use(systemRoutes)
   .use(metaRoutes)
   .use(youtubeAccountRoutes)
+  .use(notificationRoutes)
+  .use(adminRoutes)
   .onError(({ code, error, set }) => {
     if (code === 'VALIDATION') {
       set.status = 400

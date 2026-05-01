@@ -1,13 +1,22 @@
 import { NavLink } from 'react-router-dom'
-import { LayoutDashboard, Upload, Settings, Youtube, LogOut } from 'lucide-react'
+import { LayoutDashboard, Upload, Settings, Youtube, LogOut, Users, Layers } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { useAuth } from '@/contexts/auth'
 
-const navItems = [
+interface NavItem {
+  to: string
+  icon: typeof LayoutDashboard
+  label: string
+  adminOnly?: boolean
+}
+
+const navItems: NavItem[] = [
   { to: '/', icon: LayoutDashboard, label: 'Dashboard' },
-  { to: '/upload', icon: Upload, label: 'Upload Video' },
+  { to: '/upload', icon: Upload, label: 'Upload' },
+  { to: '/bulk-upload', icon: Layers, label: 'Bulk Upload' },
   { to: '/settings', icon: Settings, label: 'Settings' },
+  { to: '/admin', icon: Users, label: 'Admin', adminOnly: true },
 ]
 
 export function Sidebar() {
@@ -21,24 +30,26 @@ export function Sidebar() {
       </div>
 
       <nav className="flex-1 space-y-1 p-3">
-        {navItems.map(({ to, icon: Icon, label }) => (
-          <NavLink
-            key={to}
-            to={to}
-            end={to === '/'}
-            className={({ isActive }) =>
-              cn(
-                'flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
-                isActive
-                  ? 'bg-primary/10 text-primary'
-                  : 'text-muted-foreground hover:bg-accent hover:text-foreground'
-              )
-            }
-          >
-            <Icon className="h-4 w-4" />
-            {label}
-          </NavLink>
-        ))}
+        {navItems
+          .filter(item => !item.adminOnly || user?.role === 'admin')
+          .map(({ to, icon: Icon, label }) => (
+            <NavLink
+              key={to}
+              to={to}
+              end={to === '/'}
+              className={({ isActive }) =>
+                cn(
+                  'flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
+                  isActive
+                    ? 'bg-primary/10 text-primary'
+                    : 'text-muted-foreground hover:bg-accent hover:text-foreground'
+                )
+              }
+            >
+              <Icon className="h-4 w-4" />
+              {label}
+            </NavLink>
+          ))}
       </nav>
 
       <div className="border-t p-3">
@@ -47,7 +58,12 @@ export function Sidebar() {
             {user?.name?.[0]?.toUpperCase() ?? 'U'}
           </div>
           <div className="flex-1 min-w-0">
-            <div className="truncate text-sm font-medium">{user?.name}</div>
+            <div className="truncate text-sm font-medium flex items-center gap-1">
+              {user?.name}
+              {user?.role === 'admin' && (
+                <span className="text-[9px] bg-primary/20 text-primary px-1 py-0 rounded">A</span>
+              )}
+            </div>
             <div className="truncate text-xs text-muted-foreground">{user?.email}</div>
           </div>
         </div>

@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, type FormEvent } from 'react'
 import { useNavigate, useSearchParams, Link } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
-import { Upload as UploadIcon, Image as ImageIcon, FileVideo, X, Sparkles, Globe2, Lock, Link2, Plus, Youtube, AlertTriangle } from 'lucide-react'
+import { useQuery, useMutation } from '@tanstack/react-query'
+import { Upload as UploadIcon, Image as ImageIcon, FileVideo, X, Sparkles, Globe2, Lock, Link2, Plus, Youtube, AlertTriangle, Send, ExternalLink } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -57,6 +57,15 @@ export function UploadPage() {
   const [thumbPreview, setThumbPreview] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [progress, setProgress] = useState(0)
+  const [editVideo, setEditVideo] = useState<Video | null>(null)
+
+  const pushMetadataMutation = useMutation({
+    mutationFn: () => api.post(`/api/videos/${editId}/push-metadata`),
+    onSuccess: () => {
+      toast.success('Metadata berhasil di-push ke YouTube')
+    },
+    onError: (e: Error) => toast.error(e.message),
+  })
 
   const [form, setForm] = useState<FormData>({
     title: '',
@@ -94,6 +103,7 @@ export function UploadPage() {
   useEffect(() => {
     if (!editId) return
     api.get<{ video: Video }>(`/api/videos/${editId}`).then(({ video }) => {
+      setEditVideo(video)
       setForm({
         title: video.title,
         description: video.description,
@@ -191,6 +201,37 @@ export function UploadPage() {
           {isEdit ? 'Ubah informasi video' : 'Upload ke YouTube via VPS US untuk audiens Amerika'}
         </p>
       </div>
+
+      {isEdit && editVideo?.youtubeUrl && (
+        <Card className="border-emerald-500/30 bg-emerald-500/5">
+          <CardContent className="p-4 flex items-center gap-3 flex-wrap">
+            <div className="flex-1 min-w-0">
+              <div className="text-sm font-medium flex items-center gap-2">
+                <Youtube className="h-4 w-4 text-primary shrink-0" />
+                Sudah di-upload ke YouTube
+              </div>
+              <a
+                href={editVideo.youtubeUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-xs text-primary hover:underline inline-flex items-center gap-1 mt-1"
+              >
+                <ExternalLink className="h-3 w-3" />
+                {editVideo.youtubeUrl}
+              </a>
+            </div>
+            <Button
+              type="button"
+              size="sm"
+              onClick={() => pushMetadataMutation.mutate()}
+              disabled={pushMetadataMutation.isPending}
+            >
+              <Send className="h-4 w-4" />
+              {pushMetadataMutation.isPending ? 'Pushing...' : 'Push Metadata ke YouTube'}
+            </Button>
+          </CardContent>
+        </Card>
+      )}
 
       <form ref={formRef} onSubmit={handleSubmit} className="space-y-6">
         {/* Channel selector — only for create mode */}

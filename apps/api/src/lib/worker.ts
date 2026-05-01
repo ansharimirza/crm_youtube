@@ -1,7 +1,9 @@
-// Client untuk forward upload ke Worker (VPS US)
+// Client untuk forward request ke Worker (VPS US)
 
 const WORKER_URL = process.env.WORKER_URL || 'http://worker:3001'
 const WORKER_API_KEY = process.env.WORKER_API_KEY || ''
+
+const headers = () => ({ 'x-api-key': WORKER_API_KEY })
 
 export interface WorkerUploadParams {
   videoPath: string
@@ -17,18 +19,11 @@ export interface WorkerUploadParams {
   refreshToken: string | null
 }
 
-export interface WorkerUploadResult {
-  ok: true
-  videoId: string
-  url: string
-}
+export type WorkerResult<T = {}> = ({ ok: true } & T) | { ok: false; error: string }
 
-export interface WorkerError {
-  ok: false
-  error: string
-}
-
-export async function uploadViaWorker(params: WorkerUploadParams): Promise<WorkerUploadResult | WorkerError> {
+export async function uploadViaWorker(
+  params: WorkerUploadParams
+): Promise<WorkerResult<{ videoId: string; url: string }>> {
   const form = new FormData()
 
   const videoFile = Bun.file(params.videoPath)
@@ -51,17 +46,96 @@ export async function uploadViaWorker(params: WorkerUploadParams): Promise<Worke
 
   const res = await fetch(`${WORKER_URL}/upload`, {
     method: 'POST',
-    headers: { 'x-api-key': WORKER_API_KEY },
+    headers: headers(),
     body: form,
   })
 
-  return await res.json() as WorkerUploadResult | WorkerError
+  return await res.json() as WorkerResult<{ videoId: string; url: string }>
+}
+
+export interface WorkerUpdateParams {
+  videoId: string
+  title: string
+  description: string
+  tags: string[]
+  categoryId: string
+  privacy: 'public' | 'private' | 'unlisted'
+  language: string
+  madeForKids: boolean
+  accessToken: string
+  refreshToken: string | null
+}
+
+export async function updateMetadataViaWorker(
+  params: WorkerUpdateParams
+): Promise<WorkerResult<{ videoId: string }>> {
+  const res = await fetch(`${WORKER_URL}/update-metadata`, {
+    method: 'POST',
+    headers: { ...headers(), 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      video_id: params.videoId,
+      title: params.title,
+      description: params.description,
+      tags: params.tags.join(','),
+      category_id: params.categoryId,
+      privacy: params.privacy,
+      language: params.language,
+      made_for_kids: String(params.madeForKids),
+      access_token: params.accessToken,
+      ...(params.refreshToken ? { refresh_token: params.refreshToken } : {}),
+    }),
+  })
+
+  return await res.json() as WorkerResult<{ videoId: string }>
+}
+
+export interface VideoStats {
+  videoId: string
+  viewCount: number
+  likeCount: number
+  commentCount: number
+}
+
+export async function getStatsViaWorker(params: {
+  videoIds: string[]
+  accessToken: string
+  refreshToken: string | null
+}): Promise<WorkerResult<{ stats: VideoStats[] }>> {
+  const res = await fetch(`${WORKER_URL}/get-stats`, {
+    method: 'POST',
+    headers: { ...headers(), 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      video_ids: params.videoIds.join(','),
+      access_token: params.accessToken,
+      ...(params.refreshToken ? { refresh_token: params.refreshToken } : {}),
+    }),
+  })
+
+  return await res.json() as WorkerResult<{ stats: VideoStats[] }>
+}
+
+export async function deleteVideoViaWorker(params: {
+  videoId: string
+  accessToken: string
+  refreshToken: string | null
+}): Promise<WorkerResult> {
+  const res = await fetch(`${WORKER_URL}/delete-video`, {
+    method: 'POST',
+    headers: { ...headers(), 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      video_id: params.videoId,
+      access_token: params.accessToken,
+      ...(params.refreshToken ? { refresh_token: params.refreshToken } : {}),
+    }),
+  })
+
+  return await res.json() as WorkerResult
 }
 
 export async function workerHealth(): Promise<boolean> {
   try {
     const res = await fetch(`${WORKER_URL}/health`, {
-      headers: { 'x-api-key': WORKER_API_KEY },
+      headers: headers(),
       signal: AbortSignal.timeout(5000),
     })
     return res.ok

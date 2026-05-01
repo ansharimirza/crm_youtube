@@ -8,8 +8,21 @@ export const users = pgTable('users', {
   passwordHash: text('password_hash').notNull(),
   name: varchar('name', { length: 255 }).notNull(),
   role: varchar('role', { length: 16, enum: ['admin', 'user'] }).default('user').notNull(),
+  isActive: boolean('is_active').default(true).notNull(),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+})
+
+// Notifikasi untuk user (in-app)
+export const notifications = pgTable('notifications', {
+  id: serial('id').primaryKey(),
+  userId: integer('user_id').references(() => users.id, { onDelete: 'cascade' }).notNull(),
+  videoId: integer('video_id').references(() => videos.id, { onDelete: 'cascade' }),
+  type: varchar('type', { length: 32 }).notNull(),
+  title: varchar('title', { length: 200 }).notNull(),
+  message: text('message').notNull(),
+  isRead: boolean('is_read').default(false).notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
 })
 
 // Akun YouTube yang di-connect ke 1 user (1 user bisa banyak channel)
@@ -48,6 +61,13 @@ export const videos = pgTable('videos', {
   youtubeId: varchar('youtube_id', { length: 32 }),
   youtubeUrl: text('youtube_url'),
   errorMsg: text('error_msg'),
+  attempts: integer('attempts').default(0).notNull(),
+  lastAttemptAt: timestamp('last_attempt_at', { withTimezone: true }),
+  // Stats yang ditarik dari YouTube
+  viewCount: integer('view_count').default(0).notNull(),
+  likeCount: integer('like_count').default(0).notNull(),
+  commentCount: integer('comment_count').default(0).notNull(),
+  statsUpdatedAt: timestamp('stats_updated_at', { withTimezone: true }),
   scheduledAt: timestamp('scheduled_at', { withTimezone: true }),
   uploadedAt: timestamp('uploaded_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
@@ -82,7 +102,13 @@ export const uploadLogsRelations = relations(uploadLogs, ({ one }) => ({
   video: one(videos, { fields: [uploadLogs.videoId], references: [videos.id] }),
 }))
 
+export const notificationsRelations = relations(notifications, ({ one }) => ({
+  user: one(users, { fields: [notifications.userId], references: [users.id] }),
+  video: one(videos, { fields: [notifications.videoId], references: [videos.id] }),
+}))
+
 export type User = typeof users.$inferSelect
 export type YoutubeAccount = typeof youtubeAccounts.$inferSelect
 export type Video = typeof videos.$inferSelect
 export type UploadLog = typeof uploadLogs.$inferSelect
+export type Notification = typeof notifications.$inferSelect

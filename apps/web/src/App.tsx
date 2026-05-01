@@ -8,7 +8,9 @@ import { LoginPage } from '@/pages/Login'
 import { RegisterPage } from '@/pages/Register'
 import { DashboardPage } from '@/pages/Dashboard'
 import { UploadPage } from '@/pages/Upload'
+import { BulkUploadPage } from '@/pages/BulkUpload'
 import { SettingsPage } from '@/pages/Settings'
+import { AdminPage } from '@/pages/Admin'
 import { YoutubeCallbackPage } from '@/pages/YoutubeCallback'
 
 const qc = new QueryClient({
@@ -45,6 +47,12 @@ function ProtectedLayout() {
   )
 }
 
+function AdminGuard() {
+  const { user } = useAuth()
+  if (user?.role !== 'admin') return <Navigate to="/" replace />
+  return <Outlet />
+}
+
 export default function App() {
   return (
     <QueryClientProvider client={qc}>
@@ -57,7 +65,11 @@ export default function App() {
             <Route element={<ProtectedLayout />}>
               <Route path="/" element={<DashboardPage />} />
               <Route path="/upload" element={<UploadPage />} />
+              <Route path="/bulk-upload" element={<BulkUploadPage />} />
               <Route path="/settings" element={<SettingsPage />} />
+              <Route element={<AdminGuard />}>
+                <Route path="/admin" element={<AdminPage />} />
+              </Route>
             </Route>
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>

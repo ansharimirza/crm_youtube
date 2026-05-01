@@ -1,14 +1,22 @@
 import { NavLink } from 'react-router-dom'
-import { LayoutDashboard, Upload, Settings, Youtube } from 'lucide-react'
+import { LayoutDashboard, Upload, Settings, Youtube, Layers, Users } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { useAuth } from '@/contexts/auth'
+import { NotificationsBell } from './NotificationsBell'
 
 const items = [
-  { to: '/', icon: LayoutDashboard, label: 'Dashboard' },
+  { to: '/', icon: LayoutDashboard, label: 'Home' },
   { to: '/upload', icon: Upload, label: 'Upload' },
+  { to: '/bulk-upload', icon: Layers, label: 'Bulk' },
   { to: '/settings', icon: Settings, label: 'Settings' },
 ]
 
 export function MobileTopbar() {
+  const { user } = useAuth()
+  const navItems = user?.role === 'admin'
+    ? [...items.slice(0, 3), { to: '/admin', icon: Users, label: 'Admin' }, items[3]]
+    : items
+
   return (
     <>
       <header className="md:hidden flex h-14 items-center justify-between border-b bg-card/30 backdrop-blur px-4 sticky top-0 z-30">
@@ -16,17 +24,18 @@ export function MobileTopbar() {
           <Youtube className="h-5 w-5 text-primary" />
           <span className="font-bold">YT CRM</span>
         </div>
+        <NotificationsBell />
       </header>
 
-      <nav className="md:hidden fixed bottom-0 inset-x-0 z-30 border-t bg-card/95 backdrop-blur grid grid-cols-3">
-        {items.map(({ to, icon: Icon, label }) => (
+      <nav className="md:hidden fixed bottom-0 inset-x-0 z-30 border-t bg-card/95 backdrop-blur grid grid-cols-5">
+        {navItems.map(({ to, icon: Icon, label }) => (
           <NavLink
             key={to}
             to={to}
             end={to === '/'}
             className={({ isActive }) =>
               cn(
-                'flex flex-col items-center gap-1 py-2.5 text-xs font-medium',
+                'flex flex-col items-center gap-1 py-2.5 text-[10px] font-medium',
                 isActive ? 'text-primary' : 'text-muted-foreground'
               )
             }

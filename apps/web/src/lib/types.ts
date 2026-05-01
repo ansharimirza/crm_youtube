@@ -3,7 +3,10 @@ export interface User {
   email: string
   name: string
   role: 'admin' | 'user'
+  isActive?: boolean
   createdAt?: string
+  videoCount?: number
+  channelCount?: number
 }
 
 export interface YoutubeAccount {
@@ -40,6 +43,12 @@ export interface Video {
   youtubeId: string | null
   youtubeUrl: string | null
   errorMsg: string | null
+  attempts: number
+  lastAttemptAt: string | null
+  viewCount: number
+  likeCount: number
+  commentCount: number
+  statsUpdatedAt: string | null
   scheduledAt: string | null
   uploadedAt: string | null
   createdAt: string
@@ -51,6 +60,17 @@ export interface UploadLog {
   videoId: number
   message: string
   level: 'info' | 'warn' | 'error'
+  createdAt: string
+}
+
+export interface Notification {
+  id: number
+  userId: number
+  videoId: number | null
+  type: string
+  title: string
+  message: string
+  isRead: boolean
   createdAt: string
 }
 

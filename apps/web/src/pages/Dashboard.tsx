@@ -1,12 +1,16 @@
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
-import { Plus, RefreshCw, Trash2, Edit3, Play, ExternalLink, Video as VideoIcon, CheckCircle2, Loader2, AlertCircle, Calendar } from 'lucide-react'
+import {
+  Plus, RefreshCw, Trash2, Edit3, Play, ExternalLink, Video as VideoIcon,
+  CheckCircle2, Loader2, AlertCircle, Calendar, Eye, ThumbsUp, MessageSquare, BarChart3,
+} from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Progress } from '@/components/ui/progress'
 import { StatusBadge } from '@/components/StatusBadge'
+import { NotificationsBell } from '@/components/NotificationsBell'
 import { api } from '@/lib/api'
-import { cn, formatBytes, formatRelativeTime } from '@/lib/utils'
+import { cn, formatBytes, formatNumber, formatRelativeTime } from '@/lib/utils'
 import { toast } from 'sonner'
 import type { Video } from '@/lib/types'
 
@@ -43,6 +47,15 @@ export function DashboardPage() {
     onError: (e: Error) => toast.error(e.message),
   })
 
+  const refreshStatsMutation = useMutation({
+    mutationFn: () => api.post<{ updated: number }>('/api/videos/refresh-all-stats'),
+    onSuccess: (data) => {
+      toast.success(`Stats di-refresh untuk ${data.updated} video`)
+      qc.invalidateQueries({ queryKey: ['videos'] })
+    },
+    onError: (e: Error) => toast.error(e.message),
+  })
+
   const videos = data?.videos ?? []
   const stats = {
     total: videos.length,
@@ -50,6 +63,9 @@ export function DashboardPage() {
     uploading: videos.filter(v => v.status === 'uploading').length,
     queued: videos.filter(v => ['queued', 'scheduled'].includes(v.status)).length,
     error: videos.filter(v => v.status === 'error').length,
+    totalViews: videos.reduce((sum, v) => sum + v.viewCount, 0),
+    totalLikes: videos.reduce((sum, v) => sum + v.likeCount, 0),
+    totalComments: videos.reduce((sum, v) => sum + v.commentCount, 0),
   }
 
   return (
@@ -61,6 +77,9 @@ export function DashboardPage() {
           <p className="text-sm text-muted-foreground mt-1">Kelola semua video YouTube kamu</p>
         </div>
         <div className="flex items-center gap-2">
+          <div className="hidden md:block">
+            <NotificationsBell />
+          </div>
           <Button onClick={() => refetch()} variant="outline" size="sm" disabled={isFetching}>
             <RefreshCw className={cn('h-4 w-4', isFetching && 'animate-spin')} />
             Refresh
@@ -68,13 +87,13 @@ export function DashboardPage() {
           <Button asChild>
             <Link to="/upload">
               <Plus className="h-4 w-4" />
-              Upload Video
+              Upload
             </Link>
           </Button>
         </div>
       </div>
 
-      {/* Worker status banner */}
+      {/* Worker status */}
       {workerHealth && (
         <div className={cn(
           'flex items-center gap-2 rounded-lg border px-4 py-2 text-sm',
@@ -91,18 +110,36 @@ export function DashboardPage() {
         </div>
       )}
 
-      {/* Stats */}
+      {/* Status stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <StatCard icon={VideoIcon}     label="Total"     value={stats.total}     color="text-foreground" />
-        <StatCard icon={CheckCircle2}  label="Selesai"   value={stats.done}      color="text-emerald-400" />
-        <StatCard icon={Loader2}       label="Uploading" value={stats.uploading} color="text-blue-400" spin={stats.uploading > 0} />
-        <StatCard icon={AlertCircle}   label="Error"     value={stats.error}     color="text-red-400" />
+        <StatCard icon={VideoIcon}     label="Total Video" value={stats.total}     color="text-foreground" />
+        <StatCard icon={CheckCircle2}  label="Selesai"     value={stats.done}      color="text-emerald-400" />
+        <StatCard icon={Loader2}       label="Uploading"   value={stats.uploading} color="text-blue-400" spin={stats.uploading > 0} />
+        <StatCard icon={AlertCircle}   label="Error"       value={stats.error}     color="text-red-400" />
       </div>
+
+      {/* Analytics overview */}
+      {stats.done > 0 && (
+        <div className="grid grid-cols-3 gap-3">
+          <AnalyticsCard icon={Eye}          label="Total Views"     value={formatNumber(stats.totalViews)}    color="text-blue-400" />
+          <AnalyticsCard icon={ThumbsUp}     label="Total Likes"     value={formatNumber(stats.totalLikes)}    color="text-emerald-400" />
+          <AnalyticsCard icon={MessageSquare} label="Total Comments" value={formatNumber(stats.totalComments)} color="text-purple-400" />
+        </div>
+      )}
 
       {/* Video list */}
       <Card>
-        <CardHeader>
+        <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle>Video</CardTitle>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => refreshStatsMutation.mutate()}
+            disabled={refreshStatsMutation.isPending}
+          >
+            <BarChart3 className={cn('h-4 w-4', refreshStatsMutation.isPending && 'animate-pulse')} />
+            Refresh Stats
+          </Button>
         </CardHeader>
         <CardContent className="p-0">
           {videos.length === 0 ? (
@@ -118,13 +155,13 @@ export function DashboardPage() {
             </div>
           ) : (
             <div className="divide-y">
-              {videos.map((v) => (
+              {videos.map(video => (
                 <VideoRow
-                  key={v.id}
-                  video={v}
-                  onStart={() => startMutation.mutate(v.id)}
+                  key={video.id}
+                  video={video}
+                  onStart={() => startMutation.mutate(video.id)}
                   onDelete={() => {
-                    if (confirm(`Hapus "${v.title}"?`)) deleteMutation.mutate(v.id)
+                    if (confirm(`Hapus "${video.title}"?`)) deleteMutation.mutate(video.id)
                   }}
                 />
               ))}
@@ -160,6 +197,27 @@ function StatCard({ icon: Icon, label, value, color, spin }: {
   )
 }
 
+function AnalyticsCard({ icon: Icon, label, value, color }: {
+  icon: typeof Eye
+  label: string
+  value: string
+  color: string
+}) {
+  return (
+    <Card>
+      <CardContent className="p-4">
+        <div className="flex items-center gap-3">
+          <Icon className={cn('h-5 w-5', color)} />
+          <div>
+            <div className="text-xl font-bold">{value}</div>
+            <div className="text-xs text-muted-foreground">{label}</div>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  )
+}
+
 function VideoRow({ video, onStart, onDelete }: {
   video: Video
   onStart: () => void
@@ -167,6 +225,7 @@ function VideoRow({ video, onStart, onDelete }: {
 }) {
   const showStart = ['queued', 'error', 'scheduled'].includes(video.status)
   const isUploading = video.status === 'uploading'
+  const showStats = video.status === 'done' && (video.viewCount > 0 || video.likeCount > 0 || video.commentCount > 0)
 
   return (
     <div className="px-5 py-4 hover:bg-accent/30 transition-colors">
@@ -179,6 +238,11 @@ function VideoRow({ video, onStart, onDelete }: {
           <div className="flex items-center gap-2 flex-wrap">
             <h3 className="font-medium truncate">{video.title}</h3>
             <StatusBadge status={video.status} />
+            {video.attempts > 0 && video.status === 'error' && (
+              <span className="text-[10px] text-amber-400 bg-amber-500/10 px-1.5 py-0.5 rounded">
+                Attempt {video.attempts}/3
+              </span>
+            )}
           </div>
 
           <div className="text-xs text-muted-foreground mt-1 flex items-center gap-2 flex-wrap">
@@ -209,6 +273,29 @@ function VideoRow({ video, onStart, onDelete }: {
               </>
             )}
           </div>
+
+          {/* Stats row */}
+          {showStats && (
+            <div className="text-xs text-muted-foreground mt-1.5 flex items-center gap-4">
+              <span className="inline-flex items-center gap-1">
+                <Eye className="h-3 w-3 text-blue-400" />
+                {formatNumber(video.viewCount)}
+              </span>
+              <span className="inline-flex items-center gap-1">
+                <ThumbsUp className="h-3 w-3 text-emerald-400" />
+                {formatNumber(video.likeCount)}
+              </span>
+              <span className="inline-flex items-center gap-1">
+                <MessageSquare className="h-3 w-3 text-purple-400" />
+                {formatNumber(video.commentCount)}
+              </span>
+              {video.statsUpdatedAt && (
+                <span className="text-muted-foreground/60">
+                  • {formatRelativeTime(video.statsUpdatedAt)}
+                </span>
+              )}
+            </div>
+          )}
 
           {isUploading && (
             <div className="mt-2 flex items-center gap-2">

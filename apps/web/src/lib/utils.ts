@@ -13,6 +13,13 @@ export function formatBytes(bytes: number, decimals = 1) {
   return parseFloat((bytes / Math.pow(k, i)).toFixed(decimals)) + ' ' + sizes[i]
 }
 
+export function formatNumber(n: number): string {
+  if (n < 1_000) return String(n)
+  if (n < 1_000_000) return `${(n / 1_000).toFixed(n < 10_000 ? 1 : 0)}K`
+  if (n < 1_000_000_000) return `${(n / 1_000_000).toFixed(n < 10_000_000 ? 1 : 0)}M`
+  return `${(n / 1_000_000_000).toFixed(1)}B`
+}
+
 export function formatRelativeTime(date: string | Date) {
   const d = typeof date === 'string' ? new Date(date) : date
   const diff = Date.now() - d.getTime()
