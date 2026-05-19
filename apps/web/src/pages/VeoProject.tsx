@@ -205,14 +205,9 @@ function CreateSceneForm({
     mutation.mutate()
   }
 
-  // Auto-adjust duration constraints
-  const durationOptions =
-    model === 'veo-2'
-      ? [4, 6, 8]
-      : [8] // Veo 3.1 dan variants = fixed 8s
-
-  const aspectRatioOptions: VeoAspectRatio[] =
-    model === 'veo-2' ? ['16:9', '9:16'] : ['16:9']
+  // Semua kombinasi diizinkan (sesuai UI geminigen.ai web)
+  const durationOptions = [4, 6, 8]
+  const aspectRatioOptions: VeoAspectRatio[] = ['16:9', '9:16']
 
   return (
     <Card>
@@ -262,14 +257,7 @@ function CreateSceneForm({
           {/* Model */}
           <div className="space-y-2">
             <Label>Model</Label>
-            <Select value={model} onValueChange={v => {
-              setModel(v as VeoModel)
-              // Reset duration & aspect saat ganti model
-              if (v !== 'veo-2') {
-                setDuration(8)
-                setAspectRatio('16:9')
-              }
-            }}>
+            <Select value={model} onValueChange={v => setModel(v as VeoModel)}>
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
                 {MODELS.map(m => (
@@ -308,24 +296,19 @@ function CreateSceneForm({
             <div className="space-y-2">
               <Label>Resolution</Label>
               <div className="grid grid-cols-2 gap-2">
-                {(['720p', '1080p'] as VeoResolution[]).map(r => {
-                  const disabled = model === 'veo-2' && r === '1080p'
-                  return (
-                    <button
-                      key={r}
-                      type="button"
-                      disabled={disabled}
-                      onClick={() => setResolution(r)}
-                      className={cn(
-                        'rounded-lg border p-3 text-sm font-medium transition-colors',
-                        resolution === r ? 'border-primary bg-primary/10' : 'border-border hover:border-primary/30',
-                        disabled && 'opacity-40 cursor-not-allowed'
-                      )}
-                    >
-                      {r}
-                    </button>
-                  )
-                })}
+                {(['720p', '1080p'] as VeoResolution[]).map(r => (
+                  <button
+                    key={r}
+                    type="button"
+                    onClick={() => setResolution(r)}
+                    className={cn(
+                      'rounded-lg border p-3 text-sm font-medium transition-colors',
+                      resolution === r ? 'border-primary bg-primary/10' : 'border-border hover:border-primary/30'
+                    )}
+                  >
+                    {r}
+                  </button>
+                ))}
               </div>
             </div>
 
