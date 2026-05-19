@@ -18,6 +18,7 @@
     "drizzle-orm": "^0.36.4",
     "elysia": "^1.1.25",
     "googleapis": "^144.0.0",
+    "jszip": "^3.10.1",
     "postgres": "^3.4.5"
   },
   "devDependencies": {

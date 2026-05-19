@@ -2,6 +2,7 @@ import { Elysia, t } from 'elysia'
 import { and, desc, eq, max } from 'drizzle-orm'
 import { mkdir } from 'node:fs/promises'
 import { join } from 'node:path'
+import JSZip from 'jszip'
 import { db, veoProjects, veoScenes } from '../db'
 import { authMiddleware } from '../middleware/auth'
 import { enqueueScene } from '../lib/scene-worker'
@@ -96,6 +97,67 @@ export const veoRoutes = new Elysia({ prefix: '/api/veo' })
       title: t.String({ minLength: 1, maxLength: 200 }),
       description: t.String({ maxLength: 1000 }),
     })),
+  })
+  // Download semua scene done jadi 1 ZIP
+  .get('/projects/:id/download-all', async ({ params, user, set }) => {
+    const id = Number(params.id)
+    const project = await db.query.veoProjects.findFirst({
+      where: and(eq(veoProjects.id, id), eq(veoProjects.userId, user.id)),
+      with: {
+        scenes: { orderBy: [veoScenes.sceneNumber] },
+      },
+    })
+    if (!project) {
+      set.status = 404
+      return { error: 'Project tidak ditemukan' }
+    }
+
+    const doneScenes = project.scenes.filter(s => s.status === 'done' && s.videoUrl)
+    if (doneScenes.length === 0) {
+      set.status = 400
+      return { error: 'Belum ada scene yang selesai untuk di-download' }
+    }
+
+    const zip = new JSZip()
+    let added = 0
+    const failed: number[] = []
+
+    // Download videos paralel (max 5 sekaligus)
+    const BATCH = 5
+    for (let i = 0; i < doneScenes.length; i += BATCH) {
+      const batch = doneScenes.slice(i, i + BATCH)
+      const results = await Promise.allSettled(
+        batch.map(async (scene) => {
+          const res = await fetch(scene.videoUrl!)
+          if (!res.ok) throw new Error(`HTTP ${res.status}`)
+          const buf = await res.arrayBuffer()
+          return { scene, buf }
+        })
+      )
+      for (const r of results) {
+        if (r.status === 'fulfilled') {
+          const { scene, buf } = r.value
+          const filename = `scene-${String(scene.sceneNumber).padStart(2, '0')}.mp4`
+          zip.file(filename, buf)
+          added++
+        } else {
+          // Reject reason not exposed individually here; track count
+        }
+      }
+    }
+
+    if (added === 0) {
+      set.status = 500
+      return { error: 'Gagal download semua video' }
+    }
+
+    const safeTitle = project.title.replace(/[^\w\s-]/g, '').trim().slice(0, 60) || 'veo-project'
+    const zipBuf = await zip.generateAsync({ type: 'uint8array', compression: 'DEFLATE', compressionOptions: { level: 1 } })
+
+    set.headers['Content-Type'] = 'application/zip'
+    set.headers['Content-Disposition'] = `attachment; filename="${safeTitle}.zip"`
+    set.headers['Content-Length'] = String(zipBuf.byteLength)
+    return new Response(zipBuf)
   })
   .delete('/projects/:id', async ({ params, user, set }) => {
     const id = Number(params.id)

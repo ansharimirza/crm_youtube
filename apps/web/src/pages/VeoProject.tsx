@@ -3,8 +3,9 @@ import { useParams, Link, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Film, Plus, ArrowLeft, Image as ImageIcon, X, Loader2, CheckCircle2,
-  AlertCircle, Clock, Trash2, Download, ExternalLink, RotateCw, Play, Sparkles,
+  AlertCircle, Clock, Trash2, Download, ExternalLink, RotateCw, Play, Sparkles, Package,
 } from 'lucide-react'
+import { getToken } from '@/lib/api'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -30,6 +31,7 @@ export function VeoProjectPage() {
   const navigate = useNavigate()
   const qc = useQueryClient()
   const [showForm, setShowForm] = useState(false)
+  const [downloading, setDownloading] = useState(false)
 
   const { data, refetch } = useQuery({
     queryKey: ['veo-project', id],
@@ -38,6 +40,34 @@ export function VeoProjectPage() {
     enabled: !!id,
   })
   const project = data?.project
+
+  async function handleDownloadAll() {
+    if (!project) return
+    setDownloading(true)
+    try {
+      const res = await fetch(`/api/veo/projects/${project.id}/download-all`, {
+        headers: { Authorization: `Bearer ${getToken()}` },
+      })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        throw new Error(err.error || `HTTP ${res.status}`)
+      }
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `${project.title.replace(/[^\w\s-]/g, '').trim() || 'veo-project'}.zip`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+      toast.success('Download dimulai')
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Download gagal')
+    } finally {
+      setDownloading(false)
+    }
+  }
 
   const deleteSceneMutation = useMutation({
     mutationFn: (sceneId: number) => api.delete(`/api/veo/scenes/${sceneId}`),
@@ -83,10 +113,22 @@ export function VeoProjectPage() {
             {project.scenes.length} scene • Dibuat {formatRelativeTime(project.createdAt)}
           </div>
         </div>
-        <Button onClick={() => setShowForm(!showForm)}>
-          <Plus className="h-4 w-4" />
-          {showForm ? 'Tutup Form' : 'Tambah Scene'}
-        </Button>
+        <div className="flex items-center gap-2">
+          {project.scenes.some(s => s.status === 'done') && (
+            <Button
+              variant="outline"
+              onClick={handleDownloadAll}
+              disabled={downloading}
+            >
+              {downloading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Package className="h-4 w-4" />}
+              {downloading ? 'Membuat ZIP...' : `Download All (${project.scenes.filter(s => s.status === 'done').length})`}
+            </Button>
+          )}
+          <Button onClick={() => setShowForm(!showForm)}>
+            <Plus className="h-4 w-4" />
+            {showForm ? 'Tutup Form' : 'Tambah Scene'}
+          </Button>
+        </div>
       </div>
 
       {/* Add scene form */}
