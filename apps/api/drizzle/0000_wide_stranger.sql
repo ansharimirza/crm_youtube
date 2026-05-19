@@ -24,9 +24,44 @@ CREATE TABLE IF NOT EXISTS "users" (
 	"name" varchar(255) NOT NULL,
 	"role" varchar(16) DEFAULT 'user' NOT NULL,
 	"is_active" boolean DEFAULT true NOT NULL,
+	"geminigen_api_key" text,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
 	CONSTRAINT "users_email_unique" UNIQUE("email")
+);
+--> statement-breakpoint
+CREATE TABLE IF NOT EXISTS "veo_projects" (
+	"id" serial PRIMARY KEY NOT NULL,
+	"user_id" integer NOT NULL,
+	"title" varchar(200) NOT NULL,
+	"description" text DEFAULT '' NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+--> statement-breakpoint
+CREATE TABLE IF NOT EXISTS "veo_scenes" (
+	"id" serial PRIMARY KEY NOT NULL,
+	"project_id" integer NOT NULL,
+	"scene_number" integer NOT NULL,
+	"prompt" text NOT NULL,
+	"model" varchar(32) DEFAULT 'veo-2' NOT NULL,
+	"aspect_ratio" varchar(8) DEFAULT '16:9' NOT NULL,
+	"resolution" varchar(8) DEFAULT '720p' NOT NULL,
+	"duration" integer DEFAULT 4 NOT NULL,
+	"mode_image" varchar(16) DEFAULT 'frame' NOT NULL,
+	"first_image_path" text,
+	"last_image_path" text,
+	"status" varchar(16) DEFAULT 'queued' NOT NULL,
+	"progress" integer DEFAULT 0 NOT NULL,
+	"attempts" integer DEFAULT 0 NOT NULL,
+	"geminigen_uuid" varchar(64),
+	"geminigen_id" integer,
+	"video_url" text,
+	"thumbnail_url" text,
+	"has_watermark" integer DEFAULT 0 NOT NULL,
+	"error_msg" text,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
 CREATE TABLE IF NOT EXISTS "videos" (
@@ -90,6 +125,18 @@ END $$;
 --> statement-breakpoint
 DO $$ BEGIN
  ALTER TABLE "upload_logs" ADD CONSTRAINT "upload_logs_video_id_videos_id_fk" FOREIGN KEY ("video_id") REFERENCES "public"."videos"("id") ON DELETE cascade ON UPDATE no action;
+EXCEPTION
+ WHEN duplicate_object THEN null;
+END $$;
+--> statement-breakpoint
+DO $$ BEGIN
+ ALTER TABLE "veo_projects" ADD CONSTRAINT "veo_projects_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;
+EXCEPTION
+ WHEN duplicate_object THEN null;
+END $$;
+--> statement-breakpoint
+DO $$ BEGIN
+ ALTER TABLE "veo_scenes" ADD CONSTRAINT "veo_scenes_project_id_veo_projects_id_fk" FOREIGN KEY ("project_id") REFERENCES "public"."veo_projects"("id") ON DELETE cascade ON UPDATE no action;
 EXCEPTION
  WHEN duplicate_object THEN null;
 END $$;

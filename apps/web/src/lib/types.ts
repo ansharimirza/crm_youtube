@@ -4,9 +4,63 @@ export interface User {
   name: string
   role: 'admin' | 'user'
   isActive?: boolean
+  hasGeminigenKey?: boolean
   createdAt?: string
   videoCount?: number
   channelCount?: number
+}
+
+export interface VeoProjectSummary {
+  id: number
+  title: string
+  description: string
+  createdAt: string
+  updatedAt: string
+  sceneCount: number
+  doneCount: number
+  errorCount: number
+  processingCount: number
+  thumbnail: string | null
+}
+
+export interface VeoProject {
+  id: number
+  userId: number
+  title: string
+  description: string
+  createdAt: string
+  updatedAt: string
+  scenes: VeoScene[]
+}
+
+export type VeoModel = 'veo-3.1' | 'veo-3.1-fast' | 'veo-3.1-lite' | 'veo-2'
+export type VeoResolution = '720p' | '1080p'
+export type VeoAspectRatio = '16:9' | '9:16'
+export type VeoSceneStatus = 'queued' | 'processing' | 'done' | 'error'
+
+export interface VeoScene {
+  id: number
+  projectId: number
+  sceneNumber: number
+  prompt: string
+  model: VeoModel
+  resolution: VeoResolution
+  aspectRatio: VeoAspectRatio
+  duration: number
+  modeImage: 'frame' | 'ingredient'
+  firstImagePath: string | null
+  lastImagePath: string | null
+  status: VeoSceneStatus
+  progress: number
+  attempts: number
+  geminigenUuid: string | null
+  geminigenId: number | null
+  videoUrl: string | null
+  thumbnailUrl: string | null
+  hasWatermark: number
+  errorMsg: string | null
+  createdAt: string
+  updatedAt: string
 }
 
 export interface YoutubeAccount {

@@ -90,7 +90,7 @@ export const authRoutes = new Elysia({ prefix: '/auth' })
 
     const user = await db.query.users.findFirst({
       where: eq(users.id, Number(payload.userId)),
-      columns: { id: true, email: true, name: true, role: true, createdAt: true },
+      columns: { id: true, email: true, name: true, role: true, geminigenApiKey: true, createdAt: true },
     })
 
     if (!user) {
@@ -98,5 +98,35 @@ export const authRoutes = new Elysia({ prefix: '/auth' })
       return { error: 'User not found' }
     }
 
-    return { user }
+    return {
+      user: {
+        ...user,
+        hasGeminigenKey: !!user.geminigenApiKey,
+        geminigenApiKey: undefined, // jangan kirim key ke client
+      },
+    }
+  })
+  .patch('/me/settings', async ({ headers, jwt, body, set }) => {
+    const auth = headers.authorization
+    if (!auth?.startsWith('Bearer ')) {
+      set.status = 401
+      return { error: 'Unauthorized' }
+    }
+    const payload = await jwt.verify(auth.slice(7))
+    if (!payload || typeof payload === 'boolean') {
+      set.status = 401
+      return { error: 'Invalid token' }
+    }
+
+    const updates: Partial<typeof users.$inferInsert> = { updatedAt: new Date() }
+    if (body.geminigenApiKey !== undefined) {
+      updates.geminigenApiKey = body.geminigenApiKey.trim() || null
+    }
+
+    await db.update(users).set(updates).where(eq(users.id, Number(payload.userId)))
+    return { ok: true }
+  }, {
+    body: t.Object({
+      geminigenApiKey: t.Optional(t.String({ maxLength: 500 })),
+    }),
   })

@@ -6,6 +6,8 @@ import { metaRoutes } from './routes/meta'
 import { youtubeAccountRoutes } from './routes/youtube-accounts'
 import { notificationRoutes } from './routes/notifications'
 import { adminRoutes } from './routes/admin'
+import { veoRoutes } from './routes/veo'
+import { recoverPendingScenes } from './lib/scene-worker'
 
 const PORT = Number(process.env.API_PORT ?? 3000)
 
@@ -20,6 +22,7 @@ const app = new Elysia()
   .use(youtubeAccountRoutes)
   .use(notificationRoutes)
   .use(adminRoutes)
+  .use(veoRoutes)
   .onError(({ code, error, set }) => {
     if (code === 'VALIDATION') {
       set.status = 400
@@ -32,5 +35,8 @@ const app = new Elysia()
   .listen({ port: PORT, hostname: '0.0.0.0' })
 
 console.log(`🚀 API listening on http://0.0.0.0:${PORT}`)
+
+// Recover scenes yang pending kalau API restart
+recoverPendingScenes().catch(err => console.error('[recover]', err))
 
 export type App = typeof app

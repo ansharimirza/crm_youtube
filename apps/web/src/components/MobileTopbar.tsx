@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom'
-import { LayoutDashboard, Upload, Settings, Youtube, Layers, Users } from 'lucide-react'
+import { LayoutDashboard, Upload, Settings, Youtube, Layers, Users, Film } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/contexts/auth'
 import { NotificationsBell } from './NotificationsBell'
@@ -7,7 +7,7 @@ import { NotificationsBell } from './NotificationsBell'
 const items = [
   { to: '/', icon: LayoutDashboard, label: 'Home' },
   { to: '/upload', icon: Upload, label: 'Upload' },
-  { to: '/bulk-upload', icon: Layers, label: 'Bulk' },
+  { to: '/veo', icon: Film, label: 'Veo' },
   { to: '/settings', icon: Settings, label: 'Settings' },
 ]
 
