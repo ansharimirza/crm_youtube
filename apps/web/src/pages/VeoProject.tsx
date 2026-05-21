@@ -1,11 +1,22 @@
-import { useState, type FormEvent } from 'react'
+import { useState, useEffect, type FormEvent } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Film, Plus, ArrowLeft, Image as ImageIcon, X, Loader2, CheckCircle2,
-  AlertCircle, Clock, Trash2, Download, ExternalLink, RotateCw, Play, Sparkles, Package,
+  AlertCircle, Clock, Trash2, Download, ExternalLink, RotateCw, Play, Sparkles,
+  Package, GripVertical,
 } from 'lucide-react'
 import { getToken } from '@/lib/api'
+import {
+  DndContext, PointerSensor, TouchSensor, KeyboardSensor,
+  useSensor, useSensors, closestCenter,
+  type DragEndEvent,
+} from '@dnd-kit/core'
+import {
+  SortableContext, sortableKeyboardCoordinates,
+  useSortable, verticalListSortingStrategy, arrayMove,
+} from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -32,6 +43,7 @@ export function VeoProjectPage() {
   const qc = useQueryClient()
   const [showForm, setShowForm] = useState(false)
   const [downloading, setDownloading] = useState(false)
+  const [localScenes, setLocalScenes] = useState<VeoScene[] | null>(null)
 
   const { data, refetch } = useQuery({
     queryKey: ['veo-project', id],
@@ -40,6 +52,47 @@ export function VeoProjectPage() {
     enabled: !!id,
   })
   const project = data?.project
+
+  // Sinkronkan local state ke server data (kecuali sedang drag/optimistic)
+  useEffect(() => {
+    if (project) setLocalScenes(project.scenes)
+  }, [project])
+
+  const scenes = localScenes ?? project?.scenes ?? []
+  const hasActive = scenes.some(s => s.status === 'processing' || s.status === 'queued')
+  const canReorder = scenes.length >= 2 && !hasActive
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 300, tolerance: 5 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  )
+
+  const reorderMutation = useMutation({
+    mutationFn: (order: number[]) =>
+      api.post(`/api/veo/projects/${id}/scenes/reorder`, { order }),
+    onSuccess: () => {
+      toast.success('Urutan scene disimpan')
+      qc.invalidateQueries({ queryKey: ['veo-project', id] })
+    },
+    onError: (e: Error) => {
+      toast.error(e.message)
+      // Revert ke server state
+      if (project) setLocalScenes(project.scenes)
+    },
+  })
+
+  function handleDragEnd(event: DragEndEvent) {
+    const { active, over } = event
+    if (!over || active.id === over.id) return
+    const oldIndex = scenes.findIndex(s => s.id === active.id)
+    const newIndex = scenes.findIndex(s => s.id === over.id)
+    if (oldIndex < 0 || newIndex < 0) return
+
+    const reordered = arrayMove(scenes, oldIndex, newIndex)
+    setLocalScenes(reordered)
+    reorderMutation.mutate(reordered.map(s => s.id))
+  }
 
   async function handleDownloadAll() {
     if (!project) return
@@ -144,8 +197,25 @@ export function VeoProjectPage() {
         />
       )}
 
+      {/* Reorder hint */}
+      {scenes.length >= 2 && (
+        hasActive ? (
+          <div className="flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-xs text-amber-300">
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            Reorder dikunci sampai semua scene selesai generate
+          </div>
+        ) : (
+          <div className="flex items-center gap-2 rounded-lg border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+            <GripVertical className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline">Drag handle di kiri kartu</span>
+            <span className="sm:hidden">Long-press &amp; drag handle di kiri kartu</span>
+            untuk reorder scene
+          </div>
+        )
+      )}
+
       {/* Scene list */}
-      {project.scenes.length === 0 ? (
+      {scenes.length === 0 ? (
         <Card>
           <CardContent className="py-16 text-center">
             <Film className="h-12 w-12 text-muted-foreground/40 mx-auto mb-3" />
@@ -157,21 +227,68 @@ export function VeoProjectPage() {
           </CardContent>
         </Card>
       ) : (
-        <div className="space-y-4">
-          {project.scenes.map(scene => (
-            <SceneCard
-              key={scene.id}
-              scene={scene}
-              onDelete={() => {
-                if (confirm(`Hapus Scene ${scene.sceneNumber}?`)) {
-                  deleteSceneMutation.mutate(scene.id)
-                }
-              }}
-              onRetry={() => retrySceneMutation.mutate(scene.id)}
-            />
-          ))}
-        </div>
+        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+          <SortableContext items={scenes.map(s => s.id)} strategy={verticalListSortingStrategy}>
+            <div className="space-y-4">
+              {scenes.map(scene => (
+                <SortableSceneCard
+                  key={scene.id}
+                  scene={scene}
+                  canReorder={canReorder}
+                  onDelete={() => {
+                    if (confirm(`Hapus Scene ${scene.sceneNumber}?`)) {
+                      deleteSceneMutation.mutate(scene.id)
+                    }
+                  }}
+                  onRetry={() => retrySceneMutation.mutate(scene.id)}
+                />
+              ))}
+            </div>
+          </SortableContext>
+        </DndContext>
       )}
+    </div>
+  )
+}
+
+function SortableSceneCard({ scene, canReorder, onDelete, onRetry }: {
+  scene: VeoScene
+  canReorder: boolean
+  onDelete: () => void
+  onRetry: () => void
+}) {
+  const {
+    attributes, listeners, setNodeRef, transform, transition, isDragging,
+  } = useSortable({ id: scene.id, disabled: !canReorder })
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    zIndex: isDragging ? 50 : 'auto',
+    opacity: isDragging ? 0.6 : 1,
+  } as React.CSSProperties
+
+  return (
+    <div ref={setNodeRef} style={style} className="flex items-stretch gap-2">
+      <button
+        type="button"
+        {...attributes}
+        {...listeners}
+        disabled={!canReorder}
+        className={cn(
+          'flex items-center justify-center w-7 rounded-md transition-colors shrink-0',
+          canReorder
+            ? 'cursor-grab active:cursor-grabbing hover:bg-accent text-muted-foreground hover:text-foreground'
+            : 'opacity-30 cursor-not-allowed text-muted-foreground'
+        )}
+        aria-label="Drag untuk reorder"
+        title={canReorder ? 'Drag untuk reorder' : 'Tunggu scene processing selesai'}
+      >
+        <GripVertical className="h-4 w-4" />
+      </button>
+      <div className="flex-1 min-w-0">
+        <SceneCard scene={scene} onDelete={onDelete} onRetry={onRetry} />
+      </div>
     </div>
   )
 }

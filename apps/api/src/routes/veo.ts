@@ -68,7 +68,7 @@ export const veoRoutes = new Elysia({ prefix: '/api/veo' })
     const project = await db.query.veoProjects.findFirst({
       where: and(eq(veoProjects.id, id), eq(veoProjects.userId, user.id)),
       with: {
-        scenes: { orderBy: [desc(veoScenes.sceneNumber)] },
+        scenes: { orderBy: [veoScenes.sceneNumber] },
       },
     })
     if (!project) {
@@ -97,6 +97,52 @@ export const veoRoutes = new Elysia({ prefix: '/api/veo' })
       title: t.String({ minLength: 1, maxLength: 200 }),
       description: t.String({ maxLength: 1000 }),
     })),
+  })
+  // Reorder scene di sebuah project
+  .post('/projects/:id/scenes/reorder', async ({ params, body, user, set }) => {
+    const projectId = Number(params.id)
+    const project = await db.query.veoProjects.findFirst({
+      where: and(eq(veoProjects.id, projectId), eq(veoProjects.userId, user.id)),
+      with: { scenes: true },
+    })
+    if (!project) {
+      set.status = 404
+      return { error: 'Project tidak ditemukan' }
+    }
+
+    // Tidak boleh reorder kalau ada scene yang lagi processing/queued
+    const hasActive = project.scenes.some(s => s.status === 'processing' || s.status === 'queued')
+    if (hasActive) {
+      set.status = 400
+      return { error: 'Tidak bisa reorder saat ada scene processing/queued' }
+    }
+
+    const ownIds = new Set(project.scenes.map(s => s.id))
+    if (body.order.length !== project.scenes.length) {
+      set.status = 400
+      return { error: 'Order harus berisi semua scene' }
+    }
+    for (const id of body.order) {
+      if (!ownIds.has(id)) {
+        set.status = 400
+        return { error: 'Scene ID tidak valid' }
+      }
+    }
+
+    // Two-phase update: pertama set ke negative biar gak konflik, lalu set ke nomor baru
+    for (const s of project.scenes) {
+      await db.update(veoScenes).set({ sceneNumber: -s.id }).where(eq(veoScenes.id, s.id))
+    }
+    for (let i = 0; i < body.order.length; i++) {
+      const id = body.order[i]
+      await db.update(veoScenes)
+        .set({ sceneNumber: i + 1, updatedAt: new Date() })
+        .where(eq(veoScenes.id, id))
+    }
+
+    return { ok: true }
+  }, {
+    body: t.Object({ order: t.Array(t.Number()) }),
   })
   // Download semua scene done jadi 1 ZIP
   .get('/projects/:id/download-all', async ({ params, user, set }) => {
