@@ -10,6 +10,7 @@ export const users = pgTable('users', {
   role: varchar('role', { length: 16, enum: ['admin', 'user'] }).default('user').notNull(),
   isActive: boolean('is_active').default(true).notNull(),
   geminigenApiKey: text('geminigen_api_key'),
+  geminiApiKey: text('gemini_api_key'),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
 })

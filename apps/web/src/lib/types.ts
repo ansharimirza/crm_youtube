@@ -5,6 +5,7 @@ export interface User {
   role: 'admin' | 'user'
   isActive?: boolean
   hasGeminigenKey?: boolean
+  hasGeminiKey?: boolean
   createdAt?: string
   videoCount?: number
   channelCount?: number
@@ -131,4 +132,20 @@ export interface Notification {
 export interface Category {
   id: string
   label: string
+}
+
+export interface AnalyzedScene {
+  scene_number: number
+  start_time: string
+  end_time: string
+  duration_suggested: number
+  veo_model_suggested: 'veo-2' | 'veo-3.1' | 'veo-3.1-fast' | 'veo-3.1-lite'
+  image_prompt: string
+  video_prompt: string
+  mood: string
+}
+
+export interface AnalyzeResult {
+  summary: string
+  scenes: AnalyzedScene[]
 }

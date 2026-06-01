@@ -14,6 +14,7 @@ import { AdminPage } from '@/pages/Admin'
 import { YoutubeCallbackPage } from '@/pages/YoutubeCallback'
 import { VeoStudioPage } from '@/pages/VeoStudio'
 import { VeoProjectPage } from '@/pages/VeoProject'
+import { AnalyzerPage } from '@/pages/Analyzer'
 
 const qc = new QueryClient({
   defaultOptions: {
@@ -70,6 +71,7 @@ export default function App() {
               <Route path="/bulk-upload" element={<BulkUploadPage />} />
               <Route path="/veo" element={<VeoStudioPage />} />
               <Route path="/veo/:id" element={<VeoProjectPage />} />
+              <Route path="/analyzer" element={<AnalyzerPage />} />
               <Route path="/settings" element={<SettingsPage />} />
               <Route element={<AdminGuard />}>
                 <Route path="/admin" element={<AdminPage />} />

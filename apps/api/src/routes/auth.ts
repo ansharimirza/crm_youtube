@@ -90,7 +90,7 @@ export const authRoutes = new Elysia({ prefix: '/auth' })
 
     const user = await db.query.users.findFirst({
       where: eq(users.id, Number(payload.userId)),
-      columns: { id: true, email: true, name: true, role: true, geminigenApiKey: true, createdAt: true },
+      columns: { id: true, email: true, name: true, role: true, geminigenApiKey: true, geminiApiKey: true, createdAt: true },
     })
 
     if (!user) {
@@ -102,7 +102,9 @@ export const authRoutes = new Elysia({ prefix: '/auth' })
       user: {
         ...user,
         hasGeminigenKey: !!user.geminigenApiKey,
-        geminigenApiKey: undefined, // jangan kirim key ke client
+        hasGeminiKey: !!user.geminiApiKey,
+        geminigenApiKey: undefined,
+        geminiApiKey: undefined,
       },
     }
   })
@@ -122,11 +124,15 @@ export const authRoutes = new Elysia({ prefix: '/auth' })
     if (body.geminigenApiKey !== undefined) {
       updates.geminigenApiKey = body.geminigenApiKey.trim() || null
     }
+    if (body.geminiApiKey !== undefined) {
+      updates.geminiApiKey = body.geminiApiKey.trim() || null
+    }
 
     await db.update(users).set(updates).where(eq(users.id, Number(payload.userId)))
     return { ok: true }
   }, {
     body: t.Object({
       geminigenApiKey: t.Optional(t.String({ maxLength: 500 })),
+      geminiApiKey: t.Optional(t.String({ maxLength: 500 })),
     }),
   })
