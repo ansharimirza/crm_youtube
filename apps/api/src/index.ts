@@ -36,7 +36,12 @@ const app = new Elysia()
     set.status = set.status === 200 ? 500 : set.status
     return { error: error instanceof Error ? error.message : 'Internal error' }
   })
-  .listen({ port: PORT, hostname: '0.0.0.0' })
+  .listen({
+    port: PORT,
+    hostname: '0.0.0.0',
+    maxRequestBodySize: 2 * 1024 * 1024 * 1024, // 2GB untuk upload video besar
+    idleTimeout: 0, // disable idle timeout (default 10s) supaya upload lama gak putus
+  })
 
 console.log(`🚀 API listening on http://0.0.0.0:${PORT}`)
 

@@ -258,7 +258,12 @@ const app = new Elysia()
     set.status = set.status === 200 ? 500 : set.status
     return { ok: false, error: error instanceof Error ? error.message : 'Internal error' }
   })
-  .listen({ port: PORT, hostname: '0.0.0.0' })
+  .listen({
+    port: PORT,
+    hostname: '0.0.0.0',
+    maxRequestBodySize: 2 * 1024 * 1024 * 1024,
+    idleTimeout: 0,
+  })
 
 console.log(`🚀 Worker listening on http://0.0.0.0:${PORT}`)
 
