@@ -58,6 +58,16 @@ export const analyzerRoutes = new Elysia({ prefix: '/api/analyzer' })
       // Analisa
       const result = await analyzeVideoForVeo(uploaded.uri, mime, apiKey)
 
+      // Clamp duration ke 4/6/8 (Veo hanya support nilai ini)
+      const allowed = [4, 6, 8] as const
+      result.scenes = result.scenes.map(s => {
+        const d = Number(s.duration_suggested) || 4
+        const nearest = allowed.reduce((prev, curr) =>
+          Math.abs(curr - d) < Math.abs(prev - d) ? curr : prev
+        )
+        return { ...s, duration_suggested: nearest }
+      })
+
       return { ok: true, result }
     } catch (err) {
       const msg = err instanceof GeminiError ? err.message : err instanceof Error ? err.message : String(err)

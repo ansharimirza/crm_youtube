@@ -44,7 +44,7 @@ const RESPONSE_SCHEMA = {
           scene_number: { type: 'integer' },
           start_time: { type: 'string' },
           end_time: { type: 'string' },
-          duration_suggested: { type: 'integer', enum: [4, 6, 8] },
+          duration_suggested: { type: 'integer' },
           veo_model_suggested: { type: 'string', enum: ['veo-2', 'veo-3.1', 'veo-3.1-fast', 'veo-3.1-lite'] },
           image_prompt: { type: 'string' },
           video_prompt: { type: 'string' },
@@ -79,7 +79,7 @@ For EACH scene, generate two complementary prompts in ENGLISH:
 
 Other fields:
 - start_time / end_time: Format as "M:SS" (e.g., "0:04", "0:12")
-- duration_suggested: Pick 4, 6, or 8 seconds based on actual scene length
+- duration_suggested: Pick exactly one of: 4, 6, or 8 seconds based on actual scene length. Do not use any other value.
 - veo_model_suggested:
   - "veo-2" for shorter scenes (4-6s) or 9:16 portrait
   - "veo-3.1" for premium quality 8s scenes needing best detail
