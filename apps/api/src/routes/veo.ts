@@ -3,9 +3,16 @@ import { and, desc, eq, max } from 'drizzle-orm'
 import { mkdir } from 'node:fs/promises'
 import { join } from 'node:path'
 import JSZip from 'jszip'
-import { db, veoProjects, veoScenes } from '../db'
+import { db, users, veoProjects, veoScenes } from '../db'
 import { authMiddleware } from '../middleware/auth'
 import { enqueueScene } from '../lib/scene-worker'
+import {
+  generateImageAndWait,
+  GeminigenError,
+  type ImageModel,
+  type ImageAspectRatio,
+  type ImageResolution,
+} from '../lib/geminigen'
 
 const UPLOAD_DIR = process.env.UPLOAD_DIR || join(process.cwd(), 'uploads')
 const VEO_DIR = join(UPLOAD_DIR, 'veo')
@@ -372,6 +379,107 @@ export const veoRoutes = new Elysia({ prefix: '/api/veo' })
       clear_last_image: t.Optional(t.String()),
       regenerate: t.Optional(t.String()),
     }),
+  })
+  // Generate image reference dari image_prompt scene (via GeminiGen image gen API)
+  .post('/scenes/:id/generate-image', async ({ params, body, user, set }) => {
+    const id = Number(params.id)
+    const scene = await db.query.veoScenes.findFirst({
+      where: eq(veoScenes.id, id),
+      with: { project: true },
+    })
+    if (!scene || scene.project.userId !== user.id) {
+      set.status = 404
+      return { error: 'Scene tidak ditemukan' }
+    }
+
+    const prompt = body.prompt?.trim() || scene.imagePrompt
+    if (!prompt) {
+      set.status = 400
+      return { error: 'Image prompt kosong. Edit scene dulu untuk isi image_prompt.' }
+    }
+
+    const userRow = await db.query.users.findFirst({ where: eq(users.id, user.id) })
+    const apiKey = userRow?.geminigenApiKey ?? process.env.GEMINIGEN_API_KEY
+    if (!apiKey) {
+      set.status = 400
+      return { error: 'GeminiGen API key belum diatur. Set di Settings.' }
+    }
+
+    const slot = body.slot ?? 'first'
+
+    // Aspect ratio image: ikutin aspect ratio scene
+    const imgAR: ImageAspectRatio =
+      scene.aspectRatio === '9:16' ? '9:16'
+      : scene.aspectRatio === '16:9' ? '16:9'
+      : '1:1'
+
+    try {
+      const result = await generateImageAndWait({
+        apiKey,
+        prompt,
+        model: (body.model ?? 'nano-banana-pro') as ImageModel,
+        aspectRatio: imgAR,
+        resolution: (body.resolution ?? '1K') as ImageResolution,
+        style: body.style ?? 'Photorealistic',
+        outputFormat: 'jpeg',
+      })
+
+      // Download image dan save ke disk
+      const imgRes = await fetch(result.imageUrl)
+      if (!imgRes.ok) throw new GeminigenError(`Download image gagal: HTTP ${imgRes.status}`)
+      const buf = await imgRes.arrayBuffer()
+      const filename = `${slot}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}.jpg`
+      const filepath = join(VEO_DIR, filename)
+      await Bun.write(filepath, buf)
+
+      // Update scene
+      const updateData: Partial<typeof veoScenes.$inferInsert> = { updatedAt: new Date() }
+      if (slot === 'first') updateData.firstImagePath = filepath
+      else updateData.lastImagePath = filepath
+
+      await db.update(veoScenes).set(updateData).where(eq(veoScenes.id, id))
+
+      return { ok: true, slot, imageUrl: result.imageUrl, geminigenUuid: result.uuid }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      set.status = 500
+      return { ok: false, error: msg }
+    }
+  }, {
+    body: t.Object({
+      slot: t.Optional(t.Union([t.Literal('first'), t.Literal('last')])),
+      prompt: t.Optional(t.String({ maxLength: 4000 })),
+      model: t.Optional(t.Union([
+        t.Literal('nano-banana-pro'),
+        t.Literal('nano-banana-2'),
+        t.Literal('imagen-4'),
+      ])),
+      resolution: t.Optional(t.Union([t.Literal('1K'), t.Literal('2K'), t.Literal('4K')])),
+      style: t.Optional(t.String()),
+    }),
+  })
+  // Serve image scene (untuk preview di UI)
+  .get('/scenes/:id/image/:slot', async ({ params, user, set }) => {
+    const id = Number(params.id)
+    const slot = params.slot
+    if (slot !== 'first' && slot !== 'last') {
+      set.status = 400
+      return { error: 'Invalid slot' }
+    }
+    const scene = await db.query.veoScenes.findFirst({
+      where: eq(veoScenes.id, id),
+      with: { project: true },
+    })
+    if (!scene || scene.project.userId !== user.id) {
+      set.status = 404
+      return { error: 'Not found' }
+    }
+    const path = slot === 'first' ? scene.firstImagePath : scene.lastImagePath
+    if (!path) {
+      set.status = 404
+      return { error: 'Image not set' }
+    }
+    return Bun.file(path)
   })
   .delete('/scenes/:id', async ({ params, user, set }) => {
     const id = Number(params.id)

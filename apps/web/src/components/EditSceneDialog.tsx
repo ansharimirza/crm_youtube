@@ -1,6 +1,6 @@
 import { useState, useEffect, type FormEvent } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { Image as ImageIcon, X, Save, RotateCw, Sparkles } from 'lucide-react'
+import { Image as ImageIcon, X, Save, RotateCw, Sparkles, Wand2, Loader2 } from 'lucide-react'
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from '@/components/ui/dialog'
@@ -99,6 +99,40 @@ export function EditSceneDialog({ scene, open, onClose, projectId }: Props) {
 
   const hasExistingFirst = !!scene.firstImagePath && !clearFirst && !firstPreview
   const hasExistingLast = !!scene.lastImagePath && !clearLast && !lastPreview
+
+  const generateImageMutation = useMutation({
+    mutationFn: async ({ slot }: { slot: 'first' | 'last' }) => {
+      const res = await fetch(`/api/veo/scenes/${scene.id}/generate-image`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${getToken()}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          slot,
+          prompt: imagePrompt || undefined,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok || !data.ok) throw new Error(data.error || `HTTP ${res.status}`)
+      return data
+    },
+    onSuccess: (data) => {
+      toast.success(`Image (${data.slot}) berhasil di-generate`)
+      qc.invalidateQueries({ queryKey: ['veo-project', String(projectId)] })
+      // Clear pending file uploads to use the newly generated one
+      if (data.slot === 'first') {
+        setFirstImage(null)
+        setFirstPreview(null)
+        setClearFirst(false)
+      } else {
+        setLastImage(null)
+        setLastPreview(null)
+        setClearLast(false)
+      }
+    },
+    onError: (e: Error) => toast.error(`Generate image gagal: ${e.message}`),
+  })
 
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) onClose() }}>
@@ -200,6 +234,8 @@ export function EditSceneDialog({ scene, open, onClose, projectId }: Props) {
                 existingHint={hasExistingFirst}
                 onChange={(file) => { setFirstImage(file); previewFile(file, setFirstPreview); setClearFirst(false) }}
                 onClear={() => { setFirstImage(null); setFirstPreview(null); setClearFirst(true) }}
+                onGenerate={imagePrompt.trim() ? () => generateImageMutation.mutate({ slot: 'first' }) : undefined}
+                generating={generateImageMutation.isPending && generateImageMutation.variables?.slot === 'first'}
               />
               <ImageSlot
                 label="Last Image"
@@ -207,10 +243,13 @@ export function EditSceneDialog({ scene, open, onClose, projectId }: Props) {
                 existingHint={hasExistingLast}
                 onChange={(file) => { setLastImage(file); previewFile(file, setLastPreview); setClearLast(false) }}
                 onClear={() => { setLastImage(null); setLastPreview(null); setClearLast(true) }}
+                onGenerate={imagePrompt.trim() ? () => generateImageMutation.mutate({ slot: 'last' }) : undefined}
+                generating={generateImageMutation.isPending && generateImageMutation.variables?.slot === 'last'}
               />
             </div>
             <p className="text-xs text-muted-foreground">
-              Reference images perlu di-set baru kalau mau hasil lebih kontrol. Skip kalau text-only Veo cukup.
+              <Wand2 className="inline h-3 w-3 mr-1 text-primary" />
+              Klik "Generate" untuk bikin gambar AI dari image prompt di atas. Atau upload manual.
             </p>
           </div>
         </form>
@@ -239,16 +278,18 @@ export function EditSceneDialog({ scene, open, onClose, projectId }: Props) {
   )
 }
 
-function ImageSlot({ label, preview, existingHint, onChange, onClear }: {
+function ImageSlot({ label, preview, existingHint, onChange, onClear, onGenerate, generating }: {
   label: string
   preview: string | null
   existingHint: boolean
   onChange: (file: File | null) => void
   onClear: () => void
+  onGenerate?: () => void
+  generating?: boolean
 }) {
   return (
-    <div>
-      <div className="text-xs text-muted-foreground mb-1">{label}</div>
+    <div className="space-y-2">
+      <div className="text-xs text-muted-foreground">{label}</div>
       {preview ? (
         <div className="relative rounded-lg border overflow-hidden aspect-video bg-muted">
           <img src={preview} alt="" className="w-full h-full object-cover" />
@@ -259,13 +300,11 @@ function ImageSlot({ label, preview, existingHint, onChange, onClear }: {
       ) : existingHint ? (
         <div className="relative flex flex-col items-center justify-center gap-2 aspect-video border-2 border-emerald-500/30 bg-emerald-500/5 rounded-lg">
           <ImageIcon className="h-5 w-5 text-emerald-400" />
-          <span className="text-xs text-emerald-300">Sudah ada (akan dipakai)</span>
-          <div className="absolute top-1 right-1 flex gap-1">
-            <Button type="button" size="icon" variant="secondary" className="h-6 w-6" onClick={onClear} title="Hapus image lama">
-              <X className="h-3 w-3" />
-            </Button>
-          </div>
-          <label className="absolute inset-0 cursor-pointer" title="Ganti dengan image baru">
+          <span className="text-xs text-emerald-300">Sudah ada</span>
+          <Button type="button" size="icon" variant="secondary" className="absolute top-1 right-1 h-6 w-6" onClick={onClear} title="Hapus image">
+            <X className="h-3 w-3" />
+          </Button>
+          <label className="absolute inset-0 cursor-pointer">
             <input
               type="file"
               accept="image/*"
@@ -274,10 +313,15 @@ function ImageSlot({ label, preview, existingHint, onChange, onClear }: {
             />
           </label>
         </div>
+      ) : generating ? (
+        <div className="flex flex-col items-center justify-center gap-2 aspect-video border-2 border-primary/30 bg-primary/5 rounded-lg">
+          <Loader2 className="h-6 w-6 text-primary animate-spin" />
+          <span className="text-xs text-muted-foreground">Generating image...</span>
+        </div>
       ) : (
         <label className="flex flex-col items-center justify-center gap-2 aspect-video border-2 border-dashed rounded-lg cursor-pointer hover:border-primary/50 transition-colors">
           <ImageIcon className="h-5 w-5 text-muted-foreground" />
-          <span className="text-xs text-muted-foreground">Pilih image</span>
+          <span className="text-xs text-muted-foreground">Upload manual</span>
           <input
             type="file"
             accept="image/*"
@@ -285,6 +329,19 @@ function ImageSlot({ label, preview, existingHint, onChange, onClear }: {
             onChange={(e) => onChange(e.target.files?.[0] ?? null)}
           />
         </label>
+      )}
+
+      {onGenerate && !generating && (
+        <Button
+          type="button"
+          size="sm"
+          variant="secondary"
+          className="w-full"
+          onClick={onGenerate}
+        >
+          <Wand2 className="h-3 w-3" />
+          {preview || existingHint ? 'Regenerate Image' : 'Generate Image AI'}
+        </Button>
       )}
     </div>
   )
