@@ -15,6 +15,7 @@ import { YoutubeCallbackPage } from '@/pages/YoutubeCallback'
 import { VeoStudioPage } from '@/pages/VeoStudio'
 import { VeoProjectPage } from '@/pages/VeoProject'
 import { AnalyzerPage } from '@/pages/Analyzer'
+import { ViralityPage } from '@/pages/Virality'
 
 const qc = new QueryClient({
   defaultOptions: {
@@ -72,6 +73,7 @@ export default function App() {
               <Route path="/veo" element={<VeoStudioPage />} />
               <Route path="/veo/:id" element={<VeoProjectPage />} />
               <Route path="/analyzer" element={<AnalyzerPage />} />
+              <Route path="/virality" element={<ViralityPage />} />
               <Route path="/settings" element={<SettingsPage />} />
               <Route element={<AdminGuard />}>
                 <Route path="/admin" element={<AdminPage />} />

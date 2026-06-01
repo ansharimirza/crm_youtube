@@ -150,3 +150,21 @@ export interface AnalyzeResult {
   summary: string
   scenes: AnalyzedScene[]
 }
+
+export type ViralityEmotion = 'Kagum' | 'Lucu' | 'Edukasi' | 'Marah'
+
+export interface ViralityCriterion {
+  score: number
+  analysis: string
+}
+
+export interface ViralityResult {
+  total_score: number
+  visual_audio_hook: ViralityCriterion
+  pacing_retention: ViralityCriterion
+  shareability: ViralityCriterion
+  critical_seconds_analysis: string
+  cut_recommendation: string
+  predicted_emotion: ViralityEmotion
+  summary: string
+}

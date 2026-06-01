@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom'
-import { LayoutDashboard, Upload, Settings, Youtube, LogOut, Users, Layers, Film, Wand2 } from 'lucide-react'
+import { LayoutDashboard, Upload, Settings, Youtube, LogOut, Users, Layers, Film, Wand2, Flame } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { useAuth } from '@/contexts/auth'
@@ -17,6 +17,7 @@ const navItems: NavItem[] = [
   { to: '/bulk-upload', icon: Layers, label: 'Bulk Upload' },
   { to: '/veo', icon: Film, label: 'Veo Studio' },
   { to: '/analyzer', icon: Wand2, label: 'Video to Prompt' },
+  { to: '/virality', icon: Flame, label: 'Virality Score' },
   { to: '/settings', icon: Settings, label: 'Settings' },
   { to: '/admin', icon: Users, label: 'Admin', adminOnly: true },
 ]
