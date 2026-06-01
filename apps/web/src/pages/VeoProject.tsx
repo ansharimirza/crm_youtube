@@ -4,7 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Film, Plus, ArrowLeft, Image as ImageIcon, X, Loader2, CheckCircle2,
   AlertCircle, Clock, Trash2, Download, ExternalLink, RotateCw, Play, Sparkles,
-  Package, GripVertical,
+  Package, GripVertical, Copy, Check, ClipboardCopy,
 } from 'lucide-react'
 import { getToken } from '@/lib/api'
 import { EditSceneDialog } from '@/components/EditSceneDialog'
@@ -169,7 +169,24 @@ export function VeoProjectPage() {
             {project.scenes.length} scene • Dibuat {formatRelativeTime(project.createdAt)}
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          {scenes.length > 0 && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                const text = scenes
+                  .map(s => `Scene ${s.sceneNumber}:\n${s.prompt}`)
+                  .join('\n\n')
+                navigator.clipboard.writeText(text).then(() => {
+                  toast.success(`Copied ${scenes.length} prompt`)
+                })
+              }}
+            >
+              <ClipboardCopy className="h-4 w-4" />
+              Copy All Prompt
+            </Button>
+          )}
           {project.scenes.some(s => s.status === 'done') && (
             <Button
               variant="outline"
@@ -584,6 +601,16 @@ function SceneCard({ scene, onDelete, onRetry, onEdit }: {
   onRetry: () => void
   onEdit: () => void
 }) {
+  const [copied, setCopied] = useState(false)
+
+  function copyPrompt() {
+    navigator.clipboard.writeText(scene.prompt).then(() => {
+      setCopied(true)
+      toast.success(`Prompt Scene ${scene.sceneNumber} disalin`)
+      setTimeout(() => setCopied(false), 1500)
+    })
+  }
+
   return (
     <Card>
       <CardContent className="p-0">
@@ -634,6 +661,9 @@ function SceneCard({ scene, onDelete, onRetry, onEdit }: {
                 )}
               </div>
               <div className="flex items-center gap-1">
+                <Button size="sm" variant="ghost" onClick={copyPrompt} title="Copy prompt">
+                  {copied ? <Check className="h-4 w-4 text-emerald-400" /> : <Copy className="h-4 w-4" />}
+                </Button>
                 {scene.status === 'done' && scene.videoUrl && (
                   <Button asChild size="sm" variant="ghost" title="Download">
                     <a href={scene.videoUrl} download target="_blank" rel="noopener noreferrer">
