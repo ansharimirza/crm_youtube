@@ -169,6 +169,164 @@ export async function waitForFileActive(
   throw new GeminiError('Timeout waiting for file to be ACTIVE')
 }
 
+// ===== CAPTION & METADATA GENERATION =====
+
+export interface CaptionResult {
+  platform: Platform
+  caption: string                    // TikTok/Reels: main caption. Shorts: short blurb
+  title?: string                     // Shorts only
+  description?: string               // Shorts only (full description)
+  hashtags: string[]                 // semua platform
+  tags?: string[]                    // Shorts only (keywords untuk YouTube SEO)
+  cover_text?: string                // teks pendek untuk thumbnail/cover (3-7 kata)
+  cta: string                        // call to action singkat
+  alternative_captions: string[]     // 2 alternatif caption
+}
+
+const CAPTION_SCHEMA = {
+  type: 'object',
+  required: ['platform', 'caption', 'hashtags', 'cta', 'alternative_captions'],
+  properties: {
+    platform: { type: 'string', enum: ['tiktok', 'reels', 'shorts'] },
+    caption: { type: 'string' },
+    title: { type: 'string' },
+    description: { type: 'string' },
+    hashtags: { type: 'array', items: { type: 'string' } },
+    tags: { type: 'array', items: { type: 'string' } },
+    cover_text: { type: 'string' },
+    cta: { type: 'string' },
+    alternative_captions: { type: 'array', items: { type: 'string' } },
+  },
+}
+
+function buildCaptionInstruction(
+  platform: Platform,
+  projectTitle: string,
+  projectDescription: string | null,
+  scenePrompts: string[],
+  language: 'id' | 'en' = 'id',
+): string {
+  const langName = language === 'id' ? 'Bahasa Indonesia' : 'English'
+
+  const platformGuide = platform === 'tiktok' ? `
+PLATFORM: TIKTOK (data 2025-2026)
+- caption: SUPER PENDEK. Target 3-10 kata. ATAU maksimal 50 karakter pesan utama (data: caption pendek = 112% lebih banyak comment).
+  Pakai formula Hook-Question-CTA: bold claim + pertanyaan provokatif + ajakan singkat.
+  Contoh BAGUS: "Aku gak nyangka ini terjadi... gimana menurutmu?"
+  Contoh JELEK: "Hari ini aku mau cerita tentang pengalaman yang sangat berkesan untuk ku saat..."
+- hashtags: TEPAT 3-5 hashtag niche-specific (jangan lebih). Mix 1 hashtag besar (#fyp / #foryoupage) + 2-3 niche spesifik + 1 branded jika ada. Hashtag tambahan = dilution algorithm.
+- cover_text: WAJIB diisi. 3-7 kata SUPER pendek. Hook curiosity/bold claim/pertanyaan. Pakai CAPS LOCK kalau pas. Contoh: "RAHASIA KOK NEMU INI?" / "INI BOHONG ATAU GAK"
+- cta: 1 kalimat singkat (follow / share / comment / save)
+- title, description, tags: kosongkan (TIDAK PERLU)
+` : platform === 'reels' ? `
+PLATFORM: INSTAGRAM REELS (data Desember 2025-2026)
+- caption: First 125 karakter PALING PENTING (yang visible sebelum tombol "more"). Total bisa sampai 2200 chars tapi jangan over-write. Target ideal: 100-200 karakter.
+  Hook di kalimat pertama. Pakai 2-3 emoji.
+- hashtags: MAX 5 HASHTAG (Instagram limit baru sejak Des 2025). Pilih 5 niche-spesifik > 30 broad. Mix: 1 trending (#reels #explore), 3-4 niche, 0-1 branded.
+- cover_text: opsional 3-7 kata (kalau hook visual di cover)
+- cta: 1-2 kalimat. "Save this!" / "Share ke teman" / "Comment kalau setuju". Save & share signal kuat ke algoritma Reels.
+- title, description, tags: kosongkan (TIDAK PERLU)
+` : `
+PLATFORM: YOUTUBE SHORTS (data 2025-2026)
+- title: WAJIB <40 karakter (truncate di mobile 45-50 chars). Pakai DECLARATIVE STATEMENT, BUKAN pertanyaan.
+  RULES:
+  • Echo hook line dari opening video (kalimat pertama di scene 1)
+  • Front-load value di 45 chars pertama
+  • Pakai NUMBERS kalau bisa (+20-30% CTR): "3 Tips...", "10 Detik...", "Cara #1..."
+  • Power words ringan (Secret, Truth, Why, This, Never, Actually). Jangan over-hype.
+  Contoh BAGUS: "3 Trik Atur Parfum Yang Awet Seharian" / "Aku Salah Pakai Parfum Selama 5 Tahun"
+  Contoh JELEK: "Bagaimana cara menggunakan parfum dengan benar?" (pertanyaan) / "Tutorial parfum lengkap dari A sampai Z di video kali ini..." (over-length)
+- description: WAJIB 300-500 karakter (detailed description = 35% lebih engagement). Format:
+  Baris 1-2: Hook line + value statement
+  Baris 3-4: Konteks singkat
+  Baris 5: CTA (subscribe / watch next)
+  Baris 6 (akhir): 3-5 hashtag, #Shorts WAJIB jadi yang PERTAMA
+- caption: ringkasan 1 baris untuk snippet (sama dengan opening description)
+- hashtags: TEPAT 3-5 hashtag. URUTAN PENTING: [#Shorts, #niche1, #niche2, #branded]. JANGAN lebih dari 15 atau SEMUA hashtag di-ignore YouTube.
+- tags: WAJIB 8-15 keyword backend (TANPA tanda #, just keywords). Multi-layered: broad + niche + branded. Contoh: ["perfume tips", "fragrance guide", "parfum awet", "tutorial parfum", "kasih parfum", "BRAVEN", "cologne advice"]
+- cover_text: 3-7 kata untuk text overlay di thumbnail. Hook + curiosity.
+- cta: 1 kalimat ajakan subscribe untuk konten serupa.
+`
+
+  const scenesContext = scenePrompts.length > 0
+    ? `\n\nKonteks video — terdiri dari ${scenePrompts.length} scene:\n${scenePrompts.map((p, i) => `Scene ${i+1}: ${p}`).join('\n')}`
+    : '\n\n(Belum ada scene prompts.)'
+
+  return `Kamu adalah AI copywriter ahli untuk short-form video viral.
+
+Tugas: Buat caption + metadata untuk video yang akan di-publish.
+
+PROJECT:
+Title: "${projectTitle}"
+${projectDescription ? `Description: ${projectDescription}` : ''}
+${scenesContext}
+
+${platformGuide}
+
+LANGUAGE: Output semua text dalam ${langName} (kecuali hashtag yang umum dipakai dalam English).
+
+ATURAN UMUM:
+1. Caption HARUS punya hook di kalimat pertama (curiosity, bold claim, atau pertanyaan langsung)
+2. Hashtag urut dari yang paling general → paling niche
+3. Cover text WAJIB pendek (max 7 kata) dan high-impact
+4. CTA jelas dan actionable
+5. alternative_captions: 2 caption alternatif dengan angle berbeda (misal: 1 informatif, 1 emosional)
+6. Jangan generic/AI-sounding. Tulis kayak creator beneran yang ngerti audience.`
+}
+
+export async function generateCaption(params: {
+  apiKey: string
+  platform: Platform
+  projectTitle: string
+  projectDescription?: string | null
+  scenePrompts: string[]
+  language?: 'id' | 'en'
+}): Promise<CaptionResult> {
+  const body = {
+    contents: [
+      {
+        parts: [
+          { text: buildCaptionInstruction(
+              params.platform,
+              params.projectTitle,
+              params.projectDescription ?? null,
+              params.scenePrompts,
+              params.language ?? 'id',
+            )
+          },
+        ],
+      },
+    ],
+    generationConfig: {
+      response_mime_type: 'application/json',
+      response_schema: CAPTION_SCHEMA,
+      temperature: 0.8,  // creative
+    },
+  }
+
+  const res = await fetch(
+    `${BASE_URL}/v1beta/models/${MODEL}:generateContent?key=${params.apiKey}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    }
+  )
+
+  if (!res.ok) {
+    const errText = await res.text()
+    throw new GeminiError(`Caption generation failed: ${errText}`, res.status)
+  }
+
+  const data = await res.json() as {
+    candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>
+  }
+  const text = data.candidates?.[0]?.content?.parts?.[0]?.text
+  if (!text) throw new GeminiError('No text in Gemini response')
+
+  return JSON.parse(text) as CaptionResult
+}
+
 // ===== VIRALITY SCORE =====
 
 export type Platform = 'tiktok' | 'reels' | 'shorts'

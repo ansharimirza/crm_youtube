@@ -8,6 +8,7 @@ import {
 } from 'lucide-react'
 import { getToken } from '@/lib/api'
 import { EditSceneDialog } from '@/components/EditSceneDialog'
+import { CaptionGenerator } from '@/components/CaptionGenerator'
 import { Edit3 } from 'lucide-react'
 import {
   DndContext, PointerSensor, TouchSensor, KeyboardSensor,
@@ -268,6 +269,9 @@ export function VeoProjectPage() {
           </SortableContext>
         </DndContext>
       )}
+
+      {/* AI Caption & Metadata Generator (bottom of project) */}
+      <CaptionGenerator projectId={project.id} hasScenes={scenes.length > 0} />
 
       <EditSceneDialog
         scene={editingScene}

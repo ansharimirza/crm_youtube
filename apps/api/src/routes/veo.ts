@@ -13,6 +13,7 @@ import {
   type ImageAspectRatio,
   type ImageResolution,
 } from '../lib/geminigen'
+import { generateCaption, GeminiError, type Platform } from '../lib/gemini'
 
 const UPLOAD_DIR = process.env.UPLOAD_DIR || join(process.cwd(), 'uploads')
 const VEO_DIR = join(UPLOAD_DIR, 'veo')
@@ -150,6 +151,49 @@ export const veoRoutes = new Elysia({ prefix: '/api/veo' })
     return { ok: true }
   }, {
     body: t.Object({ order: t.Array(t.Number()) }),
+  })
+  // Generate caption & metadata untuk publish
+  .post('/projects/:id/generate-caption', async ({ params, body, user, set }) => {
+    const id = Number(params.id)
+    const project = await db.query.veoProjects.findFirst({
+      where: and(eq(veoProjects.id, id), eq(veoProjects.userId, user.id)),
+      with: { scenes: { orderBy: [veoScenes.sceneNumber] } },
+    })
+    if (!project) {
+      set.status = 404
+      return { error: 'Project tidak ditemukan' }
+    }
+
+    const userRow = await db.query.users.findFirst({ where: eq(users.id, user.id) })
+    const apiKey = userRow?.geminiApiKey ?? process.env.GEMINI_API_KEY
+    if (!apiKey) {
+      set.status = 400
+      return { error: 'Gemini API key belum diatur di Settings' }
+    }
+
+    const scenePrompts = project.scenes.map(s => s.prompt).filter(Boolean)
+
+    try {
+      const result = await generateCaption({
+        apiKey,
+        platform: body.platform as Platform,
+        projectTitle: project.title,
+        projectDescription: project.description,
+        scenePrompts,
+        language: (body.language as 'id' | 'en') ?? 'id',
+      })
+      return { ok: true, result }
+    } catch (err) {
+      const msg = err instanceof GeminiError ? err.message : err instanceof Error ? err.message : String(err)
+      console.error('[generate-caption] Error:', msg)
+      set.status = 500
+      return { ok: false, error: msg }
+    }
+  }, {
+    body: t.Object({
+      platform: t.Union([t.Literal('tiktok'), t.Literal('reels'), t.Literal('shorts')]),
+      language: t.Optional(t.Union([t.Literal('id'), t.Literal('en')])),
+    }),
   })
   // Download semua scene done jadi 1 ZIP
   .get('/projects/:id/download-all', async ({ params, user, set }) => {

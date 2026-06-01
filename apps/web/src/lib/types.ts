@@ -200,6 +200,18 @@ export interface AlternativeHook {
   text: string
 }
 
+export interface CaptionResult {
+  platform: Platform
+  caption: string
+  title?: string
+  description?: string
+  hashtags: string[]
+  tags?: string[]
+  cover_text?: string
+  cta: string
+  alternative_captions: string[]
+}
+
 export interface ViralityResult {
   total_score: number
   criteria: {
