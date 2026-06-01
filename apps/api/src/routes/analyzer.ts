@@ -107,21 +107,33 @@ export const analyzerRoutes = new Elysia({ prefix: '/api/analyzer' })
       .from(veoScenes).where(eq(veoScenes.projectId, projectId))
     let nextNum = (maxRow.max ?? 0) + 1
 
+    const allowedDurations = [4, 6, 8] as const
     const created: number[] = []
     for (const s of body.scenes) {
+      // Resolution: pakai override global kalau ada, kalau tidak default 720p
+      const resolution = body.resolution ?? '720p'
+
+      // Model: pakai override global kalau ada, kalau tidak pakai saran AI per-scene
+      const model = (body.model ?? s.veo_model_suggested ?? 'veo-2') as 'veo-2' | 'veo-3.1' | 'veo-3.1-fast' | 'veo-3.1-lite'
+
+      // Duration: clamp ke 4/6/8
+      const d = Number(s.duration_suggested) || 4
+      const duration = allowedDurations.reduce((prev, curr) =>
+        Math.abs(curr - d) < Math.abs(prev - d) ? curr : prev
+      )
+
       const [scene] = await db.insert(veoScenes).values({
         projectId,
         sceneNumber: nextNum++,
         prompt: s.video_prompt,
-        model: (s.veo_model_suggested ?? 'veo-2') as 'veo-2' | 'veo-3.1' | 'veo-3.1-fast' | 'veo-3.1-lite',
+        model,
         aspectRatio: body.aspect_ratio ?? '16:9',
-        resolution: '720p',
-        duration: Math.min(8, Math.max(4, s.duration_suggested ?? 4)),
+        resolution,
+        duration,
         modeImage: 'frame',
         status: 'queued',
       }).returning()
       created.push(scene.id)
-      // Auto-start generate (text-only, tanpa image ref)
       if (body.auto_start !== false) enqueueScene(scene.id)
     }
 
@@ -131,6 +143,11 @@ export const analyzerRoutes = new Elysia({ prefix: '/api/analyzer' })
       project_id: t.Number(),
       auto_start: t.Optional(t.Boolean()),
       aspect_ratio: t.Optional(t.Union([t.Literal('16:9'), t.Literal('9:16')])),
+      resolution: t.Optional(t.Union([t.Literal('720p'), t.Literal('1080p')])),
+      model: t.Optional(t.Union([
+        t.Literal('veo-2'), t.Literal('veo-3.1'),
+        t.Literal('veo-3.1-fast'), t.Literal('veo-3.1-lite'),
+      ])),
       scenes: t.Array(t.Object({
         video_prompt: t.String({ minLength: 1 }),
         image_prompt: t.Optional(t.String()),

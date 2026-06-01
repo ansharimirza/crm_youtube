@@ -28,6 +28,8 @@ export function AnalyzerPage() {
   const [editedScenes, setEditedScenes] = useState<AnalyzedScene[] | null>(null)
   const [targetProjectId, setTargetProjectId] = useState<string>('')
   const [aspectRatio, setAspectRatio] = useState<'16:9' | '9:16'>('9:16')
+  const [resolution, setResolution] = useState<'720p' | '1080p'>('1080p')
+  const [modelOverride, setModelOverride] = useState<string>('ai')
 
   const { data: projData } = useQuery({
     queryKey: ['veo-projects'],
@@ -36,8 +38,13 @@ export function AnalyzerPage() {
   const projects = projData?.projects ?? []
 
   const addMutation = useMutation({
-    mutationFn: (payload: { project_id: number; scenes: AnalyzedScene[]; aspect_ratio: '16:9' | '9:16' }) =>
-      api.post<{ created: number[] }>('/api/analyzer/add-to-project', payload),
+    mutationFn: (payload: {
+      project_id: number
+      scenes: AnalyzedScene[]
+      aspect_ratio: '16:9' | '9:16'
+      resolution: '720p' | '1080p'
+      model?: string
+    }) => api.post<{ created: number[] }>('/api/analyzer/add-to-project', payload),
     onSuccess: (data, vars) => {
       toast.success(`${data.created.length} scene di-tambahkan & mulai generate`)
       qc.invalidateQueries({ queryKey: ['veo-project', String(vars.project_id)] })
@@ -97,6 +104,8 @@ export function AnalyzerPage() {
       project_id: Number(targetProjectId),
       scenes: editedScenes,
       aspect_ratio: aspectRatio,
+      resolution,
+      ...(modelOverride !== 'ai' ? { model: modelOverride } : {}),
     })
   }
 
@@ -220,35 +229,66 @@ export function AnalyzerPage() {
               <CardDescription>Scene akan otomatis di-queue & generate dengan prompt yang sudah diedit</CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
-              <div className="grid sm:grid-cols-2 gap-3">
-                <div className="space-y-2">
-                  <Label>Project Tujuan</Label>
-                  <Select value={targetProjectId} onValueChange={setTargetProjectId}>
-                    <SelectTrigger><SelectValue placeholder="Pilih project..." /></SelectTrigger>
-                    <SelectContent>
-                      {projects.map(p => (
-                        <SelectItem key={p.id} value={String(p.id)}>{p.title}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  {projects.length === 0 && (
-                    <p className="text-xs text-muted-foreground">
-                      Belum ada project — <Link to="/veo" className="text-primary hover:underline">buat dulu di Veo Studio</Link>
-                    </p>
-                  )}
-                </div>
+              <div className="space-y-2">
+                <Label>Project Tujuan</Label>
+                <Select value={targetProjectId} onValueChange={setTargetProjectId}>
+                  <SelectTrigger><SelectValue placeholder="Pilih project..." /></SelectTrigger>
+                  <SelectContent>
+                    {projects.map(p => (
+                      <SelectItem key={p.id} value={String(p.id)}>{p.title}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {projects.length === 0 && (
+                  <p className="text-xs text-muted-foreground">
+                    Belum ada project — <Link to="/veo" className="text-primary hover:underline">buat dulu di Veo Studio</Link>
+                  </p>
+                )}
+              </div>
 
+              <div className="grid sm:grid-cols-3 gap-3">
                 <div className="space-y-2">
-                  <Label>Aspect Ratio (untuk semua scene)</Label>
+                  <Label>Aspect Ratio</Label>
                   <Select value={aspectRatio} onValueChange={v => setAspectRatio(v as '9:16' | '16:9')}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="9:16">9:16 (Shorts / TikTok / Reels)</SelectItem>
-                      <SelectItem value="16:9">16:9 (Widescreen / YouTube reguler)</SelectItem>
+                      <SelectItem value="9:16">9:16 (Shorts/Reels)</SelectItem>
+                      <SelectItem value="16:9">16:9 (Widescreen)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Resolution</Label>
+                  <Select value={resolution} onValueChange={v => setResolution(v as '720p' | '1080p')}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="720p">720p (HD)</SelectItem>
+                      <SelectItem value="1080p">1080p (Full HD)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Model Veo</Label>
+                  <Select value={modelOverride} onValueChange={setModelOverride}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="ai">Saran AI (per-scene)</SelectItem>
+                      <SelectItem value="veo-3.1">Veo 3.1 (best quality)</SelectItem>
+                      <SelectItem value="veo-3.1-fast">Veo 3.1 Fast</SelectItem>
+                      <SelectItem value="veo-3.1-lite">Veo 3.1 Lite (audio)</SelectItem>
+                      <SelectItem value="veo-2">Veo 2 (flex duration)</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
               </div>
+
+              {modelOverride === 'ai' && (
+                <p className="text-xs text-muted-foreground">
+                  Tiap scene pakai model yang disarankan AI (lihat badge di kartu scene)
+                </p>
+              )}
 
               <Button
                 onClick={handleAddToProject}
