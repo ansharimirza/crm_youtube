@@ -31,6 +31,7 @@ export const veoScenes = pgTable('veo_scenes', {
   sceneNumber: integer('scene_number').notNull(),
   // Input
   prompt: text('prompt').notNull(),
+  imagePrompt: text('image_prompt'),
   model: varchar('model', { length: 32, enum: ['veo-3.1', 'veo-3.1-fast', 'veo-3.1-lite', 'veo-2'] }).default('veo-2').notNull(),
   aspectRatio: varchar('aspect_ratio', { length: 8, enum: ['16:9', '9:16'] }).default('16:9').notNull(),
   resolution: varchar('resolution', { length: 8, enum: ['720p', '1080p'] }).default('720p').notNull(),

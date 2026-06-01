@@ -126,6 +126,7 @@ export const analyzerRoutes = new Elysia({ prefix: '/api/analyzer' })
         projectId,
         sceneNumber: nextNum++,
         prompt: s.video_prompt,
+        imagePrompt: s.image_prompt ?? null,
         model,
         aspectRatio: body.aspect_ratio ?? '16:9',
         resolution,

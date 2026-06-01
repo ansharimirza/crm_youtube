@@ -44,6 +44,7 @@ export interface VeoScene {
   projectId: number
   sceneNumber: number
   prompt: string
+  imagePrompt: string | null
   model: VeoModel
   resolution: VeoResolution
   aspectRatio: VeoAspectRatio

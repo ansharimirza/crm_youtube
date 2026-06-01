@@ -7,6 +7,8 @@ import {
   Package, GripVertical,
 } from 'lucide-react'
 import { getToken } from '@/lib/api'
+import { EditSceneDialog } from '@/components/EditSceneDialog'
+import { Edit3 } from 'lucide-react'
 import {
   DndContext, PointerSensor, TouchSensor, KeyboardSensor,
   useSensor, useSensors, closestCenter,
@@ -44,6 +46,7 @@ export function VeoProjectPage() {
   const [showForm, setShowForm] = useState(false)
   const [downloading, setDownloading] = useState(false)
   const [localScenes, setLocalScenes] = useState<VeoScene[] | null>(null)
+  const [editingScene, setEditingScene] = useState<VeoScene | null>(null)
 
   const { data, refetch } = useQuery({
     queryKey: ['veo-project', id],
@@ -235,6 +238,7 @@ export function VeoProjectPage() {
                   key={scene.id}
                   scene={scene}
                   canReorder={canReorder}
+                  onEdit={() => setEditingScene(scene)}
                   onDelete={() => {
                     if (confirm(`Hapus Scene ${scene.sceneNumber}?`)) {
                       deleteSceneMutation.mutate(scene.id)
@@ -247,15 +251,23 @@ export function VeoProjectPage() {
           </SortableContext>
         </DndContext>
       )}
+
+      <EditSceneDialog
+        scene={editingScene}
+        open={!!editingScene}
+        onClose={() => setEditingScene(null)}
+        projectId={project.id}
+      />
     </div>
   )
 }
 
-function SortableSceneCard({ scene, canReorder, onDelete, onRetry }: {
+function SortableSceneCard({ scene, canReorder, onDelete, onRetry, onEdit }: {
   scene: VeoScene
   canReorder: boolean
   onDelete: () => void
   onRetry: () => void
+  onEdit: () => void
 }) {
   const {
     attributes, listeners, setNodeRef, transform, transition, isDragging,
@@ -287,7 +299,7 @@ function SortableSceneCard({ scene, canReorder, onDelete, onRetry }: {
         <GripVertical className="h-4 w-4" />
       </button>
       <div className="flex-1 min-w-0">
-        <SceneCard scene={scene} onDelete={onDelete} onRetry={onRetry} />
+        <SceneCard scene={scene} onDelete={onDelete} onRetry={onRetry} onEdit={onEdit} />
       </div>
     </div>
   )
@@ -566,10 +578,11 @@ function SceneStatusBadge({ scene }: { scene: VeoScene }) {
   )
 }
 
-function SceneCard({ scene, onDelete, onRetry }: {
+function SceneCard({ scene, onDelete, onRetry, onEdit }: {
   scene: VeoScene
   onDelete: () => void
   onRetry: () => void
+  onEdit: () => void
 }) {
   return (
     <Card>
@@ -622,14 +635,19 @@ function SceneCard({ scene, onDelete, onRetry }: {
               </div>
               <div className="flex items-center gap-1">
                 {scene.status === 'done' && scene.videoUrl && (
-                  <Button asChild size="sm" variant="ghost">
+                  <Button asChild size="sm" variant="ghost" title="Download">
                     <a href={scene.videoUrl} download target="_blank" rel="noopener noreferrer">
                       <Download className="h-4 w-4" />
                     </a>
                   </Button>
                 )}
+                {(scene.status === 'done' || scene.status === 'error') && (
+                  <Button size="sm" variant="ghost" onClick={onEdit} title="Edit & regenerate">
+                    <Edit3 className="h-4 w-4" />
+                  </Button>
+                )}
                 {scene.status === 'error' && (
-                  <Button size="sm" variant="outline" onClick={onRetry}>
+                  <Button size="sm" variant="outline" onClick={onRetry} title="Retry">
                     <RotateCw className="h-4 w-4" />
                     Retry
                   </Button>

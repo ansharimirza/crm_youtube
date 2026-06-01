@@ -282,7 +282,7 @@ export const veoRoutes = new Elysia({ prefix: '/api/veo' })
       return { error: `Sedang ${scene.status}, tidak perlu retry` }
     }
 
-    // Reset state
+    // Reset state, clear hasil lama (kalau ada)
     await db.update(veoScenes).set({
       status: 'queued',
       progress: 0,
@@ -290,11 +290,88 @@ export const veoRoutes = new Elysia({ prefix: '/api/veo' })
       errorMsg: null,
       geminigenUuid: null,
       geminigenId: null,
+      videoUrl: null,
+      thumbnailUrl: null,
+      hasWatermark: 0,
+      uploadedAt: null,
       updatedAt: new Date(),
     }).where(eq(veoScenes.id, id))
 
     enqueueScene(id)
     return { ok: true }
+  })
+  // Edit scene metadata (multipart, optional images)
+  .patch('/scenes/:id', async ({ params, body, user, set }) => {
+    const id = Number(params.id)
+    const scene = await db.query.veoScenes.findFirst({
+      where: eq(veoScenes.id, id),
+      with: { project: true },
+    })
+    if (!scene || scene.project.userId !== user.id) {
+      set.status = 404
+      return { error: 'Scene tidak ditemukan' }
+    }
+    if (scene.status === 'processing' || scene.status === 'queued') {
+      set.status = 400
+      return { error: `Tidak bisa edit saat status: ${scene.status}` }
+    }
+
+    const updates: Partial<typeof veoScenes.$inferInsert> = { updatedAt: new Date() }
+    if (body.prompt !== undefined) updates.prompt = body.prompt
+    if (body.image_prompt !== undefined) updates.imagePrompt = body.image_prompt || null
+    if (body.model) updates.model = body.model
+    if (body.resolution) updates.resolution = body.resolution
+    if (body.aspect_ratio) updates.aspectRatio = body.aspect_ratio
+    if (body.duration) updates.duration = Number(body.duration)
+
+    if (body.first_image) {
+      updates.firstImagePath = await saveFile(body.first_image, 'first')
+    }
+    if (body.last_image) {
+      updates.lastImagePath = await saveFile(body.last_image, 'last')
+    }
+    if (body.clear_first_image === 'true') updates.firstImagePath = null
+    if (body.clear_last_image === 'true') updates.lastImagePath = null
+
+    await db.update(veoScenes).set(updates).where(eq(veoScenes.id, id))
+
+    // Jika regenerate flag true, reset state & enqueue
+    if (body.regenerate === 'true') {
+      await db.update(veoScenes).set({
+        status: 'queued',
+        progress: 0,
+        attempts: 0,
+        errorMsg: null,
+        geminigenUuid: null,
+        geminigenId: null,
+        videoUrl: null,
+        thumbnailUrl: null,
+        hasWatermark: 0,
+        uploadedAt: null,
+        updatedAt: new Date(),
+      }).where(eq(veoScenes.id, id))
+      enqueueScene(id)
+    }
+
+    const updated = await db.query.veoScenes.findFirst({ where: eq(veoScenes.id, id) })
+    return { ok: true, scene: updated }
+  }, {
+    body: t.Object({
+      prompt: t.Optional(t.String({ minLength: 1, maxLength: 4000 })),
+      image_prompt: t.Optional(t.String({ maxLength: 4000 })),
+      model: t.Optional(t.Union([
+        t.Literal('veo-2'), t.Literal('veo-3.1'),
+        t.Literal('veo-3.1-fast'), t.Literal('veo-3.1-lite'),
+      ])),
+      resolution: t.Optional(t.Union([t.Literal('720p'), t.Literal('1080p')])),
+      aspect_ratio: t.Optional(t.Union([t.Literal('16:9'), t.Literal('9:16')])),
+      duration: t.Optional(t.String()),
+      first_image: t.Optional(t.File()),
+      last_image: t.Optional(t.File()),
+      clear_first_image: t.Optional(t.String()),
+      clear_last_image: t.Optional(t.String()),
+      regenerate: t.Optional(t.String()),
+    }),
   })
   .delete('/scenes/:id', async ({ params, user, set }) => {
     const id = Number(params.id)
