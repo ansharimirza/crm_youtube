@@ -151,20 +151,72 @@ export interface AnalyzeResult {
   scenes: AnalyzedScene[]
 }
 
-export type ViralityEmotion = 'Kagum' | 'Lucu' | 'Edukasi' | 'Marah'
+export type Platform = 'tiktok' | 'reels' | 'shorts'
+
+export type ViralityEmotion =
+  | 'Kagum' | 'Lucu' | 'Edukasi' | 'Marah'
+  | 'Penasaran' | 'Inspiratif' | 'Relatable' | 'Shock'
+
+export type HookPattern =
+  | 'Bold Claim' | 'Curiosity Gap' | 'Micro-Story'
+  | 'Visual Shock' | 'Direct Question' | 'None'
 
 export interface ViralityCriterion {
   score: number
   analysis: string
+  detected_signals: string[]
+}
+
+export interface SteppsItem {
+  hit: boolean
+  note: string
+}
+
+export interface SteppsBreakdown {
+  social_currency: SteppsItem
+  triggers: SteppsItem
+  emotion: SteppsItem
+  public: SteppsItem
+  practical_value: SteppsItem
+  stories: SteppsItem
+}
+
+export interface HookDiagnosis {
+  pattern_detected: HookPattern
+  strength_indicators: string[]
+  weakness_indicators: string[]
+}
+
+export interface CutRecommendation {
+  timestamp_start: string
+  timestamp_end: string
+  issue: string
+  action: string
+  reason: string
+}
+
+export interface AlternativeHook {
+  pattern: HookPattern
+  text: string
 }
 
 export interface ViralityResult {
   total_score: number
-  visual_audio_hook: ViralityCriterion
-  pacing_retention: ViralityCriterion
-  shareability: ViralityCriterion
-  critical_seconds_analysis: string
-  cut_recommendation: string
-  predicted_emotion: ViralityEmotion
+  criteria: {
+    hook_strength: ViralityCriterion
+    pacing_retention: ViralityCriterion
+    emotional_payload: ViralityCriterion
+    shareability: ViralityCriterion
+    platform_fit: ViralityCriterion
+  }
+  hook_diagnosis: HookDiagnosis
+  cut_recommendations: CutRecommendation[]
+  stepps_breakdown: SteppsBreakdown
+  predicted_emotion: {
+    primary: ViralityEmotion
+    arc_description: string
+  }
+  predicted_completion_rate: number
+  alternative_hooks: AlternativeHook[]
   summary: string
 }

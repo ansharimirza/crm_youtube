@@ -10,6 +10,7 @@ import {
   scoreVirality,
   deleteGeminiFile,
   GeminiError,
+  type Platform,
 } from '../lib/gemini'
 
 const TMP_DIR = process.env.VIRALITY_TMP_DIR || join(process.env.UPLOAD_DIR || process.cwd(), 'virality-tmp')
@@ -45,11 +46,12 @@ export const viralityRoutes = new Elysia({ prefix: '/api/virality' })
 
     try {
       const mime = file.type || 'video/mp4'
+      const platform = (body.platform ?? 'tiktok') as Platform
       const uploaded = await uploadVideoToGemini(filepath, mime, apiKey, file.name)
       geminiFileName = uploaded.name
       await waitForFileActive(uploaded.name, apiKey)
-      const result = await scoreVirality(uploaded.uri, mime, apiKey)
-      return { ok: true, result }
+      const result = await scoreVirality(uploaded.uri, mime, apiKey, platform)
+      return { ok: true, result, platform }
     } catch (err) {
       const msg = err instanceof GeminiError ? err.message : err instanceof Error ? err.message : String(err)
       console.error('[virality] Error:', msg)
@@ -62,5 +64,10 @@ export const viralityRoutes = new Elysia({ prefix: '/api/virality' })
   }, {
     body: t.Object({
       video: t.File(),
+      platform: t.Optional(t.Union([
+        t.Literal('tiktok'),
+        t.Literal('reels'),
+        t.Literal('shorts'),
+      ])),
     }),
   })
