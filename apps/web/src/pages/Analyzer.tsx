@@ -4,6 +4,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import {
   Wand2, Upload as UploadIcon, FileVideo, X, Loader2, Copy, Check,
   Image as ImageIcon, Film, Clock, KeyRound, Sparkles, Send, ChevronRight,
+  ClipboardCopy,
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -199,10 +200,39 @@ export function AnalyzerPage() {
               </CardTitle>
               <CardDescription>{result.summary}</CardDescription>
             </CardHeader>
-            <CardContent>
+            <CardContent className="space-y-3">
               <div className="text-sm text-muted-foreground">
                 <strong className="text-foreground">{editedScenes.length} scene</strong> ter-deteksi.
                 Edit prompt di bawah jika perlu sebelum add ke project.
+              </div>
+
+              {/* Copy All buttons */}
+              <div className="flex flex-wrap gap-2">
+                <CopyAllButton
+                  label="Copy All Video Prompts"
+                  text={editedScenes
+                    .map((s, i) => `Scene ${i + 1}:\n${s.video_prompt}`)
+                    .join('\n\n')}
+                  icon={Film}
+                />
+                <CopyAllButton
+                  label="Copy All Image Prompts"
+                  text={editedScenes
+                    .map((s, i) => `Scene ${i + 1}:\n${s.image_prompt}`)
+                    .join('\n\n')}
+                  icon={ImageIcon}
+                />
+                <CopyAllButton
+                  label="Copy All (Image + Video)"
+                  text={editedScenes
+                    .map((s, i) =>
+                      `Scene ${i + 1}\n` +
+                      `Image: ${s.image_prompt}\n` +
+                      `Video: ${s.video_prompt}`
+                    )
+                    .join('\n\n')}
+                  icon={ClipboardCopy}
+                />
               </div>
             </CardContent>
           </Card>
@@ -402,5 +432,28 @@ function SceneResultCard({
         </div>
       </CardContent>
     </Card>
+  )
+}
+
+function CopyAllButton({ label, text, icon: Icon }: {
+  label: string
+  text: string
+  icon: typeof ClipboardCopy
+}) {
+  const [copied, setCopied] = useState(false)
+
+  function copy() {
+    navigator.clipboard.writeText(text).then(() => {
+      setCopied(true)
+      toast.success(label.replace('Copy ', '') + ' disalin')
+      setTimeout(() => setCopied(false), 1500)
+    })
+  }
+
+  return (
+    <Button size="sm" variant="outline" onClick={copy}>
+      {copied ? <Check className="h-4 w-4 text-emerald-400" /> : <Icon className="h-4 w-4" />}
+      {label}
+    </Button>
   )
 }
