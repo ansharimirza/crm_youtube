@@ -169,6 +169,159 @@ export async function waitForFileActive(
   throw new GeminiError('Timeout waiting for file to be ACTIVE')
 }
 
+// ===== RESUME PARSER =====
+
+export interface ParsedResume {
+  name: string
+  contact: { phone: string; email: string; location: string; linkedin: string; website: string }
+  summary: { tagline: string; bullets: string[]; skills: string[] }
+  experience: Array<{
+    title: string; company: string; location: string;
+    start: string; end: string; summary: string; bullets: string[]
+  }>
+  education: Array<{
+    degree: string; school: string; location: string; date: string; honors: string
+  }>
+  certifications: Array<{ name: string; org: string; date: string }>
+  projects: Array<{ name: string; description: string; bullets: string[] }>
+  awards: string[]
+}
+
+const RESUME_SCHEMA = {
+  type: 'object',
+  required: ['name', 'contact', 'summary', 'experience', 'education', 'certifications', 'projects', 'awards'],
+  properties: {
+    name: { type: 'string' },
+    contact: {
+      type: 'object',
+      required: ['phone', 'email', 'location', 'linkedin', 'website'],
+      properties: {
+        phone: { type: 'string' },
+        email: { type: 'string' },
+        location: { type: 'string' },
+        linkedin: { type: 'string' },
+        website: { type: 'string' },
+      },
+    },
+    summary: {
+      type: 'object',
+      required: ['tagline', 'bullets', 'skills'],
+      properties: {
+        tagline: { type: 'string' },
+        bullets: { type: 'array', items: { type: 'string' } },
+        skills: { type: 'array', items: { type: 'string' } },
+      },
+    },
+    experience: {
+      type: 'array',
+      items: {
+        type: 'object',
+        required: ['title', 'company', 'location', 'start', 'end', 'summary', 'bullets'],
+        properties: {
+          title: { type: 'string' },
+          company: { type: 'string' },
+          location: { type: 'string' },
+          start: { type: 'string' },
+          end: { type: 'string' },
+          summary: { type: 'string' },
+          bullets: { type: 'array', items: { type: 'string' } },
+        },
+      },
+    },
+    education: {
+      type: 'array',
+      items: {
+        type: 'object',
+        required: ['degree', 'school', 'location', 'date', 'honors'],
+        properties: {
+          degree: { type: 'string' },
+          school: { type: 'string' },
+          location: { type: 'string' },
+          date: { type: 'string' },
+          honors: { type: 'string' },
+        },
+      },
+    },
+    certifications: {
+      type: 'array',
+      items: {
+        type: 'object',
+        required: ['name', 'org', 'date'],
+        properties: {
+          name: { type: 'string' },
+          org: { type: 'string' },
+          date: { type: 'string' },
+        },
+      },
+    },
+    projects: {
+      type: 'array',
+      items: {
+        type: 'object',
+        required: ['name', 'description', 'bullets'],
+        properties: {
+          name: { type: 'string' },
+          description: { type: 'string' },
+          bullets: { type: 'array', items: { type: 'string' } },
+        },
+      },
+    },
+    awards: { type: 'array', items: { type: 'string' } },
+  },
+}
+
+const RESUME_INSTRUCTION = `You are a resume parser. Extract structured data from the resume text below.
+
+Rules:
+- Return ALL fields. Use empty string "" or empty array [] for missing data.
+- Do not invent content — only extract what's actually present.
+- For "summary.tagline": one short italicized opening line like "Multi-faceted retail executive with expertise in:" (often appears right after contact info). If none, return "".
+- For "summary.bullets": short summary bullet points.
+- For "summary.skills": skill keywords (e.g. "Project Management", "P&L Ownership").
+- For experience dates: format like "Jan 2022" or "2022" or "Present".
+- Preserve the original language of the resume (don't translate).
+- Order experience newest-first.
+
+Resume text:
+`
+
+export async function parseResume(text: string, apiKey: string): Promise<ParsedResume> {
+  const body = {
+    contents: [
+      {
+        parts: [{ text: RESUME_INSTRUCTION + '\n\n' + text }],
+      },
+    ],
+    generationConfig: {
+      response_mime_type: 'application/json',
+      response_schema: RESUME_SCHEMA,
+      temperature: 0.1,
+    },
+  }
+
+  const res = await fetch(
+    `${BASE_URL}/v1beta/models/${MODEL}:generateContent?key=${apiKey}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    }
+  )
+
+  if (!res.ok) {
+    const errText = await res.text()
+    throw new GeminiError(`Resume parse failed: ${errText}`, res.status)
+  }
+
+  const data = await res.json() as {
+    candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>
+  }
+  const txt = data.candidates?.[0]?.content?.parts?.[0]?.text
+  if (!txt) throw new GeminiError('No text in Gemini response')
+
+  return JSON.parse(txt) as ParsedResume
+}
+
 // ===== CAPTION & METADATA GENERATION =====
 
 export interface CaptionResult {

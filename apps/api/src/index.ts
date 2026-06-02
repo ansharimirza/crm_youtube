@@ -9,6 +9,7 @@ import { adminRoutes } from './routes/admin'
 import { veoRoutes } from './routes/veo'
 import { analyzerRoutes } from './routes/analyzer'
 import { viralityRoutes } from './routes/virality'
+import { resumeRoutes } from './routes/resume'
 import { recoverPendingScenes } from './lib/scene-worker'
 
 const PORT = Number(process.env.API_PORT ?? 3000)
@@ -27,6 +28,7 @@ const app = new Elysia()
   .use(veoRoutes)
   .use(analyzerRoutes)
   .use(viralityRoutes)
+  .use(resumeRoutes)
   .onError(({ code, error, set }) => {
     if (code === 'VALIDATION') {
       set.status = 400
