@@ -327,13 +327,6 @@ function SectionHeader({ children, template, accent }) {
 
 function CornerMark({ template, accent }) {
   const mark = template.decorativeMark
-  if (mark === 'corner-arc') {
-    return <div aria-hidden="true" style={{
-      position: 'absolute', top: 0, right: 0,
-      width: '0.85in', height: '0.85in',
-      background: accent, borderBottomLeftRadius: '100%', opacity: 0.92,
-    }}/>
-  }
   if (mark === 'thin-rule') {
     return <div aria-hidden="true" style={{
       position: 'absolute', top: '0.5in', right: '0.75in',
@@ -359,7 +352,7 @@ function ResumeHeader({ data, template, accent }) {
 
   if (align === 'center') {
     return (
-      <div style={{ textAlign: 'center', marginTop: template.decorativeMark === 'corner-arc' ? '0.2in' : 0 }}>
+      <div style={{ textAlign: 'center', marginTop: 0 }}>
         <h1 style={nameStyles}>{data.name || 'Your Name'}</h1>
         <div style={{ ...contactStyle, marginTop: '0.12in' }}>{contactItems.join('  |  ')}</div>
       </div>
@@ -367,7 +360,7 @@ function ResumeHeader({ data, template, accent }) {
   }
   if (align === 'left') {
     return (
-      <div style={{ textAlign: 'left', marginTop: template.decorativeMark === 'corner-arc' ? '0.2in' : 0 }}>
+      <div style={{ textAlign: 'left', marginTop: 0 }}>
         <h1 style={nameStyles}>{data.name || 'Your Name'}</h1>
         {template.decorativeMark === 'name-rule' && (<div style={{ width: '1.4in', height: '1.5px', background: accent, marginTop: '0.06in' }} />)}
         {template.decorativeMark === 'name-rule-orange' && (<div style={{ width: '1.4in', height: '2px', background: template.accent2 || accent, marginTop: '0.08in' }} />)}
@@ -376,7 +369,7 @@ function ResumeHeader({ data, template, accent }) {
     )
   }
   return (
-    <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: '0.3in', marginTop: template.decorativeMark === 'corner-arc' ? '0.2in' : 0 }}>
+    <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: '0.3in', marginTop: 0 }}>
       <h1 style={nameStyles}>{data.name || 'Your Name'}</h1>
       <div style={{ ...contactStyle, textAlign: 'right', maxWidth: '3.5in', lineHeight: 1.5 }}>
         {contactItems.map((item, i) => <div key={i}>{item}</div>)}
