@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Server, Youtube, User as UserIcon, Plus, Trash2, Globe2, BadgeCheck, KeyRound, Eye, EyeOff, Film, Wand2 } from 'lucide-react'
+import { Server, Youtube, User as UserIcon, Plus, Trash2, Globe2, BadgeCheck, KeyRound, Eye, EyeOff, Film, Wand2, Video } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -144,6 +144,9 @@ export function SettingsPage() {
       {/* Gemini API Key */}
       <GeminiKeyCard onSave={refresh} />
 
+      {/* Anthropic API Key */}
+      <AnthropicKeyCard onSave={refresh} />
+
       {/* Worker Status */}
       <Card>
         <CardHeader>
@@ -276,6 +279,88 @@ function GeminiKeyCard({ onSave }: { onSave: () => void }) {
           </div>
           <p className="text-xs text-muted-foreground">
             Gratis & instant di <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">aistudio.google.com/app/apikey</a>
+          </p>
+        </div>
+      </CardContent>
+    </Card>
+  )
+}
+
+function AnthropicKeyCard({ onSave }: { onSave: () => void }) {
+  const { user } = useAuth()
+  const [key, setKey] = useState('')
+  const [show, setShow] = useState(false)
+
+  const mutation = useMutation({
+    mutationFn: (k: string) => api.patch('/auth/me/settings', { anthropicApiKey: k }),
+    onSuccess: () => {
+      toast.success('Anthropic API key disimpan')
+      setKey('')
+      onSave()
+    },
+    onError: (e: Error) => toast.error(e.message),
+  })
+
+  const isConnected = user?.hasAnthropicKey
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base flex items-center gap-2">
+          <Video className="h-4 w-4 text-pink-400" />
+          Anthropic Claude (TikTok Studio)
+        </CardTitle>
+        <CardDescription>API key dari console.anthropic.com untuk generate TikTok script via Claude Sonnet 4.6</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className={cn(
+          'flex items-center gap-3 rounded-lg border p-4',
+          isConnected ? 'bg-emerald-500/10 border-emerald-500/30' : 'bg-amber-500/10 border-amber-500/30'
+        )}>
+          <div className={cn('h-2 w-2 rounded-full', isConnected ? 'bg-emerald-400' : 'bg-amber-400')} />
+          <div className="flex-1">
+            <div className={cn('text-sm font-medium', isConnected ? 'text-emerald-300' : 'text-amber-300')}>
+              {isConnected ? 'API Key tersimpan' : 'Belum ada API Key'}
+            </div>
+            <div className="text-xs text-muted-foreground mt-0.5">
+              {isConnected ? 'TikTok Studio siap dipakai' : '$5 free credit di console.anthropic.com'}
+            </div>
+          </div>
+        </div>
+
+        <div className="space-y-2">
+          <Label className="flex items-center gap-2">
+            <KeyRound className="h-3.5 w-3.5" />
+            {isConnected ? 'Ganti API Key' : 'API Key'}
+          </Label>
+          <div className="flex gap-2">
+            <div className="relative flex-1">
+              <Input
+                type={show ? 'text' : 'password'}
+                value={key}
+                onChange={e => setKey(e.target.value)}
+                placeholder="sk-ant-api03-..."
+                className="pr-10"
+              />
+              <button
+                type="button"
+                onClick={() => setShow(!show)}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+              >
+                {show ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </button>
+            </div>
+            <Button onClick={() => mutation.mutate(key)} disabled={mutation.isPending || !key.trim()}>
+              Simpan
+            </Button>
+            {isConnected && (
+              <Button variant="outline" onClick={() => mutation.mutate('')} disabled={mutation.isPending} title="Hapus">
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            )}
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Daftar gratis di <a href="https://console.anthropic.com" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">console.anthropic.com</a> — $5 free credit untuk testing.
           </p>
         </div>
       </CardContent>

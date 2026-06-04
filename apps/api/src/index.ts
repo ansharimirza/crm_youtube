@@ -10,6 +10,8 @@ import { veoRoutes } from './routes/veo'
 import { analyzerRoutes } from './routes/analyzer'
 import { viralityRoutes } from './routes/virality'
 import { resumeRoutes } from './routes/resume'
+import { tiktokRoutes } from './routes/tiktok'
+import { recoverPendingTiktokScenes } from './lib/tiktok-worker'
 import { recoverPendingScenes } from './lib/scene-worker'
 
 const PORT = Number(process.env.API_PORT ?? 3000)
@@ -29,6 +31,7 @@ const app = new Elysia()
   .use(analyzerRoutes)
   .use(viralityRoutes)
   .use(resumeRoutes)
+  .use(tiktokRoutes)
   .onError(({ code, error, set }) => {
     if (code === 'VALIDATION') {
       set.status = 400
@@ -49,5 +52,6 @@ console.log(`🚀 API listening on http://0.0.0.0:${PORT}`)
 
 // Recover scenes yang pending kalau API restart
 recoverPendingScenes().catch(err => console.error('[recover]', err))
+recoverPendingTiktokScenes().catch(err => console.error('[tiktok-recover]', err))
 
 export type App = typeof app

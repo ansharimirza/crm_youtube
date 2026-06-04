@@ -90,7 +90,7 @@ export const authRoutes = new Elysia({ prefix: '/auth' })
 
     const user = await db.query.users.findFirst({
       where: eq(users.id, Number(payload.userId)),
-      columns: { id: true, email: true, name: true, role: true, geminigenApiKey: true, geminiApiKey: true, createdAt: true },
+      columns: { id: true, email: true, name: true, role: true, geminigenApiKey: true, geminiApiKey: true, anthropicApiKey: true, createdAt: true },
     })
 
     if (!user) {
@@ -103,8 +103,10 @@ export const authRoutes = new Elysia({ prefix: '/auth' })
         ...user,
         hasGeminigenKey: !!user.geminigenApiKey,
         hasGeminiKey: !!user.geminiApiKey,
+        hasAnthropicKey: !!user.anthropicApiKey,
         geminigenApiKey: undefined,
         geminiApiKey: undefined,
+        anthropicApiKey: undefined,
       },
     }
   })
@@ -127,6 +129,9 @@ export const authRoutes = new Elysia({ prefix: '/auth' })
     if (body.geminiApiKey !== undefined) {
       updates.geminiApiKey = body.geminiApiKey.trim() || null
     }
+    if (body.anthropicApiKey !== undefined) {
+      updates.anthropicApiKey = body.anthropicApiKey.trim() || null
+    }
 
     await db.update(users).set(updates).where(eq(users.id, Number(payload.userId)))
     return { ok: true }
@@ -134,5 +139,6 @@ export const authRoutes = new Elysia({ prefix: '/auth' })
     body: t.Object({
       geminigenApiKey: t.Optional(t.String({ maxLength: 500 })),
       geminiApiKey: t.Optional(t.String({ maxLength: 500 })),
+      anthropicApiKey: t.Optional(t.String({ maxLength: 500 })),
     }),
   })

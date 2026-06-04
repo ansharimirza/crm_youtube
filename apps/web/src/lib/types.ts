@@ -6,6 +6,7 @@ export interface User {
   isActive?: boolean
   hasGeminigenKey?: boolean
   hasGeminiKey?: boolean
+  hasAnthropicKey?: boolean
   createdAt?: string
   videoCount?: number
   channelCount?: number
@@ -152,6 +153,76 @@ export interface AnalyzeResult {
 }
 
 export type Platform = 'tiktok' | 'reels' | 'shorts'
+
+export type TiktokMode = 'ugc' | 'pov_hand' | 'mirror_check'
+export type TiktokContentType = 'review' | 'unboxing' | 'affiliate'
+export type TiktokSceneStatus = 'queued' | 'processing' | 'done' | 'error'
+export type TiktokCampaignStatus = 'draft' | 'generating' | 'done' | 'error'
+
+export interface TiktokProductInfo {
+  name: string
+  description: string
+  category: string
+  key_features: string[]
+  brand: string
+  detected_text?: string
+}
+
+export interface TiktokScene {
+  id: number
+  campaignId: number
+  sceneNumber: number
+  script: string
+  veoPrompt: string
+  duration: number
+  status: TiktokSceneStatus
+  progress: number
+  attempts: number
+  videoUrl: string | null
+  thumbnailUrl: string | null
+  errorMsg: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export interface TiktokCampaign {
+  id: number
+  userId: number
+  title: string
+  mode: TiktokMode
+  contentType: TiktokContentType
+  language: 'id' | 'en'
+  productName: string
+  productDescription: string
+  environment: string
+  aspectRatio: '9:16' | '16:9' | '1:1'
+  resolution: '720p' | '1080p'
+  veoModel: string
+  sceneCount: number
+  status: TiktokCampaignStatus
+  productImagePath: string | null
+  baseModelPath: string | null
+  productUrl: string | null
+  scenes?: TiktokScene[]
+  createdAt: string
+  updatedAt: string
+}
+
+export interface TiktokCampaignSummary {
+  id: number
+  title: string
+  mode: TiktokMode
+  contentType: TiktokContentType
+  language: 'id' | 'en'
+  productName: string
+  status: TiktokCampaignStatus
+  sceneCount: number
+  doneCount: number
+  processingCount: number
+  errorCount: number
+  thumbnail: string | null
+  createdAt: string
+}
 
 export type ViralityEmotion =
   | 'Kagum' | 'Lucu' | 'Edukasi' | 'Marah'

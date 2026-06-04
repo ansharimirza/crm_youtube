@@ -17,6 +17,9 @@ import { VeoProjectPage } from '@/pages/VeoProject'
 import { AnalyzerPage } from '@/pages/Analyzer'
 import { ViralityPage } from '@/pages/Virality'
 import { ResumePage } from '@/pages/Resume'
+import { TiktokStudioPage } from '@/pages/TiktokStudio'
+import { TiktokNewPage } from '@/pages/TiktokNew'
+import { TiktokCampaignPage } from '@/pages/TiktokCampaign'
 
 const qc = new QueryClient({
   defaultOptions: {
@@ -76,6 +79,9 @@ export default function App() {
               <Route path="/analyzer" element={<AnalyzerPage />} />
               <Route path="/virality" element={<ViralityPage />} />
               <Route path="/resume" element={<ResumePage />} />
+              <Route path="/tiktok" element={<TiktokStudioPage />} />
+              <Route path="/tiktok/new" element={<TiktokNewPage />} />
+              <Route path="/tiktok/:id" element={<TiktokCampaignPage />} />
               <Route path="/settings" element={<SettingsPage />} />
               <Route element={<AdminGuard />}>
                 <Route path="/admin" element={<AdminPage />} />

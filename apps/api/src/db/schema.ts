@@ -11,6 +11,7 @@ export const users = pgTable('users', {
   isActive: boolean('is_active').default(true).notNull(),
   geminigenApiKey: text('geminigen_api_key'),
   geminiApiKey: text('gemini_api_key'),
+  anthropicApiKey: text('anthropic_api_key'),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
 })
@@ -114,6 +115,53 @@ export const videos = pgTable('videos', {
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
 })
 
+// TikTok Studio: campaign berisi banyak scene
+export const tiktokCampaigns = pgTable('tiktok_campaigns', {
+  id: serial('id').primaryKey(),
+  userId: integer('user_id').references(() => users.id, { onDelete: 'cascade' }).notNull(),
+  title: varchar('title', { length: 200 }).notNull(),
+  mode: varchar('mode', { length: 32, enum: ['ugc', 'pov_hand', 'mirror_check'] }).notNull(),
+  contentType: varchar('content_type', { length: 32, enum: ['review', 'unboxing', 'affiliate'] }).notNull(),
+  language: varchar('language', { length: 8, enum: ['id', 'en'] }).default('id').notNull(),
+  // Inputs
+  baseModelPath: text('base_model_path'),     // image of person (UGC mode)
+  productImagePath: text('product_image_path'),
+  productUrl: text('product_url'),
+  productName: varchar('product_name', { length: 255 }).notNull(),
+  productDescription: text('product_description').default('').notNull(),
+  // Settings
+  environment: text('environment').notNull(),
+  aspectRatio: varchar('aspect_ratio', { length: 8, enum: ['16:9', '9:16', '1:1'] }).default('9:16').notNull(),
+  resolution: varchar('resolution', { length: 8, enum: ['720p', '1080p'] }).default('1080p').notNull(),
+  veoModel: varchar('veo_model', { length: 32 }).default('veo-2').notNull(),
+  sceneCount: integer('scene_count').default(4).notNull(),
+  // State
+  status: varchar('status', { length: 16, enum: ['draft', 'generating', 'done', 'error'] }).default('draft').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+})
+
+export const tiktokScenes = pgTable('tiktok_scenes', {
+  id: serial('id').primaryKey(),
+  campaignId: integer('campaign_id').references(() => tiktokCampaigns.id, { onDelete: 'cascade' }).notNull(),
+  sceneNumber: integer('scene_number').notNull(),
+  // Script (from Claude)
+  script: text('script').notNull(),       // narrative description / what happens
+  veoPrompt: text('veo_prompt').notNull(), // technical prompt for Veo
+  duration: integer('duration').default(4).notNull(),
+  // Generation state
+  status: varchar('status', { length: 16, enum: ['queued', 'processing', 'done', 'error'] }).default('queued').notNull(),
+  progress: integer('progress').default(0).notNull(),
+  attempts: integer('attempts').default(0).notNull(),
+  geminigenUuid: varchar('geminigen_uuid', { length: 64 }),
+  geminigenId: integer('geminigen_id'),
+  videoUrl: text('video_url'),
+  thumbnailUrl: text('thumbnail_url'),
+  errorMsg: text('error_msg'),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+})
+
 export const uploadLogs = pgTable('upload_logs', {
   id: serial('id').primaryKey(),
   videoId: integer('video_id').references(() => videos.id, { onDelete: 'cascade' }).notNull(),
@@ -135,6 +183,15 @@ export const veoProjectsRelations = relations(veoProjects, ({ one, many }) => ({
 
 export const veoScenesRelations = relations(veoScenes, ({ one }) => ({
   project: one(veoProjects, { fields: [veoScenes.projectId], references: [veoProjects.id] }),
+}))
+
+export const tiktokCampaignsRelations = relations(tiktokCampaigns, ({ one, many }) => ({
+  user: one(users, { fields: [tiktokCampaigns.userId], references: [users.id] }),
+  scenes: many(tiktokScenes),
+}))
+
+export const tiktokScenesRelations = relations(tiktokScenes, ({ one }) => ({
+  campaign: one(tiktokCampaigns, { fields: [tiktokScenes.campaignId], references: [tiktokCampaigns.id] }),
 }))
 
 export const youtubeAccountsRelations = relations(youtubeAccounts, ({ one, many }) => ({
@@ -164,3 +221,5 @@ export type UploadLog = typeof uploadLogs.$inferSelect
 export type Notification = typeof notifications.$inferSelect
 export type VeoProject = typeof veoProjects.$inferSelect
 export type VeoScene = typeof veoScenes.$inferSelect
+export type TiktokCampaign = typeof tiktokCampaigns.$inferSelect
+export type TiktokScene = typeof tiktokScenes.$inferSelect
