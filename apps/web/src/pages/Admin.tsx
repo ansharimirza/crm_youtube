@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Users, Plus, Trash2, Shield, ShieldOff, UserPlus, Video as VideoIcon, Youtube, Database, KeyRound, Power } from 'lucide-react'
+import { Users, Plus, Trash2, Shield, ShieldOff, UserPlus, Video as VideoIcon, Youtube, Database, KeyRound, Power, Pencil, X, Check } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -170,6 +170,9 @@ function UserRow({ user, isCurrentUser }: { user: User; isCurrentUser: boolean }
   const qc = useQueryClient()
   const [showResetPw, setShowResetPw] = useState(false)
   const [newPassword, setNewPassword] = useState('')
+  const [showEdit, setShowEdit] = useState(false)
+  const [editName, setEditName] = useState(user.name)
+  const [editEmail, setEditEmail] = useState(user.email)
 
   const updateMutation = useMutation({
     mutationFn: (data: Partial<User> & { password?: string }) =>
@@ -179,9 +182,22 @@ function UserRow({ user, isCurrentUser }: { user: User; isCurrentUser: boolean }
       qc.invalidateQueries({ queryKey: ['admin-users'] })
       setShowResetPw(false)
       setNewPassword('')
+      setShowEdit(false)
     },
     onError: (e: Error) => toast.error(e.message),
   })
+
+  function saveEdit() {
+    const updates: Partial<User> = {}
+    if (editName.trim() && editName.trim() !== user.name) updates.name = editName.trim()
+    if (editEmail.trim() && editEmail.trim() !== user.email) updates.email = editEmail.trim()
+    if (Object.keys(updates).length === 0) {
+      toast.info('Tidak ada perubahan')
+      setShowEdit(false)
+      return
+    }
+    updateMutation.mutate(updates)
+  }
 
   const deleteMutation = useMutation({
     mutationFn: () => api.delete(`/api/admin/users/${user.id}`),
@@ -244,47 +260,83 @@ function UserRow({ user, isCurrentUser }: { user: User; isCurrentUser: boolean }
           </div>
         </div>
 
-        {!isCurrentUser && (
-          <div className="flex items-center gap-1 shrink-0">
-            <Button
-              size="icon"
-              variant="ghost"
-              onClick={toggleRole}
-              title={user.role === 'admin' ? 'Demote ke user' : 'Promote ke admin'}
-              disabled={updateMutation.isPending}
-            >
-              {user.role === 'admin' ? <ShieldOff className="h-4 w-4" /> : <Shield className="h-4 w-4" />}
+        <div className="flex items-center gap-1 shrink-0">
+          <Button
+            size="icon"
+            variant="ghost"
+            onClick={() => { setEditName(user.name); setEditEmail(user.email); setShowEdit(v => !v) }}
+            title="Edit nama / email"
+          >
+            <Pencil className="h-4 w-4" />
+          </Button>
+          {!isCurrentUser && (
+            <>
+              <Button
+                size="icon"
+                variant="ghost"
+                onClick={toggleRole}
+                title={user.role === 'admin' ? 'Demote ke user' : 'Promote ke admin'}
+                disabled={updateMutation.isPending}
+              >
+                {user.role === 'admin' ? <ShieldOff className="h-4 w-4" /> : <Shield className="h-4 w-4" />}
+              </Button>
+              <Button
+                size="icon"
+                variant="ghost"
+                onClick={toggleActive}
+                title={user.isActive ? 'Disable user' : 'Enable user'}
+                disabled={updateMutation.isPending}
+              >
+                <Power className={cn('h-4 w-4', !user.isActive && 'text-red-400')} />
+              </Button>
+              <Button
+                size="icon"
+                variant="ghost"
+                onClick={() => setShowResetPw(!showResetPw)}
+                title="Reset password"
+              >
+                <KeyRound className="h-4 w-4" />
+              </Button>
+              <Button
+                size="icon"
+                variant="ghost"
+                onClick={handleDelete}
+                title="Hapus user"
+                className="text-red-400 hover:text-red-300 hover:bg-red-500/10"
+                disabled={deleteMutation.isPending}
+              >
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            </>
+          )}
+        </div>
+      </div>
+
+      {showEdit && (
+        <div className="mt-3 grid sm:grid-cols-2 gap-2 pl-14">
+          <Input
+            placeholder="Nama"
+            value={editName}
+            onChange={e => setEditName(e.target.value)}
+          />
+          <Input
+            type="email"
+            placeholder="Email"
+            value={editEmail}
+            onChange={e => setEditEmail(e.target.value)}
+          />
+          <div className="sm:col-span-2 flex gap-2">
+            <Button size="sm" onClick={saveEdit} disabled={updateMutation.isPending}>
+              <Check className="h-4 w-4" />
+              Simpan
             </Button>
-            <Button
-              size="icon"
-              variant="ghost"
-              onClick={toggleActive}
-              title={user.isActive ? 'Disable user' : 'Enable user'}
-              disabled={updateMutation.isPending}
-            >
-              <Power className={cn('h-4 w-4', !user.isActive && 'text-red-400')} />
-            </Button>
-            <Button
-              size="icon"
-              variant="ghost"
-              onClick={() => setShowResetPw(!showResetPw)}
-              title="Reset password"
-            >
-              <KeyRound className="h-4 w-4" />
-            </Button>
-            <Button
-              size="icon"
-              variant="ghost"
-              onClick={handleDelete}
-              title="Hapus user"
-              className="text-red-400 hover:text-red-300 hover:bg-red-500/10"
-              disabled={deleteMutation.isPending}
-            >
-              <Trash2 className="h-4 w-4" />
+            <Button size="sm" variant="ghost" onClick={() => setShowEdit(false)}>
+              <X className="h-4 w-4" />
+              Batal
             </Button>
           </div>
-        )}
-      </div>
+        </div>
+      )}
 
       {showResetPw && (
         <div className="mt-3 flex gap-2 pl-14">
