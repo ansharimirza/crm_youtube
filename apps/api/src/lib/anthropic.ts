@@ -14,6 +14,15 @@ function buildClient(apiKey: string): Anthropic {
   return new Anthropic({ apiKey })
 }
 
+// Claude sometimes wraps JSON in markdown fences despite "JSON ONLY" instruction
+function stripJsonFences(raw: string): string {
+  return raw.trim()
+    .replace(/^```json\s*/i, '')
+    .replace(/^```\s*/i, '')
+    .replace(/\s*```\s*$/i, '')
+    .trim()
+}
+
 /* ===========================================================
    1. PRODUCT IDENTIFICATION (vision)
    =========================================================== */
@@ -76,7 +85,7 @@ export async function identifyProductFromImage(
   if (!text || text.type !== 'text') throw new AnthropicError('No text in response')
 
   try {
-    return JSON.parse(text.text) as ProductInfo
+    return JSON.parse(stripJsonFences(text.text)) as ProductInfo
   } catch (err) {
     throw new AnthropicError(`Failed to parse product JSON: ${err instanceof Error ? err.message : err}`)
   }
@@ -131,7 +140,7 @@ export async function extractProductFromHtml(
   if (!text || text.type !== 'text') throw new AnthropicError('No text in response')
 
   try {
-    return JSON.parse(text.text) as ProductInfo
+    return JSON.parse(stripJsonFences(text.text)) as ProductInfo
   } catch (err) {
     throw new AnthropicError(`Failed to parse extraction JSON: ${err instanceof Error ? err.message : err}`)
   }
@@ -187,7 +196,7 @@ Suggest 5 environments for a TikTok video featuring this product. ${langInstr}`,
   if (!text || text.type !== 'text') throw new AnthropicError('No text in response')
 
   try {
-    const parsed = JSON.parse(text.text) as { environments: string[] }
+    const parsed = JSON.parse(stripJsonFences(text.text)) as { environments: string[] }
     return parsed.environments.slice(0, 5)
   } catch (err) {
     throw new AnthropicError(`Failed to parse environment JSON: ${err instanceof Error ? err.message : err}`)
@@ -464,12 +473,8 @@ Generate exactly ${sceneCount} scenes that tell a cohesive story matching the mo
   const text = res.content.find((b) => b.type === 'text')
   if (!text || text.type !== 'text') throw new AnthropicError('No text in response')
 
-  let raw = text.text.trim()
-  // Strip optional markdown fences (Claude sometimes wraps despite "JSON ONLY")
-  raw = raw.replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/\s*```\s*$/i, '')
-
   try {
-    const parsed = JSON.parse(raw) as { scenes: SceneScript[] }
+    const parsed = JSON.parse(stripJsonFences(text.text)) as { scenes: SceneScript[] }
     // Clamp duration to allowed values
     const allowed = [4, 6, 8] as const
     return parsed.scenes.slice(0, sceneCount).map((s, i) => {
