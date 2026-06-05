@@ -131,11 +131,19 @@ async function runSceneImage(sceneId: number) {
         updatedAt: new Date(),
       }).where(eq(tiktokScenes.id, sceneId))
 
-      console.log(`[tiktok-img:${sceneId}] Attempt ${attempts}/${MAX_ATTEMPTS}`)
+      console.log(`[tiktok-img:${sceneId}] Attempt ${attempts}/${MAX_ATTEMPTS}, ${refs.length} ref images`)
+
+      // Belt-and-suspenders: prepend an explicit instruction that the reference
+      // images MUST drive the output (face identity + product identity).
+      const refHints = refs.length === 2
+        ? 'CRITICAL: Reference image 1 is the PERSON\'s face/body — keep their exact facial features, skin tone, hair, and build. Reference image 2 is the PRODUCT — keep its exact packaging, label text, color, and shape. The output must show THIS person holding THIS product. Do not invent new face or new product.\n\n'
+        : refs.length === 1
+        ? 'CRITICAL: Use the reference image as the SOURCE identity — keep its exact appearance, do not reinterpret.\n\n'
+        : ''
 
       const initial = await generateImage({
         apiKey,
-        prompt: scene.imagePrompt,
+        prompt: refHints + scene.imagePrompt,
         model: 'nano-banana-pro',
         aspectRatio: mapAspectImage(campaign.aspectRatio as '9:16' | '16:9' | '1:1'),
         resolution: campaign.resolution === '1080p' ? '2K' : '1K',
