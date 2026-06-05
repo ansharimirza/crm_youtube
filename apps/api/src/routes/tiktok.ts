@@ -8,6 +8,7 @@ import { enqueueTiktokImage, enqueueTiktokVideo } from '../lib/tiktok-worker'
 import {
   identifyProductFromImage,
   extractProductFromHtml,
+  enrichProductFromTitleAndImage,
   suggestEnvironments,
   generateSceneScripts,
   AnthropicError,
@@ -49,12 +50,35 @@ export const tiktokRoutes = new Elysia({ prefix: '/api/tiktok' })
     try {
       const scraped = await scrapeProductUrl(body.url)
 
-      if (scraped.source !== 'html' && scraped.name) {
-        // For TikTok redirect, description = title; let Claude enrich category/brand/features
-        // by combining the title + (optional) image into a product info extraction call.
+      // TikTok Shop redirect: only has title + image. Enrich via Claude vision.
+      if (scraped.source === 'tiktok_redirect') {
+        try {
+          const product = await enrichProductFromTitleAndImage({
+            title: scraped.name,
+            imageUrl: scraped.image_url,
+            apiKey,
+          })
+          return { ok: true, product, image_url: scraped.image_url, source: scraped.source }
+        } catch (err) {
+          // Fallback: return title-only product, user can fill rest manually
+          console.error('[tiktok enrich]', err)
+          const product: ProductInfo = {
+            name: scraped.name,
+            description: scraped.name,
+            category: '',
+            key_features: [],
+            brand: '',
+            detected_text: '',
+          }
+          return { ok: true, product, image_url: scraped.image_url, source: scraped.source }
+        }
+      }
+
+      // Meta tags / JSON-LD path — has proper description already
+      if (scraped.source !== 'html' && scraped.name && scraped.description) {
         const product: ProductInfo = {
           name: scraped.name,
-          description: scraped.description || scraped.name,
+          description: scraped.description,
           category: '',
           key_features: [],
           brand: '',

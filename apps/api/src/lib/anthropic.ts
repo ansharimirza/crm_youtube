@@ -109,6 +109,65 @@ Output JSON ONLY. Schema:
 
 If HTML is empty or contains no product info, return empty strings/arrays. Do NOT hallucinate.`
 
+/**
+ * Enrich a product when we only have title + image URL (e.g. from TikTok Shop
+ * og_info). Sends both to Claude vision in one call.
+ */
+export async function enrichProductFromTitleAndImage(
+  params: { title: string; imageUrl: string | null; apiKey: string }
+): Promise<ProductInfo> {
+  const { title, imageUrl, apiKey } = params
+  const client = buildClient(apiKey)
+
+  // Build vision content. Download image to base64 since Anthropic SDK in this version
+  // expects base64 source (not URL).
+  const content: Array<Record<string, unknown>> = []
+  if (imageUrl) {
+    try {
+      const imgRes = await fetch(imageUrl, { signal: AbortSignal.timeout(15_000) })
+      if (imgRes.ok) {
+        const buf = Buffer.from(await imgRes.arrayBuffer())
+        const ct = imgRes.headers.get('content-type') ?? 'image/jpeg'
+        const mediaType = ct.startsWith('image/') ? ct.split(';')[0] : 'image/jpeg'
+        content.push({
+          type: 'image',
+          source: { type: 'base64', media_type: mediaType, data: buf.toString('base64') },
+        })
+      }
+    } catch { /* skip image on download error, fall back to title-only */ }
+  }
+  content.push({
+    type: 'text',
+    text: `Product title from listing: "${title}"\n\nExtract structured product info. Use the image (if any) to identify visible details. Output JSON ONLY:
+{
+  "name": "Clean product name (keep brand, remove SEO spam keywords)",
+  "description": "1-2 sentence neutral description",
+  "category": "Product category",
+  "key_features": ["3-5 likely features"],
+  "brand": "Brand name",
+  "detected_text": "Any visible text"
+}`,
+  })
+
+  const res = await client.messages.create({
+    model: MODEL,
+    max_tokens: 1024,
+    system: [
+      { type: 'text', text: PRODUCT_VISION_SYSTEM, cache_control: { type: 'ephemeral' } },
+    ],
+    messages: [{ role: 'user', content: content as never }],
+  })
+
+  const text = res.content.find((b) => b.type === 'text')
+  if (!text || text.type !== 'text') throw new AnthropicError('No text in response')
+
+  try {
+    return JSON.parse(stripJsonFences(text.text)) as ProductInfo
+  } catch (err) {
+    throw new AnthropicError(`Failed to parse enrich JSON: ${err instanceof Error ? err.message : err}`)
+  }
+}
+
 export async function extractProductFromHtml(
   html: string,
   apiKey: string
