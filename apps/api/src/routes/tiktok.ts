@@ -63,11 +63,19 @@ export const tiktokRoutes = new Elysia({ prefix: '/api/tiktok' })
 
       if (scraped.raw_html) {
         const product = await extractProductFromHtml(scraped.raw_html, apiKey)
+        // Tokopedia / Shopee SPA — HTML kosong, Claude balikin field kosong.
+        if (!product.name?.trim() && !product.description?.trim()) {
+          set.status = 400
+          return {
+            ok: false,
+            error: 'Site ini SPA / dilindungi anti-bot (Tokopedia/Shopee). Coba upload gambar produk manual.',
+          }
+        }
         return { ok: true, product, image_url: scraped.image_url, source: 'claude_html' }
       }
 
       set.status = 400
-      return { error: 'Tidak bisa extract info produk dari URL ini' }
+      return { error: 'Tidak bisa extract info produk dari URL ini. Coba upload gambar produk.' }
     } catch (err) {
       const msg = err instanceof ScrapeError || err instanceof AnthropicError
         ? err.message
