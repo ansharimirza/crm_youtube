@@ -179,6 +179,7 @@ export interface GenerateImageParams {
   resolution?: ImageResolution
   style?: string
   outputFormat?: 'jpeg' | 'png'
+  refImagePaths?: string[]  // for Nano Banana — character + product references
 }
 
 export interface GenerateImageResponse {
@@ -200,6 +201,11 @@ export async function generateImage(params: GenerateImageParams): Promise<Genera
   if (params.resolution) form.append('resolution', params.resolution)
   if (params.style) form.append('style', params.style)
   form.append('output_format', params.outputFormat ?? 'jpeg')
+
+  // Ref images untuk Nano Banana (character + product consistency)
+  for (const refPath of params.refImagePaths ?? []) {
+    await appendFileToForm(form, 'ref_images', refPath)
+  }
 
   const res = await fetch('https://api.geminigen.ai/uapi/v1/generate_image', {
     method: 'POST',

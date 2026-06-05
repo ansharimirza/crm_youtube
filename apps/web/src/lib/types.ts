@@ -156,7 +156,8 @@ export type Platform = 'tiktok' | 'reels' | 'shorts'
 
 export type TiktokMode = 'ugc' | 'pov_hand' | 'mirror_check'
 export type TiktokContentType = 'review' | 'unboxing' | 'affiliate'
-export type TiktokSceneStatus = 'queued' | 'processing' | 'done' | 'error'
+export type TiktokImageStatus = 'queued' | 'processing' | 'done' | 'error'
+export type TiktokSceneStatus = 'pending' | 'queued' | 'processing' | 'done' | 'error'
 export type TiktokCampaignStatus = 'draft' | 'generating' | 'done' | 'error'
 
 export interface TiktokProductInfo {
@@ -173,8 +174,15 @@ export interface TiktokScene {
   campaignId: number
   sceneNumber: number
   script: string
+  imagePrompt: string
   veoPrompt: string
   duration: number
+  // Image phase
+  imageStatus: TiktokImageStatus
+  imageUrl: string | null
+  imageAttempts: number
+  imageErrorMsg: string | null
+  // Video phase
   status: TiktokSceneStatus
   progress: number
   attempts: number
@@ -217,6 +225,7 @@ export interface TiktokCampaignSummary {
   productName: string
   status: TiktokCampaignStatus
   sceneCount: number
+  imageDoneCount: number
   doneCount: number
   processingCount: number
   errorCount: number

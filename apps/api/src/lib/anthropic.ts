@@ -204,8 +204,9 @@ export type ContentType = 'review' | 'unboxing' | 'affiliate'
 export interface SceneScript {
   scene_number: number
   duration: number       // 4, 6, or 8 seconds
-  script: string         // What happens in the scene (narrative)
-  veo_prompt: string     // Technical prompt for Veo
+  script: string         // VO/narration text (what person says/thinks)
+  image_prompt: string   // Static still-frame prompt for Nano Banana image gen
+  veo_prompt: string     // Technical prompt for Veo motion/video generation
 }
 
 const MODE_DESCRIPTIONS = {
@@ -257,14 +258,17 @@ Generate a complete scene-by-scene script. Each scene must have:
 
 1. scene_number (integer)
 2. duration (integer: 4, 6, or 8 seconds — match to scene complexity)
-3. script: Narrative description of what happens in the scene in the requested LANGUAGE. Include camera angle, action, dialogue/voiceover if any.
-4. veo_prompt: Technical English prompt for Google Veo to generate this scene. Include:
-   - Subject and action
-   - Camera angle (e.g., "close-up", "medium shot", "POV", "mirror reflection")
-   - Lighting (warm, natural, studio)
-   - Style (handheld iPhone style for UGC, smooth motion for affiliate)
-   - Mood
-   - End with: "Maintain consistency with provided product reference image."
+3. script: VO / voiceover text in the requested LANGUAGE. This is what the person SAYS or thinks during the scene (1-2 sentences max). Natural conversational tone matching the content type. Do NOT include camera directions here — just spoken text.
+4. image_prompt: Detailed English prompt for Nano Banana image generation. Describe the STILL FRAME (the starting picture of the scene). Must include:
+   - Subject (person from reference image holding/using product from reference image)
+   - Pose, expression, hands position
+   - Camera angle (e.g., "selfie close-up", "POV looking down at hands", "mirror reflection waist-up")
+   - Setting/environment details
+   - Lighting (warm, natural, golden hour, studio softbox)
+   - Style ("handheld iPhone photo, candid, slightly soft focus" for UGC; "clean product photography lighting" for affiliate)
+   - 9:16 vertical composition cues
+   - Must mention "using provided reference images for face and product consistency"
+5. veo_prompt: Short English prompt for Veo to ANIMATE the still frame into 4-8s video. Describe only the MOTION (camera move, action, expression change, product interaction). Do NOT redescribe the subject — Veo will use the image as first frame. End with brief mood/lighting note.
 
 ═══════════════════════════════════════════════════
 CRITICAL RULES:
@@ -276,6 +280,7 @@ CRITICAL RULES:
       "scene_number": 1,
       "duration": 4,
       "script": "...",
+      "image_prompt": "...",
       "veo_prompt": "..."
     }
   ]

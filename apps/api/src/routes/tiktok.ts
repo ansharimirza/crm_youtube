@@ -4,7 +4,7 @@ import { mkdir } from 'node:fs/promises'
 import { join } from 'node:path'
 import { db, users, tiktokCampaigns, tiktokScenes } from '../db'
 import { authMiddleware } from '../middleware/auth'
-import { enqueueTiktokScene } from '../lib/tiktok-worker'
+import { enqueueTiktokImage, enqueueTiktokVideo } from '../lib/tiktok-worker'
 import {
   identifyProductFromImage,
   extractProductFromHtml,
@@ -49,7 +49,6 @@ export const tiktokRoutes = new Elysia({ prefix: '/api/tiktok' })
     try {
       const scraped = await scrapeProductUrl(body.url)
 
-      // If meta tags or JSON-LD gave us enough, return it directly
       if (scraped.source !== 'html' && scraped.name && scraped.description) {
         const product: ProductInfo = {
           name: scraped.name,
@@ -62,7 +61,6 @@ export const tiktokRoutes = new Elysia({ prefix: '/api/tiktok' })
         return { ok: true, product, image_url: scraped.image_url, source: scraped.source }
       }
 
-      // Fallback: use Claude to extract from raw HTML
       if (scraped.raw_html) {
         const product = await extractProductFromHtml(scraped.raw_html, apiKey)
         return { ok: true, product, image_url: scraped.image_url, source: 'claude_html' }
@@ -141,7 +139,7 @@ export const tiktokRoutes = new Elysia({ prefix: '/api/tiktok' })
     }),
   })
 
-  // === 4. CREATE CAMPAIGN + GENERATE SCRIPTS + QUEUE VIDEOS ===
+  // === 4. CREATE CAMPAIGN + GENERATE SCRIPTS + QUEUE IMAGES (phase 1) ===
   .post('/campaigns', async ({ body, user, set }) => {
     const apiKey = await getAnthropicKey(user.id)
     if (!apiKey) {
@@ -149,13 +147,11 @@ export const tiktokRoutes = new Elysia({ prefix: '/api/tiktok' })
       return { error: 'Anthropic API key belum diatur di Settings' }
     }
 
-    // Save base model image if provided
     let baseModelPath: string | null = null
     if (body.base_model_image) {
       baseModelPath = await saveFile(body.base_model_image, 'tiktok-base')
     }
 
-    // Save product image (uploaded fresh or copied from previous analyze)
     let productImagePath: string | null = body.product_image_path ?? null
     if (body.product_image) {
       productImagePath = await saveFile(body.product_image, 'tiktok-product')
@@ -170,7 +166,7 @@ export const tiktokRoutes = new Elysia({ prefix: '/api/tiktok' })
       detected_text: '',
     }
 
-    // Step 1: Generate scene scripts via Claude
+    // Generate scripts via Claude (includes image_prompt + veo_prompt per scene)
     let scripts
     try {
       scripts = await generateSceneScripts({
@@ -196,7 +192,6 @@ export const tiktokRoutes = new Elysia({ prefix: '/api/tiktok' })
       return { ok: false, error: 'Claude tidak return scene scripts' }
     }
 
-    // Step 2: Create campaign in DB
     const [campaign] = await db.insert(tiktokCampaigns).values({
       userId: user.id,
       title: body.title,
@@ -216,23 +211,24 @@ export const tiktokRoutes = new Elysia({ prefix: '/api/tiktok' })
       status: 'generating',
     }).returning()
 
-    // Step 3: Insert scenes and queue generation
     const sceneIds: number[] = []
     for (const s of scripts) {
       const [scene] = await db.insert(tiktokScenes).values({
         campaignId: campaign.id,
         sceneNumber: s.scene_number,
         script: s.script,
+        imagePrompt: s.image_prompt,
         veoPrompt: s.veo_prompt,
         duration: s.duration,
-        status: 'queued',
+        imageStatus: 'queued',
+        status: 'pending',
       }).returning()
       sceneIds.push(scene.id)
     }
 
-    // Auto-start (unless auto_start=false)
+    // Auto-start IMAGE generation (phase 1). Video phase waits for user click.
     if (body.auto_start !== 'false') {
-      for (const id of sceneIds) enqueueTiktokScene(id)
+      for (const id of sceneIds) enqueueTiktokImage(id)
     }
 
     return { ok: true, campaign, scene_count: sceneIds.length }
@@ -242,22 +238,20 @@ export const tiktokRoutes = new Elysia({ prefix: '/api/tiktok' })
       mode: t.Union([t.Literal('ugc'), t.Literal('pov_hand'), t.Literal('mirror_check')]),
       content_type: t.Union([t.Literal('review'), t.Literal('unboxing'), t.Literal('affiliate')]),
       language: t.Union([t.Literal('id'), t.Literal('en')]),
-      // Product info
       product_name: t.String({ minLength: 1, maxLength: 255 }),
       product_description: t.String({ maxLength: 2000 }),
       product_category: t.Optional(t.String({ maxLength: 100 })),
       product_brand: t.Optional(t.String({ maxLength: 100 })),
-      product_features: t.Optional(t.String({ maxLength: 2000 })),  // pipe-separated
+      product_features: t.Optional(t.String({ maxLength: 2000 })),
       product_url: t.Optional(t.String({ maxLength: 2000 })),
       product_image: t.Optional(t.File()),
-      product_image_path: t.Optional(t.String()),  // reuse from analyze-image
+      product_image_path: t.Optional(t.String()),
       base_model_image: t.Optional(t.File()),
-      // Studio settings
       environment: t.String({ minLength: 1, maxLength: 500 }),
       aspect_ratio: t.Union([t.Literal('9:16'), t.Literal('16:9'), t.Literal('1:1')]),
       resolution: t.Optional(t.Union([t.Literal('720p'), t.Literal('1080p')])),
       veo_model: t.Optional(t.String()),
-      scene_count: t.String(),  // "2"/"4"/"6"/"8"
+      scene_count: t.String(),
       auto_start: t.Optional(t.String()),
     }),
   })
@@ -268,7 +262,7 @@ export const tiktokRoutes = new Elysia({ prefix: '/api/tiktok' })
       where: eq(tiktokCampaigns.userId, user.id),
       orderBy: [desc(tiktokCampaigns.createdAt)],
       with: {
-        scenes: { columns: { id: true, status: true, videoUrl: true, thumbnailUrl: true } },
+        scenes: { columns: { id: true, status: true, imageStatus: true, imageUrl: true, videoUrl: true, thumbnailUrl: true } },
       },
     })
     const campaigns = list.map(c => ({
@@ -280,10 +274,16 @@ export const tiktokRoutes = new Elysia({ prefix: '/api/tiktok' })
       productName: c.productName,
       status: c.status,
       sceneCount: c.sceneCount,
+      imageDoneCount: c.scenes.filter(s => s.imageStatus === 'done').length,
       doneCount: c.scenes.filter(s => s.status === 'done').length,
-      processingCount: c.scenes.filter(s => s.status === 'processing' || s.status === 'queued').length,
-      errorCount: c.scenes.filter(s => s.status === 'error').length,
-      thumbnail: c.scenes.find(s => s.thumbnailUrl)?.thumbnailUrl ?? null,
+      processingCount: c.scenes.filter(s =>
+        s.imageStatus === 'processing' || s.imageStatus === 'queued' ||
+        s.status === 'processing' || s.status === 'queued'
+      ).length,
+      errorCount: c.scenes.filter(s => s.imageStatus === 'error' || s.status === 'error').length,
+      thumbnail: c.scenes.find(s => s.thumbnailUrl)?.thumbnailUrl
+        ?? c.scenes.find(s => s.imageUrl)?.imageUrl
+        ?? null,
       createdAt: c.createdAt,
     }))
     return { campaigns }
@@ -305,8 +305,8 @@ export const tiktokRoutes = new Elysia({ prefix: '/api/tiktok' })
     return { campaign }
   })
 
-  // === RETRY SCENE ===
-  .post('/scenes/:id/retry', async ({ params, user, set }) => {
+  // === REVISE SCENE IMAGE (regenerate Nano Banana with appended instruction) ===
+  .post('/scenes/:id/revise-image', async ({ params, body, user, set }) => {
     const id = Number(params.id)
     const scene = await db.query.tiktokScenes.findFirst({
       where: eq(tiktokScenes.id, id),
@@ -316,10 +316,109 @@ export const tiktokRoutes = new Elysia({ prefix: '/api/tiktok' })
       set.status = 404
       return { error: 'Not found' }
     }
+    if (scene.imageStatus === 'processing' || scene.imageStatus === 'queued') {
+      set.status = 400
+      return { error: 'Image masih dalam proses' }
+    }
+
+    const instruction = body.instruction?.trim() ?? ''
+    const newPrompt = instruction
+      ? `${scene.imagePrompt}\n\nADJUSTMENT: ${instruction}`
+      : scene.imagePrompt
+
+    await db.update(tiktokScenes).set({
+      imagePrompt: newPrompt,
+      imageStatus: 'queued',
+      imageAttempts: 0,
+      imageErrorMsg: null,
+      imageUrl: null,
+      imagePath: null,
+      imageGeminigenUuid: null,
+      updatedAt: new Date(),
+    }).where(eq(tiktokScenes.id, id))
+
+    enqueueTiktokImage(id)
+    return { ok: true }
+  }, {
+    body: t.Object({
+      instruction: t.Optional(t.String({ maxLength: 1000 })),
+    }),
+  })
+
+  // === UPDATE SCRIPT TEXT (no regen) ===
+  .patch('/scenes/:id/script', async ({ params, body, user, set }) => {
+    const id = Number(params.id)
+    const scene = await db.query.tiktokScenes.findFirst({
+      where: eq(tiktokScenes.id, id),
+      with: { campaign: true },
+    })
+    if (!scene || scene.campaign.userId !== user.id) {
+      set.status = 404
+      return { error: 'Not found' }
+    }
+    await db.update(tiktokScenes).set({
+      script: body.script,
+      updatedAt: new Date(),
+    }).where(eq(tiktokScenes.id, id))
+    return { ok: true }
+  }, {
+    body: t.Object({ script: t.String({ maxLength: 2000 }) }),
+  })
+
+  // === UPDATE PROMPTS (image_prompt and/or veo_prompt) ===
+  .patch('/scenes/:id/prompt', async ({ params, body, user, set }) => {
+    const id = Number(params.id)
+    const scene = await db.query.tiktokScenes.findFirst({
+      where: eq(tiktokScenes.id, id),
+      with: { campaign: true },
+    })
+    if (!scene || scene.campaign.userId !== user.id) {
+      set.status = 404
+      return { error: 'Not found' }
+    }
+    const updates: Partial<typeof tiktokScenes.$inferInsert> = { updatedAt: new Date() }
+    if (body.image_prompt !== undefined) updates.imagePrompt = body.image_prompt
+    if (body.veo_prompt !== undefined) updates.veoPrompt = body.veo_prompt
+    await db.update(tiktokScenes).set(updates).where(eq(tiktokScenes.id, id))
+
+    // If image_prompt changed and user wants to regenerate, queue image again
+    if (body.image_prompt !== undefined && body.regen) {
+      await db.update(tiktokScenes).set({
+        imageStatus: 'queued',
+        imageAttempts: 0,
+        imageErrorMsg: null,
+      }).where(eq(tiktokScenes.id, id))
+      enqueueTiktokImage(id)
+    }
+    return { ok: true }
+  }, {
+    body: t.Object({
+      image_prompt: t.Optional(t.String({ maxLength: 4000 })),
+      veo_prompt: t.Optional(t.String({ maxLength: 4000 })),
+      regen: t.Optional(t.Boolean()),
+    }),
+  })
+
+  // === GENERATE VIDEO for ONE scene (phase 2) ===
+  .post('/scenes/:id/generate-video', async ({ params, user, set }) => {
+    const id = Number(params.id)
+    const scene = await db.query.tiktokScenes.findFirst({
+      where: eq(tiktokScenes.id, id),
+      with: { campaign: true },
+    })
+    if (!scene || scene.campaign.userId !== user.id) {
+      set.status = 404
+      return { error: 'Not found' }
+    }
+    if (scene.imageStatus !== 'done') {
+      set.status = 400
+      return { error: 'Image belum selesai. Tunggu image generate dulu.' }
+    }
     if (scene.status === 'processing' || scene.status === 'queued') {
       set.status = 400
-      return { error: `Status: ${scene.status}` }
+      return { error: 'Video sedang dalam proses' }
     }
+
     await db.update(tiktokScenes).set({
       status: 'queued',
       progress: 0,
@@ -331,7 +430,72 @@ export const tiktokRoutes = new Elysia({ prefix: '/api/tiktok' })
       thumbnailUrl: null,
       updatedAt: new Date(),
     }).where(eq(tiktokScenes.id, id))
-    enqueueTiktokScene(id)
+
+    enqueueTiktokVideo(id)
+    return { ok: true }
+  })
+
+  // === GENERATE ALL VIDEOS for a campaign (bulk phase 2) ===
+  .post('/campaigns/:id/generate-videos', async ({ params, user, set }) => {
+    const id = Number(params.id)
+    const campaign = await db.query.tiktokCampaigns.findFirst({
+      where: and(eq(tiktokCampaigns.id, id), eq(tiktokCampaigns.userId, user.id)),
+      with: { scenes: true },
+    })
+    if (!campaign) {
+      set.status = 404
+      return { error: 'Not found' }
+    }
+
+    // Only kick scenes whose image is done and video is pending/error
+    const eligible = campaign.scenes.filter(s =>
+      s.imageStatus === 'done' && (s.status === 'pending' || s.status === 'error')
+    )
+    if (eligible.length === 0) {
+      set.status = 400
+      return { error: 'Tidak ada scene yang siap. Pastikan image sudah selesai.' }
+    }
+
+    for (const s of eligible) {
+      await db.update(tiktokScenes).set({
+        status: 'queued',
+        progress: 0,
+        attempts: 0,
+        errorMsg: null,
+        geminigenUuid: null,
+        geminigenId: null,
+        videoUrl: null,
+        thumbnailUrl: null,
+        updatedAt: new Date(),
+      }).where(eq(tiktokScenes.id, s.id))
+      enqueueTiktokVideo(s.id)
+    }
+
+    await db.update(tiktokCampaigns)
+      .set({ status: 'generating', updatedAt: new Date() })
+      .where(eq(tiktokCampaigns.id, id))
+
+    return { ok: true, queued: eligible.length }
+  })
+
+  // === RETRY IMAGE (failed scenes) ===
+  .post('/scenes/:id/retry-image', async ({ params, user, set }) => {
+    const id = Number(params.id)
+    const scene = await db.query.tiktokScenes.findFirst({
+      where: eq(tiktokScenes.id, id),
+      with: { campaign: true },
+    })
+    if (!scene || scene.campaign.userId !== user.id) {
+      set.status = 404
+      return { error: 'Not found' }
+    }
+    await db.update(tiktokScenes).set({
+      imageStatus: 'queued',
+      imageAttempts: 0,
+      imageErrorMsg: null,
+      updatedAt: new Date(),
+    }).where(eq(tiktokScenes.id, id))
+    enqueueTiktokImage(id)
     return { ok: true }
   })
 

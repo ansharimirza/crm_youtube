@@ -1,39 +1,70 @@
-// TikTok Studio worker — orchestrates Veo generation for campaign scenes.
-// Similar to scene-worker.ts but for tiktok_scenes table.
+// TikTok Studio worker — two-phase orchestration:
+// Phase 1 (image): Nano Banana generates a still frame per scene using
+//   character + product reference images. Runs automatically after campaign create.
+// Phase 2 (video): Veo animates the still frame into a 4-8s clip when the user
+//   clicks "Generate Video".
 
-import { eq, and } from 'drizzle-orm'
+import { eq } from 'drizzle-orm'
+import { writeFile, mkdir } from 'node:fs/promises'
+import { join, extname } from 'node:path'
 import { db, tiktokScenes, tiktokCampaigns, users } from '../db'
 import {
   generateVeo, getHistory, isTerminalStatus, GeminigenError,
+  generateImage, getImageHistory,
   type VeoModel, type VeoResolution, type VeoAspectRatio,
+  type ImageAspectRatio,
 } from './geminigen'
 import { notify } from './notifications'
 
-const MAX_CONCURRENT = 5
-const MAX_ATTEMPTS = 10
-const POLL_INTERVAL_MS = 10_000
-const POLL_TIMEOUT_MS = 30 * 60_000
-const RETRY_DELAY_MS = 15_000
+const MAX_CONCURRENT_IMG = 4
+const MAX_CONCURRENT_VID = 5
+const MAX_ATTEMPTS = 8
+const RETRY_DELAY_MS = 12_000
 
-let activeJobs = 0
-const queue: number[] = []
+// Video polling
+const VID_POLL_INTERVAL_MS = 10_000
+const VID_POLL_TIMEOUT_MS = 30 * 60_000
 
-function tryStartNext() {
-  while (activeJobs < MAX_CONCURRENT && queue.length > 0) {
-    const sceneId = queue.shift()!
-    activeJobs++
-    runScene(sceneId)
-      .catch((err) => console.error(`[tiktok-worker:${sceneId}]`, err))
-      .finally(() => {
-        activeJobs--
-        tryStartNext()
-      })
+// Image polling
+const IMG_POLL_INTERVAL_MS = 3_000
+const IMG_POLL_TIMEOUT_MS = 5 * 60_000
+
+const UPLOADS_DIR = process.env.UPLOADS_DIR || '/app/data/uploads'
+
+// =========== queues ===========
+let imgActive = 0
+let vidActive = 0
+const imgQueue: number[] = []
+const vidQueue: number[] = []
+
+function pumpImg() {
+  while (imgActive < MAX_CONCURRENT_IMG && imgQueue.length > 0) {
+    const id = imgQueue.shift()!
+    imgActive++
+    runSceneImage(id)
+      .catch((err) => console.error(`[tiktok-img:${id}]`, err))
+      .finally(() => { imgActive--; pumpImg() })
   }
 }
 
-export function enqueueTiktokScene(sceneId: number) {
-  if (!queue.includes(sceneId)) queue.push(sceneId)
-  tryStartNext()
+function pumpVid() {
+  while (vidActive < MAX_CONCURRENT_VID && vidQueue.length > 0) {
+    const id = vidQueue.shift()!
+    vidActive++
+    runSceneVideo(id)
+      .catch((err) => console.error(`[tiktok-vid:${id}]`, err))
+      .finally(() => { vidActive--; pumpVid() })
+  }
+}
+
+export function enqueueTiktokImage(sceneId: number) {
+  if (!imgQueue.includes(sceneId)) imgQueue.push(sceneId)
+  pumpImg()
+}
+
+export function enqueueTiktokVideo(sceneId: number) {
+  if (!vidQueue.includes(sceneId)) vidQueue.push(sceneId)
+  pumpVid()
 }
 
 async function getApiKey(userId: number): Promise<string | null> {
@@ -42,10 +73,149 @@ async function getApiKey(userId: number): Promise<string | null> {
   return process.env.GEMINIGEN_API_KEY ?? null
 }
 
-async function pollUntilDone(uuid: string, apiKey: string, sceneId: number) {
+// Helper: download a URL and save to local uploads dir, return local path
+async function downloadToLocal(url: string, subdir: string): Promise<string> {
+  const res = await fetch(url)
+  if (!res.ok) throw new Error(`Download failed: HTTP ${res.status}`)
+  const buf = Buffer.from(await res.arrayBuffer())
+  const ext = extname(new URL(url).pathname) || '.jpg'
+  const dir = join(UPLOADS_DIR, subdir)
+  await mkdir(dir, { recursive: true })
+  const filename = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}${ext}`
+  const fullPath = join(dir, filename)
+  await writeFile(fullPath, buf)
+  return fullPath
+}
+
+function mapAspectImage(a: '9:16' | '16:9' | '1:1'): ImageAspectRatio {
+  return a
+}
+
+/* ==========================================================
+   PHASE 1 — IMAGE GENERATION (Nano Banana)
+   ========================================================== */
+
+async function runSceneImage(sceneId: number) {
+  const scene = await db.query.tiktokScenes.findFirst({
+    where: eq(tiktokScenes.id, sceneId),
+    with: { campaign: true },
+  })
+  if (!scene) return
+  const campaign = scene.campaign
+
+  const apiKey = await getApiKey(campaign.userId)
+  if (!apiKey) {
+    await db.update(tiktokScenes).set({
+      imageStatus: 'error',
+      imageErrorMsg: 'GeminiGen API key belum diatur. Set di Settings.',
+      updatedAt: new Date(),
+    }).where(eq(tiktokScenes.id, sceneId))
+    return
+  }
+
+  const refs = [
+    campaign.baseModelPath,
+    campaign.productImagePath,
+  ].filter((p): p is string => !!p)
+
+  let attempts = scene.imageAttempts ?? 0
+  let lastError = ''
+
+  while (attempts < MAX_ATTEMPTS) {
+    attempts++
+    try {
+      await db.update(tiktokScenes).set({
+        imageStatus: 'processing',
+        imageAttempts: attempts,
+        imageErrorMsg: null,
+        updatedAt: new Date(),
+      }).where(eq(tiktokScenes.id, sceneId))
+
+      console.log(`[tiktok-img:${sceneId}] Attempt ${attempts}/${MAX_ATTEMPTS}`)
+
+      const initial = await generateImage({
+        apiKey,
+        prompt: scene.imagePrompt,
+        model: 'nano-banana-pro',
+        aspectRatio: mapAspectImage(campaign.aspectRatio as '9:16' | '16:9' | '1:1'),
+        resolution: campaign.resolution === '1080p' ? '2K' : '1K',
+        outputFormat: 'jpeg',
+        refImagePaths: refs,
+      })
+
+      await db.update(tiktokScenes).set({
+        imageGeminigenUuid: initial.uuid,
+        updatedAt: new Date(),
+      }).where(eq(tiktokScenes.id, sceneId))
+
+      // Poll until done
+      let imageUrl: string | null = null
+      if (initial.status === 2 && initial.generate_result) {
+        imageUrl = initial.generate_result
+      } else if (initial.status === 3) {
+        throw new GeminigenError(initial.error_message || 'Image gen failed')
+      } else {
+        const start = Date.now()
+        while (Date.now() - start < IMG_POLL_TIMEOUT_MS) {
+          await new Promise(r => setTimeout(r, IMG_POLL_INTERVAL_MS))
+          const h = await getImageHistory(initial.uuid, apiKey)
+          if (h.status === 2) {
+            imageUrl = h.generate_result
+              ?? h.generated_image?.[0]?.image_url
+              ?? h.generated_image?.[0]?.file_download_url
+              ?? null
+            break
+          }
+          if (h.status === 3) {
+            throw new GeminigenError(h.error_message || 'Image gen failed')
+          }
+        }
+        if (!imageUrl) throw new GeminigenError('Image polling timeout')
+      }
+
+      // Download to local for ref reuse
+      const localPath = await downloadToLocal(imageUrl, 'tiktok-images')
+
+      await db.update(tiktokScenes).set({
+        imageStatus: 'done',
+        imageUrl,
+        imagePath: localPath,
+        imageErrorMsg: null,
+        updatedAt: new Date(),
+      }).where(eq(tiktokScenes.id, sceneId))
+
+      console.log(`[tiktok-img:${sceneId}] DONE`)
+      return
+    } catch (err) {
+      lastError = err instanceof Error ? err.message : String(err)
+      console.warn(`[tiktok-img:${sceneId}] Error attempt ${attempts}: ${lastError}`)
+    }
+
+    await db.update(tiktokScenes).set({
+      imageErrorMsg: `Attempt ${attempts}: ${lastError}. Retrying...`,
+      updatedAt: new Date(),
+    }).where(eq(tiktokScenes.id, sceneId))
+
+    if (attempts < MAX_ATTEMPTS) {
+      await new Promise(r => setTimeout(r, RETRY_DELAY_MS))
+    }
+  }
+
+  await db.update(tiktokScenes).set({
+    imageStatus: 'error',
+    imageErrorMsg: `Gagal setelah ${MAX_ATTEMPTS}x. Last: ${lastError}`,
+    updatedAt: new Date(),
+  }).where(eq(tiktokScenes.id, sceneId))
+}
+
+/* ==========================================================
+   PHASE 2 — VIDEO GENERATION (Veo)
+   ========================================================== */
+
+async function pollVideoUntilDone(uuid: string, apiKey: string, sceneId: number) {
   const start = Date.now()
-  while (Date.now() - start < POLL_TIMEOUT_MS) {
-    await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS))
+  while (Date.now() - start < VID_POLL_TIMEOUT_MS) {
+    await new Promise((r) => setTimeout(r, VID_POLL_INTERVAL_MS))
     const history = await getHistory(uuid, apiKey)
     await db.update(tiktokScenes)
       .set({ progress: history.status_percentage ?? 0, updatedAt: new Date() })
@@ -55,7 +225,7 @@ async function pollUntilDone(uuid: string, apiKey: string, sceneId: number) {
   throw new GeminigenError('Polling timeout')
 }
 
-async function runScene(sceneId: number) {
+async function runSceneVideo(sceneId: number) {
   const scene = await db.query.tiktokScenes.findFirst({
     where: eq(tiktokScenes.id, sceneId),
     with: { campaign: true },
@@ -73,9 +243,9 @@ async function runScene(sceneId: number) {
     return
   }
 
-  // For tiktok scenes, the product image is used as `first_image` reference
-  // so Veo generates videos consistent with the actual product
-  const firstImagePath = campaign.productImagePath ?? null
+  // Use the generated scene image as first frame for max consistency.
+  // Fall back to product image if for some reason image wasn't generated.
+  const firstImagePath = scene.imagePath ?? campaign.productImagePath ?? null
 
   let attempts = scene.attempts ?? 0
   let lastError = ''
@@ -92,7 +262,7 @@ async function runScene(sceneId: number) {
         updatedAt: new Date(),
       }).where(eq(tiktokScenes.id, sceneId))
 
-      console.log(`[tiktok-worker:${sceneId}] Attempt ${attempts}/${MAX_ATTEMPTS}`)
+      console.log(`[tiktok-vid:${sceneId}] Attempt ${attempts}/${MAX_ATTEMPTS}`)
 
       const generated = await generateVeo({
         apiKey,
@@ -112,7 +282,7 @@ async function runScene(sceneId: number) {
         updatedAt: new Date(),
       }).where(eq(tiktokScenes.id, sceneId))
 
-      const history = await pollUntilDone(generated.uuid, apiKey, sceneId)
+      const history = await pollVideoUntilDone(generated.uuid, apiKey, sceneId)
 
       if (history.status === 2) {
         const video = history.generated_video?.[0]
@@ -126,15 +296,15 @@ async function runScene(sceneId: number) {
         }).where(eq(tiktokScenes.id, sceneId))
 
         await maybeMarkCampaignDone(campaign.id, campaign.userId)
-        console.log(`[tiktok-worker:${sceneId}] DONE`)
+        console.log(`[tiktok-vid:${sceneId}] DONE`)
         return
       }
 
       lastError = history.error_message || history.status_desc || 'Generation failed'
-      console.warn(`[tiktok-worker:${sceneId}] Fail attempt ${attempts}: ${lastError}`)
+      console.warn(`[tiktok-vid:${sceneId}] Fail attempt ${attempts}: ${lastError}`)
     } catch (err) {
       lastError = err instanceof Error ? err.message : String(err)
-      console.warn(`[tiktok-worker:${sceneId}] Error attempt ${attempts}: ${lastError}`)
+      console.warn(`[tiktok-vid:${sceneId}] Error attempt ${attempts}: ${lastError}`)
     }
 
     await db.update(tiktokScenes).set({
@@ -165,8 +335,8 @@ async function maybeMarkCampaignDone(campaignId: number, userId: number) {
   const allScenes = await db.query.tiktokScenes.findMany({
     where: eq(tiktokScenes.campaignId, campaignId),
   })
-  const allDone = allScenes.every((s) => s.status === 'done')
-  if (allDone && allScenes.length > 0) {
+  const allVideoDone = allScenes.every((s) => s.status === 'done')
+  if (allVideoDone && allScenes.length > 0) {
     await db.update(tiktokCampaigns)
       .set({ status: 'done', updatedAt: new Date() })
       .where(eq(tiktokCampaigns.id, campaignId))
@@ -176,7 +346,7 @@ async function maybeMarkCampaignDone(campaignId: number, userId: number) {
         userId,
         type: 'tiktok_campaign_done',
         title: `TikTok campaign selesai`,
-        message: `"${campaign.title}" — semua ${allScenes.length} scene berhasil generate`,
+        message: `"${campaign.title}" — semua ${allScenes.length} scene berhasil generate video`,
       })
     }
   }
@@ -184,10 +354,21 @@ async function maybeMarkCampaignDone(campaignId: number, userId: number) {
 
 export async function recoverPendingTiktokScenes() {
   const pending = await db.query.tiktokScenes.findMany({
-    where: (s, { or, eq }) => or(eq(s.status, 'queued'), eq(s.status, 'processing')),
+    where: (s, { or, eq }) => or(
+      eq(s.imageStatus, 'queued'),
+      eq(s.imageStatus, 'processing'),
+      eq(s.status, 'queued'),
+      eq(s.status, 'processing'),
+    ),
   })
   for (const s of pending) {
-    console.log(`[tiktok-worker] Recovering scene ${s.id} (status: ${s.status})`)
-    enqueueTiktokScene(s.id)
+    if (s.imageStatus === 'queued' || s.imageStatus === 'processing') {
+      console.log(`[tiktok-img] Recovering scene ${s.id} (image_status: ${s.imageStatus})`)
+      enqueueTiktokImage(s.id)
+    }
+    if (s.status === 'queued' || s.status === 'processing') {
+      console.log(`[tiktok-vid] Recovering scene ${s.id} (status: ${s.status})`)
+      enqueueTiktokVideo(s.id)
+    }
   }
 }
