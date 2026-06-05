@@ -49,10 +49,12 @@ export const tiktokRoutes = new Elysia({ prefix: '/api/tiktok' })
     try {
       const scraped = await scrapeProductUrl(body.url)
 
-      if (scraped.source !== 'html' && scraped.name && scraped.description) {
+      if (scraped.source !== 'html' && scraped.name) {
+        // For TikTok redirect, description = title; let Claude enrich category/brand/features
+        // by combining the title + (optional) image into a product info extraction call.
         const product: ProductInfo = {
           name: scraped.name,
-          description: scraped.description,
+          description: scraped.description || scraped.name,
           category: '',
           key_features: [],
           brand: '',
