@@ -10,7 +10,7 @@ export const authMiddleware = new Elysia({ name: 'auth-middleware' })
       secret: process.env.JWT_SECRET!,
     })
   )
-  .derive({ as: 'scoped' }, async ({ headers, jwt, set }) => {
+  .derive({ as: 'global' }, async ({ headers, jwt, set }) => {
     const auth = headers.authorization
     if (!auth?.startsWith('Bearer ')) {
       set.status = 401
