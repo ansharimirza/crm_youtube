@@ -1,5 +1,7 @@
 import { Elysia } from 'elysia'
 import { cors } from '@elysiajs/cors'
+import { appendFile, mkdir } from 'node:fs/promises'
+import { join } from 'node:path'
 import { authRoutes } from './routes/auth'
 import { videoRoutes, systemRoutes } from './routes/videos'
 import { metaRoutes } from './routes/meta'
@@ -15,6 +17,24 @@ import { recoverPendingTiktokScenes } from './lib/tiktok-worker'
 import { recoverPendingScenes } from './lib/scene-worker'
 
 const PORT = Number(process.env.API_PORT ?? 3000)
+
+// ===== File-based logging that persists across container restarts =====
+const LOG_DIR = process.env.LOG_DIR || '/app/logs'
+await mkdir(LOG_DIR, { recursive: true }).catch(() => {})
+
+async function writeLog(level: 'info' | 'error', message: string, meta?: unknown) {
+  const ts = new Date().toISOString()
+  const file = level === 'error' ? 'error.log' : 'api.log'
+  const line = `${ts} [${level.toUpperCase()}] ${message}${meta ? ' ' + JSON.stringify(meta) : ''}\n`
+  await appendFile(join(LOG_DIR, file), line).catch(() => {})
+}
+
+// Capture all console.error to file too
+const origError = console.error
+console.error = (...args: unknown[]) => {
+  origError(...args)
+  void writeLog('error', args.map(a => a instanceof Error ? `${a.message}\n${a.stack}` : typeof a === 'string' ? a : JSON.stringify(a)).join(' '))
+}
 
 const app = new Elysia()
   .use(cors({ origin: true, credentials: true }))
@@ -32,12 +52,14 @@ const app = new Elysia()
   .use(viralityRoutes)
   .use(resumeRoutes)
   .use(tiktokRoutes)
-  .onError(({ code, error, set }) => {
+  .onError(({ code, error, set, path, request }) => {
     if (code === 'VALIDATION') {
       set.status = 400
-      return { error: 'Validation failed', detail: String(error) }
+      const detail = String(error)
+      console.error('[VALIDATION]', request.method, path, detail)
+      return { error: 'Validation failed', detail }
     }
-    console.error('[API ERROR]', error)
+    console.error('[API ERROR]', request.method, path, error)
     set.status = set.status === 200 ? 500 : set.status
     return { error: error instanceof Error ? error.message : 'Internal error' }
   })

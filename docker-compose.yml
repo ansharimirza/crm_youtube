@@ -33,12 +33,19 @@ services:
       WORKER_API_KEY: ${WORKER_API_KEY}
       API_PORT: 3000
       UPLOAD_DIR: /app/uploads
+      LOG_DIR: /app/logs
     ports:
       - "3000:3000"
     volumes:
       - ./apps/api/src:/app/src
       - ./apps/api/drizzle:/app/drizzle
       - api-uploads:/app/uploads
+      - ./logs/api:/app/logs
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "5"
     depends_on:
       postgres:
         condition: service_healthy
@@ -70,6 +77,12 @@ services:
       - ./apps/web/src:/app/src
       - ./apps/web/index.html:/app/index.html
       - ./apps/web/public:/app/public
+      - ./apps/web/vite.config.ts:/app/vite.config.ts
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "3"
     depends_on:
       - api
 
