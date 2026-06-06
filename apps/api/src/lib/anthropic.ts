@@ -441,15 +441,28 @@ Generate a complete scene-by-scene script. Each scene must have:
 1. scene_number (integer)
 2. duration (integer: 4, 6, or 8 seconds — match to scene complexity)
 3. script: VO / voiceover text in the requested LANGUAGE. This is what the person SAYS or thinks during the scene (1-2 sentences max). Natural conversational tone matching the content type. Do NOT include camera directions here — just spoken text.
-4. image_prompt: Detailed English prompt for Nano Banana image generation. Describe the STILL FRAME (the starting picture of the scene). Must include:
-   - Subject (person from reference image holding/using product from reference image)
-   - Pose, expression, hands position
-   - Camera angle (e.g., "selfie close-up", "POV looking down at hands", "mirror reflection waist-up")
-   - Setting/environment details
+4. image_prompt: Detailed English prompt for Nano Banana image generation. Describe the STILL FRAME (the starting picture of the scene).
+
+   ═══ IDENTITY ANCHORING — HARDEST RULE ═══
+   The reference images define WHO and WHAT. Never override them with text.
+   - NEVER describe gender ("a woman", "a man", "she", "he", "a young female")
+   - NEVER describe hair (color, length, style)
+   - NEVER describe age, ethnicity, skin tone, face shape, body type
+   - NEVER describe clothing color/style unless instructing a change from the reference
+   - NEVER describe the product appearance (label, color, shape) — just say "the product from reference image 2"
+   - ALWAYS refer to the person as: "the subject from reference image 1" or "the person from reference image 1"
+   - Use the singular pronoun "they" / "their" only — never "she/her/he/his"
+   - START every image_prompt with: "Maintain exact identity from reference image 1 (person) and reference image 2 (product). "
+
+   ═══ WHAT TO DESCRIBE (only these) ═══
+   - Pose, body orientation, hand position (without describing the hands themselves)
+   - Facial expression (smile, surprised, focused, intrigued) — emotion only, no facial features
+   - Camera angle: "selfie close-up", "POV looking down at hands", "mirror reflection waist-up", "medium shot from below"
+   - Setting/environment details (props, surface, backdrop)
    - Lighting (warm, natural, golden hour, studio softbox)
-   - Style ("handheld iPhone photo, candid, slightly soft focus" for UGC; "clean product photography lighting" for affiliate)
+   - Photography style: "handheld iPhone photo, candid, slightly soft focus" for UGC; "clean product photography lighting" for affiliate
    - 9:16 vertical composition cues
-   - Must mention "using provided reference images for face and product consistency"
+   - End with: "Photorealistic, maintain strict consistency with both provided reference images."
 5. veo_prompt: Short English prompt for Veo to ANIMATE the still frame into 4-8s video. Describe only the MOTION (camera move, action, expression change, product interaction). Do NOT redescribe the subject — Veo will use the image as first frame. End with brief mood/lighting note.
 
 ═══════════════════════════════════════════════════
