@@ -566,19 +566,30 @@ Generate a complete scene-by-scene script. Each scene must have:
    - If a UGC scene is intentionally silent (eg. visual reaction beat) → DIALOGUE: "no dialogue", and AMBIENT: should describe the sound
    - The DIALOGUE language must be the CAMPAIGN language (Indonesian for 'id'); do NOT translate to English
 
-   ═══ TWO-BEAT MOTION RULE (CRITICAL) ═══
-   Each Veo clip can be 4-8 seconds. You MUST design the PROMPT field as TWO BEATS within ONE continuous shot — same character, same setting, no hard cut, but a clear visual shift at the midpoint:
-   - Beat 1 (0 to half of duration): The frame opens matching the still image. Hold the pose for ~1 second to establish.
-   - Beat 2 (half of duration to end): A camera move OR subject action that adds dynamics. Examples:
-       * Camera: slow push-in, slight pull-back, tilt-up, dolly zoom, handheld drift
-       * Subject: lifts product closer, sprays, sniffs, expression brightens, glances to camera, eyebrows raise
-   Phrase the PROMPT as: "<beat 1 description>. <beat 2 description>"
-   For 4-second clips, the shift happens at the 2s mark. For 8-second clips, at the 4s mark.
+   ═══ MID-SCENE CUT RULE (CRITICAL — must feel like a visible edit) ═══
+   Each Veo clip is 4-8s. You MUST design PROMPT as TWO BEATS with an OBVIOUS visual shift at the midpoint — same character, same setting, no scene change, but the framing/scale must CLEARLY change. Subtle gaze shifts do NOT count. The viewer should perceive it like a hard cut, even though Veo treats it as one shot.
 
-   ═══ CAMERA EXAMPLES per MODE ═══
-   - UGC: "iPhone front selfie camera, slight handheld micro-shake, slow push-in at the midpoint"
-   - POV Hand: "iPhone 0.5x ultra-wide lens, looking down at the hands and surface, slight tilt-down at the midpoint"
-   - Mirror Check: "Phone held in front of mirror, vertical framing, slight zoom-out reveal at the midpoint"
+   Pick ONE pattern for beat 2 (visible shift):
+   - SNAP ZOOM-IN: camera rapidly pushes from medium shot to extreme close-up on a detail (label, hand, lips, eye)
+   - SNAP ZOOM-OUT: camera quickly pulls from close-up to wide reveal of full body or room
+   - ANGLE CUT: camera position changes — e.g. front-on to overhead, eye-level to low-angle, selfie to over-the-shoulder
+   - SMASH CUT TO DETAIL: hold the establishing shot, then jump-cut to ultra-close on one product element
+   - SPEED RAMP: action accelerates dramatically at midpoint (slow → fast unwrapping)
+
+   Beat 1 (0 → half duration): Frame opens matching the still image. Hold the establishing pose ~1s.
+   Beat 2 (half duration → end): EXPLICIT visual change using one of the patterns above. Phrase it as a DIRECTIVE, not a suggestion:
+   ✓ "At the 4-second mark, HARD SNAP ZOOM to extreme close-up of the product label, filling the frame."
+   ✓ "At the 2-second mark, ANGLE CUT to overhead top-down shot of hands holding the box."
+   ✗ "At the midpoint, their gaze lifts slightly" — too subtle, REWRITE.
+
+   For 4-second clips → shift at 2s. For 8-second clips → shift at 4s.
+
+   ═══ CAMERA field — describe BOTH the opening lens AND the cut transition ═══
+   Format: "<opening lens/angle>, <transition keyword> at <timestamp>"
+   Examples per mode:
+   - UGC: "iPhone front selfie camera, handheld micro-shake, SNAP ZOOM-IN to extreme close-up of mouth/lips at the 4-second mark"
+   - POV Hand: "iPhone 0.5x ultra-wide lens, looking down at the hands and surface, ANGLE CUT to overhead top-down at the 4-second mark"
+   - Mirror Check: "Phone held in front of mirror, vertical framing, SNAP ZOOM-OUT to full mirror reveal at the 2-second mark"
 
    ═══ AMBIENT examples (sound only, not what is said) ═══
    - With dialogue: "AMBIENT: Quiet room tone with light keyboard typing in the background"
