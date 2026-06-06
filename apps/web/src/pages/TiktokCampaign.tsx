@@ -381,27 +381,15 @@ function SceneCard({
           {showPrompt ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
         </button>
         {showPrompt && (
-          <div className="space-y-2 text-[11px] font-mono">
-            <div>
-              <div className="text-muted-foreground mb-1 flex items-center justify-between">
-                <span>Image Prompt</span>
-                <button
-                  className="text-primary hover:underline"
-                  onClick={() => { navigator.clipboard.writeText(scene.imagePrompt); toast.success('Copied') }}
-                >copy</button>
-              </div>
-              <div className="p-2 bg-muted/30 rounded leading-relaxed max-h-32 overflow-auto">{scene.imagePrompt}</div>
+          <div className="text-[11px] font-mono">
+            <div className="text-muted-foreground mb-1 flex items-center justify-between">
+              <span>Veo Prompt</span>
+              <button
+                className="text-primary hover:underline"
+                onClick={() => { navigator.clipboard.writeText(scene.veoPrompt); toast.success('Copied') }}
+              >copy</button>
             </div>
-            <div>
-              <div className="text-muted-foreground mb-1 flex items-center justify-between">
-                <span>Veo Prompt</span>
-                <button
-                  className="text-primary hover:underline"
-                  onClick={() => { navigator.clipboard.writeText(scene.veoPrompt); toast.success('Copied') }}
-                >copy</button>
-              </div>
-              <div className="p-2 bg-muted/30 rounded leading-relaxed max-h-32 overflow-auto">{scene.veoPrompt}</div>
-            </div>
+            <div className="p-2 bg-muted/30 rounded leading-relaxed max-h-40 overflow-auto">{scene.veoPrompt}</div>
           </div>
         )}
 
