@@ -463,7 +463,32 @@ Generate a complete scene-by-scene script. Each scene must have:
    - Photography style: "handheld iPhone photo, candid, slightly soft focus" for UGC; "clean product photography lighting" for affiliate
    - 9:16 vertical composition cues
    - End with: "Photorealistic, maintain strict consistency with both provided reference images."
-5. veo_prompt: Short English prompt for Veo to ANIMATE the still frame into 4-8s video. Describe only the MOTION (camera move, action, expression change, product interaction). Do NOT redescribe the subject — Veo will use the image as first frame. End with brief mood/lighting note.
+5. veo_prompt: STRUCTURED motion prompt for Veo. Use EXACTLY this label format, one line per label (no line breaks within a label). All labels in UPPERCASE. Output it as a SINGLE STRING with " " separating each label section.
+
+   Required structure:
+   "PROMPT: <action summary>. CAMERA: <lens + angle + camera motion>. DETAILS: Photorealistic high-fidelity video generation. Maintain strict consistency with the provided image reference. CONTEXT: AMBIENT: <speaking or breathing note>. ENVIRONMENT: <env description in campaign language>. NEGATIVE: distortion, morphing, bad hands, text overlays, identity change, wrong product."
+
+   ═══ TWO-BEAT MOTION RULE (CRITICAL) ═══
+   Each Veo clip can be 4-8 seconds. You MUST design the PROMPT field as TWO BEATS within ONE continuous shot — same character, same setting, no hard cut, but a clear visual shift at the midpoint:
+   - Beat 1 (0 to half of duration): The frame opens matching the still image. Hold the pose for ~1 second to establish.
+   - Beat 2 (half of duration to end): A camera move OR subject action that adds dynamics. Examples:
+       * Camera: slow push-in, slight pull-back, tilt-up, dolly zoom, handheld drift
+       * Subject: lifts product closer, sprays, sniffs, expression brightens, glances to camera, eyebrows raise
+   Phrase the PROMPT as: "<beat 1 description>. <beat 2 description>"
+   For 4-second clips, the shift happens at the 2s mark. For 8-second clips, at the 4s mark.
+
+   ═══ CAMERA EXAMPLES per MODE ═══
+   - UGC: "iPhone front selfie camera, slight handheld micro-shake, slow push-in at the midpoint"
+   - POV Hand: "iPhone 0.5x ultra-wide lens, looking down at the hands and surface, slight tilt-down at the midpoint"
+   - Mirror Check: "Phone held in front of mirror, vertical framing, slight zoom-out reveal at the midpoint"
+
+   ═══ AMBIENT examples ═══
+   - If the scene has voiceover: "AMBIENT: Speaking to camera, mouth moves with VO line."
+   - If POV Hand (no face): "AMBIENT: Mouth closed or natural breathing, no talking."
+   - If Mirror Check: "AMBIENT: Soft natural room ambience, subtle breath."
+
+   ═══ ENVIRONMENT field ═══
+   Write in the campaign's language (Bahasa Indonesia for 'id', English for 'en'). Pull from the user's environment input verbatim or paraphrase tightly.
 
 ═══════════════════════════════════════════════════
 QUALITY CHECKS (run mentally before finalizing):
