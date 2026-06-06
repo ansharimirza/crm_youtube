@@ -481,15 +481,13 @@ OUTPUT FORMAT:
 Generate a complete scene-by-scene script. Each scene must have:
 
 1. scene_number (integer)
-2. duration (integer: 4, 6, or 8 seconds — match to scene complexity)
+2. duration: ALWAYS use 8 seconds (the Veo per-clip maximum). Do not pick shorter values — the user prefers the longest possible clip per scene so the mid-scene cut has room to breathe. Set this field to 8 for every scene.
 3. script: VO / voiceover text in the requested LANGUAGE. What the subject SAYS during the scene. Strict rules:
 
    ═══ DURATION → WORD COUNT (must obey) ═══
-   Average natural speaking rate: ~2.5 words/second (ID & EN).
-   - 4-second scene  → 8-10 words max
-   - 6-second scene  → 12-14 words max
-   - 8-second scene  → 18-20 words max
-   Leave breathing room — better under than over. Count words before finalizing.
+   All scenes are FIXED at 8 seconds. Speaking rate ~2.5 words/sec.
+   - 8-second scene → 16-20 words max (target ~18)
+   Leave breathing room. Count words before finalizing — if over 20, trim.
 
    ═══ ANTI-AI / ANTI-SCRIPTED VOICE — research-backed ═══
    Native TikTok creators use ~10-15% disfluency (fillers, restarts, micro-corrections). Scripted/AI-sounding VO has 0% disfluency and that's the #1 tell.
@@ -606,7 +604,7 @@ QUALITY CHECKS (run mentally before finalizing — block if any check fails)
 - Hook pattern: which one am I using? (Specific Story Drop / Curiosity Gap / Bold Specific Claim / Pattern Interrupt / Direct Specific Question)
 - STEPPS: which 2+ principles does this script hit?
 - Anti-patterns: have I avoided EVERY item in the content-type ANTI-PATTERNS list AND the anti-AI banned phrases?
-- VO word count: count words for each script. Does each fit (8s ≤ 20 words / 6s ≤ 14 words / 4s ≤ 10 words)? Trim if over.
+- VO word count: every scene is 8s, so each script must be ≤20 words. Trim if over.
 - Natural speech audit: does each script have at least ONE filler/restart/specific detail? If it reads like an ad copy, REWRITE.
 - Image prompt audit: zero gender/hair/skin words? Starts with "Maintain exact identity..."? Has anti-AI realism cues (iPhone, candid, natural skin texture)? Banned aesthetic words absent?
 - Veo prompt audit: structured format (PROMPT/CAMERA/DETAILS/CONTEXT/ENVIRONMENT/NEGATIVE)? Two-beat motion described (shift at midpoint)? DIALOGUE field present and matches script VERBATIM (or "no dialogue" for POV Hand)?
@@ -686,15 +684,12 @@ Generate exactly ${sceneCount} scenes that tell a cohesive story matching the mo
 
   try {
     const parsed = JSON.parse(stripJsonFences(text.text)) as { scenes: SceneScript[] }
-    // Clamp duration to allowed values
-    const allowed = [4, 6, 8] as const
-    return parsed.scenes.slice(0, sceneCount).map((s, i) => {
-      const d = Number(s.duration) || 4
-      const duration = allowed.reduce((prev, curr) =>
-        Math.abs(curr - d) < Math.abs(prev - d) ? curr : prev
-      )
-      return { ...s, scene_number: i + 1, duration }
-    })
+    // Force 8s per scene (Veo max) so the mid-scene cut has room to breathe
+    return parsed.scenes.slice(0, sceneCount).map((s, i) => ({
+      ...s,
+      scene_number: i + 1,
+      duration: 8,
+    }))
   } catch (err) {
     throw new AnthropicError(`Failed to parse scene JSON: ${err instanceof Error ? err.message : err}`)
   }
