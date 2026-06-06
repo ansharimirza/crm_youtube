@@ -209,20 +209,35 @@ export async function extractProductFromHtml(
    3. ENVIRONMENT SUGGESTION
    =========================================================== */
 
-const ENV_SUGGEST_SYSTEM = `You are a TikTok content production designer. Given a product, suggest 5 environment/backdrop options that would showcase the product effectively in a short-form video.
+const ENV_SUGGEST_SYSTEM = `You are a TikTok content production designer. Given a product, suggest exactly 10 environment/backdrop options that would showcase the product effectively in a short-form video.
 
-Each suggestion should be a concise 5-15 word description in the requested language. Output JSON ONLY:
+Each suggestion: 5-15 words in the requested language. Output JSON ONLY:
 {
-  "environments": [
-    "Environment description 1",
-    "Environment description 2",
-    "Environment description 3",
-    "Environment description 4",
-    "Environment description 5"
-  ]
+  "environments": ["env 1", "env 2", "env 3", "env 4", "env 5", "env 6", "env 7", "env 8", "env 9", "env 10"]
 }
 
-Mix realistic (home/store/cafe), aesthetic (minimalist studio, warm wood), and lifestyle (outdoor, gym) options based on what fits the product. Be specific about lighting and surface.`
+═══ DIVERSITY RULES ═══
+Mix across these buckets (~2 each so the user has real variety):
+- HOME real: kitchen counter, work-from-home desk, bedside table, bathroom shelf, living room couch
+- OUTSIDE lifestyle: coffee shop window seat, motorbike side bag, gym locker, car dashboard, park bench
+- WORKPLACE: office cubicle, meeting room, retail counter, dorm room
+- AESTHETIC but real: kayu jati meja makan with afternoon window light, marble bathroom counter dengan natural light
+- POV moments: held in hand while walking, on lap with crossed legs, in front of mirror at sink
+
+═══ ANTI-AI / "TIDAK TERLALU AI" RULES ═══
+BAN these phrases (sound like AI / generic stock):
+- "luxury", "premium", "elegant", "magazine-quality", "professional studio", "softbox", "studio lighting"
+- "minimalist studio with spotlight", "dramatic spotlight", "fog machine"
+- "marmer hitam mewah" (cliche)
+- "aesthetic", "vibe" tanpa konteks spesifik
+
+PREFER:
+- Specific real-world surface: "meja kayu jati pojok dapur dengan tumpahan kopi", "rak handuk kamar mandi pagi", "dashboard mobil saat lampu merah"
+- Real lighting language: "sinar matahari pagi dari jendela samping", "lampu kuning warm dari plafon", "cahaya laptop layar"
+- Specific time of day: "jam 3 sore", "subuh", "menjelang magrib"
+- Mild imperfection: "ada cangkir kopi setengah penuh", "buku berserakan di sampingnya"
+
+Quality bar: each environment should feel like a frame from a real friend's phone, NOT a stock photo or studio set.`
 
 export async function suggestEnvironments(
   productInfo: ProductInfo,
@@ -233,7 +248,7 @@ export async function suggestEnvironments(
   const client = buildClient(apiKey)
   const res = await client.messages.create({
     model: MODEL,
-    max_tokens: 600,
+    max_tokens: 1500,
     system: [
       { type: 'text', text: ENV_SUGGEST_SYSTEM, cache_control: { type: 'ephemeral' } },
     ],
@@ -256,7 +271,7 @@ Suggest 5 environments for a TikTok video featuring this product. ${langInstr}`,
 
   try {
     const parsed = JSON.parse(stripJsonFences(text.text)) as { environments: string[] }
-    return parsed.environments.slice(0, 5)
+    return parsed.environments.slice(0, 10)
   } catch (err) {
     throw new AnthropicError(`Failed to parse environment JSON: ${err instanceof Error ? err.message : err}`)
   }
@@ -621,7 +636,7 @@ export async function generateSceneScripts(params: {
   const client = buildClient(apiKey)
   const res = await client.messages.create({
     model: MODEL,
-    max_tokens: 4096,
+    max_tokens: 16000,
     thinking: { type: 'adaptive' },
     system: [
       { type: 'text', text: system, cache_control: { type: 'ephemeral' } },
