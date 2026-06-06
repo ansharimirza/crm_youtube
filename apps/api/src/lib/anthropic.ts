@@ -404,14 +404,41 @@ RETENTION-CURVE STRUCTURE (TikTok algorithm rewards completion rate)
 - FINAL scene: Payoff that loops back to the hook (review/unboxing) OR explicit CTA (affiliate). Leave viewer satisfied or activated.
 
 ═══════════════════════════════════════════════════
-HOOK PATTERNS (use ONE in scene 1, choose based on content type):
-- Bold Claim: assert something surprising as fact
-- Curiosity Gap: hint at info viewer doesn't have yet
-- Micro-Story: drop into a small narrative ("Kemarin di kantor...")
-- Visual Shock: unexpected angle, reveal, or close-up
-- Direct Question: "Kalian pernah ngerasa...?"
-- Pattern Interrupt: start mid-action or mid-sentence
-- Social Proof: lead with viral numbers or "yang udah cobain..."
+HOOK PATTERNS (scene 1 ONLY — 0-3s = make-or-break)
+
+Native-feeling hooks share one trait: they sound like the start of a thought, NOT the start of an ad. Research from TikTok creator studies (2023-2025):
+- Top-quartile hooks open with a SPECIFIC, concrete detail OR a mid-thought sentence
+- Bottom-quartile hooks open with a generic call-to-attention ("Stop scrolling!", "Hey guys!")
+
+Choose ONE pattern that fits the content type:
+
+- Specific Story Drop: open with one concrete sentence from a moment.
+   ✓ "Kemarin di lift kantor, ada cowok nyamperin gue cuma buat nanya parfum gue apa..."
+   ✗ "Hai guys, hari ini aku mau review parfum..." (generic, AI-tell)
+
+- Curiosity Gap: imply info viewer doesn't have.
+   ✓ "Parfum yang dipake cowok-cowok yang biasanya disangka mahal padahal..."
+   ✗ "Kalian harus tau parfum ini!" (telling, not showing)
+
+- Bold Specific Claim: a concrete claim with a specific number, comparison, or contrast.
+   ✓ "30 hari pake parfum ini, ke-3 orang dari empat orang yang gue temuin nanya wanginya apa"
+   ✗ "Parfum terbaik yang pernah aku coba!" (vague, generic)
+
+- Pattern Interrupt: start mid-action or mid-sentence as if camera caught you talking.
+   ✓ "...nih dia masalahnya kalo pake parfum yang salah..."
+   ✗ "Halo semua! Selamat datang!" (literal opposite)
+
+- Direct Question (only when SPECIFIC):
+   ✓ "Kalian pernah ga ke gym terus baju kalian bau parfum kalian sendiri sampe pulang?"
+   ✗ "Pernah ga sih kalian pengen wangi enak?" (vague)
+
+═══ ANTI-AI HOOK BANS (never open scene 1 with these) ═══
+- "Stop scrolling!", "Hai guys", "Halo semua", "Hi everyone", "Hari ini aku mau"
+- "PSA" (overused, screams AI)
+- "Yang lagi viral", "Yang lagi trending"
+- "Diskon hari ini" (sales-y opener)
+- "Kalian harus", "You need to", "You won't believe"
+- Any greeting whatsoever
 
 ═══════════════════════════════════════════════════
 STEPPS PRINCIPLES (Jonah Berger — what makes content spread)
@@ -440,7 +467,31 @@ Generate a complete scene-by-scene script. Each scene must have:
 
 1. scene_number (integer)
 2. duration (integer: 4, 6, or 8 seconds — match to scene complexity)
-3. script: VO / voiceover text in the requested LANGUAGE. This is what the person SAYS or thinks during the scene (1-2 sentences max). Natural conversational tone matching the content type. Do NOT include camera directions here — just spoken text.
+3. script: VO / voiceover text in the requested LANGUAGE. What the subject SAYS during the scene. Strict rules:
+
+   ═══ DURATION → WORD COUNT (must obey) ═══
+   Average natural speaking rate: ~2.5 words/second (ID & EN).
+   - 4-second scene  → 8-10 words max
+   - 6-second scene  → 12-14 words max
+   - 8-second scene  → 18-20 words max
+   Leave breathing room — better under than over. Count words before finalizing.
+
+   ═══ ANTI-AI / ANTI-SCRIPTED VOICE — research-backed ═══
+   Native TikTok creators use ~10-15% disfluency (fillers, restarts, micro-corrections). Scripted/AI-sounding VO has 0% disfluency and that's the #1 tell.
+
+   - INCLUDE micro-fillers (light, not overloaded): "tuh", "tuh ya", "eh", "sih", "kayanya", "deh", "loh", "nih", "uh" (ID) / "uh", "like", "I mean", "okay so" (EN)
+   - INCLUDE specific sensory detail or small personal moment: "tadi pagi gue lagi mau ke kantor", "ini lagi gue cobain yang ke dua", "tau ga nih..."
+   - START mid-thought, not "Hi guys / Hai temen-temen" — pretend the camera caught you already talking
+   - ALLOW one micro-correction or restart if it fits naturally ("eh maksudnya..." / "wait...")
+   - BREAK formal grammar where casual speech would. Drop subjects ("biasanya yang lain tuh keras, ini soft").
+   - PROSODY hint: use ellipsis (...) for hesitation, em dash (—) for mid-sentence pivot, question mark for natural rising intonation
+
+   ═══ ANTI-AI BANNED PHRASES (never use, regardless of language) ═══
+   - "Game changer", "must have", "obsessed with", "literally life-changing", "you won't believe", "stop scrolling"
+   - "Hadir!", "Memperkenalkan", "Solusi terbaik", "Wajib punya", "Worth it banget"
+   - Any phrase that sounds like an Instagram ad caption from 2020
+   - Multiple exclamation marks in a row ("Amazing!!!")
+   - Generic emoji-equivalents in text ("OMG", "WOW")
 4. image_prompt: Detailed English prompt for Nano Banana image generation. Describe the STILL FRAME (the starting picture of the scene).
 
    ═══ IDENTITY ANCHORING — HARDEST RULE ═══
@@ -463,6 +514,31 @@ Generate a complete scene-by-scene script. Each scene must have:
    - Photography style: "handheld iPhone photo, candid, slightly soft focus" for UGC; "clean product photography lighting" for affiliate
    - 9:16 vertical composition cues
    - End with: "Photorealistic, maintain strict consistency with both provided reference images."
+
+   ═══ ANTI-AI / "NOT TOO AI" IMAGE DIRECTIVES — research-backed ═══
+   AI-image tells: glossy plastic skin, perfect symmetry, over-lit studio look, zero clutter, hyper-saturated colors, stock-photo composition. We want it to feel like a phone photo a friend took.
+
+   For UGC mode, ALWAYS append these realism cues:
+   - "shot on iPhone 15 Pro, vertical, candid, slight motion blur from hand-hold"
+   - "natural skin texture with pores and slight imperfections — not glossy or smoothed"
+   - "ambient room lighting with subtle color cast (not studio softbox)"
+   - "slight imperfections in framing — composition feels casual, not perfect rule of thirds"
+   - "small environmental clutter visible (papers on table, cable, etc) — lived-in space, not pristine"
+   - "color grading: natural, slightly desaturated, slight green/yellow cast like phone camera in indoor light"
+
+   For POV Hand mode, ALWAYS append:
+   - "shot on iPhone 15 Pro 0.5x ultra-wide, slight handheld micro-shake"
+   - "natural hand texture — visible knuckles, faint veins, not airbrushed"
+   - "warm tungsten room light, NOT studio softbox"
+
+   For Mirror Check mode, ALWAYS append:
+   - "phone screen reflection visible in mirror, slight smudges on mirror surface"
+   - "natural room lighting from window/lamp, soft shadow under chin"
+
+   ═══ HARD BANS ═══
+   - Banned aesthetic words: "luxury", "premium", "magazine-quality", "professional photoshoot", "studio softbox", "fashion editorial", "cinematic" (use for AFFILIATE Veo prompt context only)
+   - Banned composition: "perfect symmetry", "rule of thirds", "golden ratio"
+   - Banned skin: "flawless", "porcelain", "glowing", "smooth"
 5. veo_prompt: STRUCTURED motion prompt for Veo. Use EXACTLY this label format, one line per label (no line breaks within a label). All labels in UPPERCASE. Output it as a SINGLE STRING with " " separating each label section.
 
    Required structure:
@@ -491,11 +567,15 @@ Generate a complete scene-by-scene script. Each scene must have:
    Write in the campaign's language (Bahasa Indonesia for 'id', English for 'en'). Pull from the user's environment input verbatim or paraphrase tightly.
 
 ═══════════════════════════════════════════════════
-QUALITY CHECKS (run mentally before finalizing):
-- Scene 1: does it pattern-interrupt within the first 5 words? If not, rewrite.
-- Hook pattern: which one am I using? (Bold Claim / Curiosity Gap / Story / Visual Shock / Question / Social Proof)
+QUALITY CHECKS (run mentally before finalizing — block if any check fails)
+- Scene 1 hook: does it START mid-thought OR with a specific concrete detail? No greeting allowed. If you wrote "Hai", "Halo", "Hi", "PSA", or "Yang lagi viral" — REWRITE.
+- Hook pattern: which one am I using? (Specific Story Drop / Curiosity Gap / Bold Specific Claim / Pattern Interrupt / Direct Specific Question)
 - STEPPS: which 2+ principles does this script hit?
-- Anti-patterns: have I avoided EVERY item in the content-type ANTI-PATTERNS list?
+- Anti-patterns: have I avoided EVERY item in the content-type ANTI-PATTERNS list AND the anti-AI banned phrases?
+- VO word count: count words for each script. Does each fit (8s ≤ 20 words / 6s ≤ 14 words / 4s ≤ 10 words)? Trim if over.
+- Natural speech audit: does each script have at least ONE filler/restart/specific detail? If it reads like an ad copy, REWRITE.
+- Image prompt audit: zero gender/hair/skin words? Starts with "Maintain exact identity..."? Has anti-AI realism cues (iPhone, candid, natural skin texture)? Banned aesthetic words absent?
+- Veo prompt audit: structured format (PROMPT/CAMERA/DETAILS/CONTEXT/ENVIRONMENT/NEGATIVE)? Two-beat motion described (shift at midpoint)?
 - Pacing: does each scene introduce something NEW (angle, action, or info)?
 - Final scene: payoff or CTA matches the content type?
 
