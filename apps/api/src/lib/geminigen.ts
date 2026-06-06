@@ -202,9 +202,11 @@ export async function generateImage(params: GenerateImageParams): Promise<Genera
   if (params.style) form.append('style', params.style)
   form.append('output_format', params.outputFormat ?? 'jpeg')
 
-  // Ref images untuk Nano Banana (character + product consistency)
+  // Ref images untuk Nano Banana (character + product consistency).
+  // Per geminigen docs, the form field is "files" for local uploads
+  // (file_urls is for URL-based refs).
   for (const refPath of params.refImagePaths ?? []) {
-    await appendFileToForm(form, 'ref_images', refPath)
+    await appendFileToForm(form, 'files', refPath)
   }
 
   const res = await fetch('https://api.geminigen.ai/uapi/v1/generate_image', {
