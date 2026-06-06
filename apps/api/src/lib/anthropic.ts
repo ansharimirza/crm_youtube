@@ -557,7 +557,14 @@ Generate a complete scene-by-scene script. Each scene must have:
 5. veo_prompt: STRUCTURED motion prompt for Veo. Use EXACTLY this label format, one line per label (no line breaks within a label). All labels in UPPERCASE. Output it as a SINGLE STRING with " " separating each label section.
 
    Required structure:
-   "PROMPT: <action summary>. CAMERA: <lens + angle + camera motion>. DETAILS: Photorealistic high-fidelity video generation. Maintain strict consistency with the provided image reference. CONTEXT: AMBIENT: <speaking or breathing note>. ENVIRONMENT: <env description in campaign language>. NEGATIVE: distortion, morphing, bad hands, text overlays, identity change, wrong product."
+   "PROMPT: <action summary>. CAMERA: <lens + angle + camera motion>. DETAILS: Photorealistic high-fidelity video generation. Maintain strict consistency with the provided image reference. CONTEXT: AMBIENT: <ambient sound note>. DIALOGUE: <exact spoken line in quotes, OR \"no dialogue\">. ENVIRONMENT: <env description in campaign language>. NEGATIVE: distortion, morphing, bad hands, text overlays, identity change, wrong product."
+
+   ═══ DIALOGUE FIELD (critical for Veo 3 lipsync) ═══
+   - If the scene HAS voiceover (UGC, Mirror Check with talking) → DIALOGUE must contain the EXACT same text as the script field, in quotes. Example: DIALOGUE: "Tuh kan, gue baru sadar parfum gue beda banget"
+   - The DIALOGUE text MUST match script field VERBATIM (same words, same punctuation)
+   - If POV Hand mode (no face, no talking) → DIALOGUE: "no dialogue"
+   - If a UGC scene is intentionally silent (eg. visual reaction beat) → DIALOGUE: "no dialogue", and AMBIENT: should describe the sound
+   - The DIALOGUE language must be the CAMPAIGN language (Indonesian for 'id'); do NOT translate to English
 
    ═══ TWO-BEAT MOTION RULE (CRITICAL) ═══
    Each Veo clip can be 4-8 seconds. You MUST design the PROMPT field as TWO BEATS within ONE continuous shot — same character, same setting, no hard cut, but a clear visual shift at the midpoint:
@@ -573,10 +580,11 @@ Generate a complete scene-by-scene script. Each scene must have:
    - POV Hand: "iPhone 0.5x ultra-wide lens, looking down at the hands and surface, slight tilt-down at the midpoint"
    - Mirror Check: "Phone held in front of mirror, vertical framing, slight zoom-out reveal at the midpoint"
 
-   ═══ AMBIENT examples ═══
-   - If the scene has voiceover: "AMBIENT: Speaking to camera, mouth moves with VO line."
-   - If POV Hand (no face): "AMBIENT: Mouth closed or natural breathing, no talking."
-   - If Mirror Check: "AMBIENT: Soft natural room ambience, subtle breath."
+   ═══ AMBIENT examples (sound only, not what is said) ═══
+   - With dialogue: "AMBIENT: Quiet room tone with light keyboard typing in the background"
+   - Without dialogue (POV Hand): "AMBIENT: Mouth closed or natural breathing, no talking. Package paper rustle, fabric brush against table"
+   - Mirror Check pause: "AMBIENT: Soft bathroom acoustic, faint water drip"
+   - General: describe physical room sounds, NOT speech (speech goes in DIALOGUE)
 
    ═══ ENVIRONMENT field ═══
    Write in the campaign's language (Bahasa Indonesia for 'id', English for 'en'). Pull from the user's environment input verbatim or paraphrase tightly.
@@ -590,7 +598,7 @@ QUALITY CHECKS (run mentally before finalizing — block if any check fails)
 - VO word count: count words for each script. Does each fit (8s ≤ 20 words / 6s ≤ 14 words / 4s ≤ 10 words)? Trim if over.
 - Natural speech audit: does each script have at least ONE filler/restart/specific detail? If it reads like an ad copy, REWRITE.
 - Image prompt audit: zero gender/hair/skin words? Starts with "Maintain exact identity..."? Has anti-AI realism cues (iPhone, candid, natural skin texture)? Banned aesthetic words absent?
-- Veo prompt audit: structured format (PROMPT/CAMERA/DETAILS/CONTEXT/ENVIRONMENT/NEGATIVE)? Two-beat motion described (shift at midpoint)?
+- Veo prompt audit: structured format (PROMPT/CAMERA/DETAILS/CONTEXT/ENVIRONMENT/NEGATIVE)? Two-beat motion described (shift at midpoint)? DIALOGUE field present and matches script VERBATIM (or "no dialogue" for POV Hand)?
 - Pacing: does each scene introduce something NEW (angle, action, or info)?
 - Final scene: payoff or CTA matches the content type?
 
