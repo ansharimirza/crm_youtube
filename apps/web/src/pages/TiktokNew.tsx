@@ -635,7 +635,7 @@ export function TiktokNewPage() {
                   </Select>
                 </div>
                 <div>
-                  <Label className="mb-2 block">Veo Model</Label>
+                  <Label className="mb-2 block">Video Model</Label>
                   <Select value={s.veoModel} onValueChange={(v) => update('veoModel', v)}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
@@ -643,6 +643,7 @@ export function TiktokNewPage() {
                       <SelectItem value="veo-3.1">Veo 3.1</SelectItem>
                       <SelectItem value="veo-3.1-fast">Veo 3.1 Fast</SelectItem>
                       <SelectItem value="veo-3.1-lite">Veo 3.1 Lite (audio)</SelectItem>
+                      <SelectItem value="grok-3">Grok 3 (xAI, 10s clips)</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>

@@ -165,6 +165,70 @@ export function isTerminalStatus(status: number): boolean {
   return status === 2 || status === 3
 }
 
+// ===== GROK VIDEO GENERATION =====
+// Different endpoint, model namespace, and parameter conventions vs Veo.
+
+export type GrokModel = 'grok-3'
+export type GrokResolution = '480p' | '720p'
+export type GrokAspectRatio = 'landscape' | 'portrait' | 'square' | 'vertical' | 'horizontal'
+export type GrokDuration = 6 | 10 | 15
+export type GrokMode = 'custom' | 'normal' | 'extremely-crazy' | 'extremely-spicy-or-crazy'
+
+export interface GenerateGrokParams {
+  apiKey: string
+  prompt: string
+  model?: GrokModel
+  resolution?: GrokResolution
+  aspectRatio?: GrokAspectRatio
+  duration?: GrokDuration
+  mode?: GrokMode
+  refImagePaths?: string[]
+}
+
+// Map our internal numeric ratio to Grok's named aspect ratio
+export function mapVeoAspectToGrok(a: '16:9' | '9:16' | '1:1'): GrokAspectRatio {
+  if (a === '16:9') return 'landscape'
+  if (a === '9:16') return 'portrait'
+  return 'square'
+}
+
+export async function generateGrok(params: GenerateGrokParams): Promise<GenerateVeoResponse> {
+  const form = new FormData()
+  form.append('prompt', params.prompt)
+  form.append('model', params.model ?? 'grok-3')
+  form.append('resolution', params.resolution ?? '720p')
+  form.append('aspect_ratio', params.aspectRatio ?? 'portrait')
+  form.append('duration', String(params.duration ?? 10))
+  form.append('mode', params.mode ?? 'normal')
+
+  // Use the same 'files' field as Veo (and Nano Banana) for local refs.
+  // Docs warn that mixing files/file_urls/ref_images is not recommended.
+  for (const refPath of params.refImagePaths ?? []) {
+    await appendFileToForm(form, 'files', refPath)
+  }
+
+  const res = await fetch(`${BASE_URL}/video-gen/grok`, {
+    method: 'POST',
+    headers: { 'x-api-key': params.apiKey },
+    body: form,
+  })
+
+  const data = await res.json().catch(() => null) as
+    | GenerateVeoResponse
+    | { detail?: { error_code?: string; error_message?: string } }
+    | null
+
+  if (!res.ok || !data || 'detail' in data) {
+    const errMsg = data && 'detail' in data
+      ? (data.detail?.error_message ?? `HTTP ${res.status}`)
+      : `HTTP ${res.status}`
+    const errCode = data && 'detail' in data ? data.detail?.error_code : undefined
+    throw new GeminigenError(errMsg, res.status, errCode)
+  }
+
+  return data as GenerateVeoResponse
+}
+
 // ===== IMAGE GENERATION =====
 
 export type ImageModel = 'nano-banana-pro' | 'nano-banana-2' | 'imagen-4'

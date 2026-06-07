@@ -9,9 +9,11 @@ import { writeFile, mkdir } from 'node:fs/promises'
 import { join, extname } from 'node:path'
 import { db, tiktokScenes, tiktokCampaigns, users } from '../db'
 import {
-  generateVeo, getHistory, isTerminalStatus, GeminigenError,
+  generateVeo, generateGrok, mapVeoAspectToGrok,
+  getHistory, isTerminalStatus, GeminigenError,
   generateImage, getImageHistory,
   type VeoModel, type VeoResolution, type VeoAspectRatio,
+  type GrokDuration, type GrokResolution,
   type ImageAspectRatio,
 } from './geminigen'
 import { notify } from './notifications'
@@ -270,19 +272,33 @@ async function runSceneVideo(sceneId: number) {
         updatedAt: new Date(),
       }).where(eq(tiktokScenes.id, sceneId))
 
-      console.log(`[tiktok-vid:${sceneId}] Attempt ${attempts}/${MAX_ATTEMPTS}`)
+      const isGrok = campaign.veoModel.startsWith('grok')
+      console.log(`[tiktok-vid:${sceneId}] Attempt ${attempts}/${MAX_ATTEMPTS} via ${isGrok ? 'Grok' : 'Veo'}`)
 
-      const generated = await generateVeo({
-        apiKey,
-        prompt: scene.veoPrompt,
-        model: campaign.veoModel as VeoModel,
-        resolution: campaign.resolution as VeoResolution,
-        duration: scene.duration,
-        aspectRatio: campaign.aspectRatio as VeoAspectRatio,
-        modeImage: 'frame',
-        firstImagePath,
-        lastImagePath: null,
-      })
+      const generated = isGrok
+        ? await generateGrok({
+            apiKey,
+            prompt: scene.veoPrompt,
+            model: 'grok-3',
+            // Grok max is 720p; downshift 1080p requests
+            resolution: (campaign.resolution === '1080p' ? '720p' : campaign.resolution) as GrokResolution,
+            aspectRatio: mapVeoAspectToGrok(campaign.aspectRatio as '16:9' | '9:16' | '1:1'),
+            // Grok allowed: 6/10/15 — snap our 8s default to 10
+            duration: (scene.duration <= 6 ? 6 : scene.duration >= 15 ? 15 : 10) as GrokDuration,
+            mode: 'normal',
+            refImagePaths: firstImagePath ? [firstImagePath] : [],
+          })
+        : await generateVeo({
+            apiKey,
+            prompt: scene.veoPrompt,
+            model: campaign.veoModel as VeoModel,
+            resolution: campaign.resolution as VeoResolution,
+            duration: scene.duration,
+            aspectRatio: campaign.aspectRatio as VeoAspectRatio,
+            modeImage: 'frame',
+            firstImagePath,
+            lastImagePath: null,
+          })
 
       await db.update(tiktokScenes).set({
         geminigenUuid: generated.uuid,

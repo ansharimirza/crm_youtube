@@ -133,6 +133,7 @@ export const tiktokCampaigns = pgTable('tiktok_campaigns', {
   environment: text('environment').notNull(),
   aspectRatio: varchar('aspect_ratio', { length: 8, enum: ['16:9', '9:16', '1:1'] }).default('9:16').notNull(),
   resolution: varchar('resolution', { length: 8, enum: ['720p', '1080p'] }).default('1080p').notNull(),
+  // Video model name — Veo (veo-2, veo-3.1, veo-3.1-fast, veo-3.1-lite) or Grok (grok-3)
   veoModel: varchar('veo_model', { length: 32 }).default('veo-2').notNull(),
   sceneCount: integer('scene_count').default(4).notNull(),
   // State
