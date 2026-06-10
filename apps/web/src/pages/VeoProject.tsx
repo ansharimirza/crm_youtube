@@ -398,8 +398,10 @@ function CreateSceneForm({
     mutation.mutate()
   }
 
-  // Semua kombinasi diizinkan (sesuai UI geminigen.ai web)
-  const durationOptions = [4, 6, 8]
+  // Per-model constraints (Grok has different allowed values than Veo)
+  const isGrok = model === 'grok-3'
+  const durationOptions = isGrok ? [6, 10, 15] : [4, 6, 8]
+  const resolutionOptions: VeoResolution[] = isGrok ? ['720p'] : ['720p', '1080p']
   const aspectRatioOptions: VeoAspectRatio[] = ['16:9', '9:16']
 
   return (
@@ -450,7 +452,17 @@ function CreateSceneForm({
           {/* Model */}
           <div className="space-y-2">
             <Label>Model</Label>
-            <Select value={model} onValueChange={v => setModel(v as VeoModel)}>
+            <Select value={model} onValueChange={v => {
+              const next = v as VeoModel
+              setModel(next)
+              // Snap duration + resolution to valid values for the new model
+              if (next === 'grok-3') {
+                if (![6, 10, 15].includes(duration)) setDuration(10)
+                if (resolution !== '720p') setResolution('720p')
+              } else {
+                if (![4, 6, 8].includes(duration)) setDuration(8)
+              }
+            }}>
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
                 {MODELS.map(m => (
@@ -488,8 +500,8 @@ function CreateSceneForm({
 
             <div className="space-y-2">
               <Label>Resolution</Label>
-              <div className="grid grid-cols-2 gap-2">
-                {(['720p', '1080p'] as VeoResolution[]).map(r => (
+              <div className={cn('grid gap-2', resolutionOptions.length === 1 ? 'grid-cols-1' : 'grid-cols-2')}>
+                {resolutionOptions.map(r => (
                   <button
                     key={r}
                     type="button"
