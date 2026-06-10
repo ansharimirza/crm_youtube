@@ -38,6 +38,7 @@ const MODELS: { value: VeoModel; label: string; desc: string }[] = [
   { value: 'veo-3.1-fast',  label: 'Veo 3.1 Fast',  desc: 'Lebih cepat (8s, 720p/1080p)' },
   { value: 'veo-3.1-lite',  label: 'Veo 3.1 Lite',  desc: 'Dengan audio sinkron' },
   { value: 'veo-2',         label: 'Veo 2',         desc: 'Flexible duration (4/6/8s), 720p only' },
+  { value: 'grok-3',        label: 'Grok 3',        desc: 'xAI (6/10/15s, 720p) — creative style' },
 ]
 
 export function VeoProjectPage() {

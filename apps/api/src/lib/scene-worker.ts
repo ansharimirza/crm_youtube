@@ -5,7 +5,12 @@
 
 import { eq } from 'drizzle-orm'
 import { db, veoScenes, users } from '../db'
-import { generateVeo, getHistory, isTerminalStatus, GeminigenError, type VeoModel, type VeoResolution, type VeoAspectRatio, type VeoModeImage } from './geminigen'
+import {
+  generateVeo, generateGrok, mapVeoAspectToGrok,
+  getHistory, isTerminalStatus, GeminigenError,
+  type VeoModel, type VeoResolution, type VeoAspectRatio, type VeoModeImage,
+  type GrokDuration, type GrokResolution,
+} from './geminigen'
 import { notify } from './notifications'
 
 const MAX_CONCURRENT = 5
@@ -91,19 +96,31 @@ async function runScene(sceneId: number) {
         updatedAt: new Date(),
       }).where(eq(veoScenes.id, sceneId))
 
-      console.log(`[scene-worker:${sceneId}] Attempt ${attempts}/${MAX_ATTEMPTS}`)
+      const isGrok = scene.model.startsWith('grok')
+      console.log(`[scene-worker:${sceneId}] Attempt ${attempts}/${MAX_ATTEMPTS} via ${isGrok ? 'Grok' : 'Veo'}`)
 
-      const generated = await generateVeo({
-        apiKey,
-        prompt: scene.prompt,
-        model: scene.model as VeoModel,
-        resolution: scene.resolution as VeoResolution,
-        duration: scene.duration,
-        aspectRatio: scene.aspectRatio as VeoAspectRatio,
-        modeImage: scene.modeImage as VeoModeImage,
-        firstImagePath: scene.firstImagePath,
-        lastImagePath: scene.lastImagePath,
-      })
+      const generated = isGrok
+        ? await generateGrok({
+            apiKey,
+            prompt: scene.prompt,
+            model: 'grok-3',
+            resolution: (scene.resolution === '1080p' ? '720p' : scene.resolution) as GrokResolution,
+            aspectRatio: mapVeoAspectToGrok(scene.aspectRatio as '16:9' | '9:16'),
+            duration: (scene.duration <= 6 ? 6 : scene.duration >= 15 ? 15 : 10) as GrokDuration,
+            mode: 'normal',
+            refImagePaths: [scene.firstImagePath, scene.lastImagePath].filter((p): p is string => !!p),
+          })
+        : await generateVeo({
+            apiKey,
+            prompt: scene.prompt,
+            model: scene.model as VeoModel,
+            resolution: scene.resolution as VeoResolution,
+            duration: scene.duration,
+            aspectRatio: scene.aspectRatio as VeoAspectRatio,
+            modeImage: scene.modeImage as VeoModeImage,
+            firstImagePath: scene.firstImagePath,
+            lastImagePath: scene.lastImagePath,
+          })
 
       await db.update(veoScenes).set({
         geminigenUuid: generated.uuid,

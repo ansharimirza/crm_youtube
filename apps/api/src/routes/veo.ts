@@ -311,7 +311,7 @@ export const veoRoutes = new Elysia({ prefix: '/api/veo' })
       first_image: t.Optional(t.File()),
       last_image: t.Optional(t.File()),
       prompt: t.String({ minLength: 1, maxLength: 4000 }),
-      model: t.Union([t.Literal('veo-3.1'), t.Literal('veo-3.1-fast'), t.Literal('veo-3.1-lite'), t.Literal('veo-2')]),
+      model: t.Union([t.Literal('veo-3.1'), t.Literal('veo-3.1-fast'), t.Literal('veo-3.1-lite'), t.Literal('veo-2'), t.Literal('grok-3')]),
       resolution: t.Union([t.Literal('720p'), t.Literal('1080p')]),
       duration: t.String(),
       aspect_ratio: t.Union([t.Literal('16:9'), t.Literal('9:16')]),
@@ -413,6 +413,7 @@ export const veoRoutes = new Elysia({ prefix: '/api/veo' })
       model: t.Optional(t.Union([
         t.Literal('veo-2'), t.Literal('veo-3.1'),
         t.Literal('veo-3.1-fast'), t.Literal('veo-3.1-lite'),
+        t.Literal('grok-3'),
       ])),
       resolution: t.Optional(t.Union([t.Literal('720p'), t.Literal('1080p')])),
       aspect_ratio: t.Optional(t.Union([t.Literal('16:9'), t.Literal('9:16')])),
