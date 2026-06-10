@@ -19,6 +19,22 @@ const POLL_INTERVAL_MS = 10_000    // 10s polling
 const POLL_TIMEOUT_MS = 30 * 60_000 // 30 menit max wait per attempt
 const RETRY_DELAY_MS = 15_000      // 15s sebelum coba lagi setelah fail
 
+// Validation errors are deterministic — retrying won't help. Stop immediately
+// and surface the real reason instead of attempting 20 times.
+function isPermanentValidationError(msg: string): boolean {
+  const m = msg.toLowerCase()
+  return (
+    m.includes('must be between') ||
+    m.includes('invalid value') ||
+    m.includes('validation failed') ||
+    m.includes('not allowed') ||
+    m.includes('unsupported') ||
+    m.includes('invalid prompt') ||
+    m.includes('content policy') ||
+    m.includes('400 bad request')
+  )
+}
+
 let activeJobs = 0
 const queue: number[] = []
 
@@ -106,7 +122,8 @@ async function runScene(sceneId: number) {
             model: 'grok-3',
             resolution: (scene.resolution === '1080p' ? '720p' : scene.resolution) as GrokResolution,
             aspectRatio: mapVeoAspectToGrok(scene.aspectRatio as '16:9' | '9:16'),
-            duration: (scene.duration <= 6 ? 6 : scene.duration >= 15 ? 15 : 10) as GrokDuration,
+            // Real Grok API caps duration at 10s despite the docs listing 15.
+            duration: (scene.duration <= 6 ? 6 : 10) as GrokDuration,
             mode: 'normal',
             refImagePaths: [scene.firstImagePath, scene.lastImagePath].filter((p): p is string => !!p),
           })
@@ -161,6 +178,24 @@ async function runScene(sceneId: number) {
     } catch (err) {
       lastError = err instanceof Error ? err.message : String(err)
       console.warn(`[scene-worker:${sceneId}] Error attempt ${attempts}: ${lastError}`)
+    }
+
+    // Stop early on permanent validation errors — retrying won't help
+    if (isPermanentValidationError(lastError)) {
+      await db.update(veoScenes).set({
+        status: 'error',
+        errorMsg: `Validation error (no retry): ${lastError}`,
+        updatedAt: new Date(),
+      }).where(eq(veoScenes.id, sceneId))
+
+      await notify({
+        userId: scene.project.userId,
+        type: 'veo_failed',
+        title: `Scene ${scene.sceneNumber} validation error`,
+        message: `"${scene.project.title}" Scene ${scene.sceneNumber}: ${lastError}`,
+      })
+      console.warn(`[scene-worker:${sceneId}] PERMANENT validation error, not retrying: ${lastError}`)
+      return
     }
 
     // Update error msg & retry setelah delay

@@ -23,6 +23,21 @@ const MAX_CONCURRENT_VID = 5
 const MAX_ATTEMPTS = 8
 const RETRY_DELAY_MS = 12_000
 
+// Validation errors are deterministic — retrying 8x won't help. Stop early.
+function isPermanentValidationError(msg: string): boolean {
+  const m = msg.toLowerCase()
+  return (
+    m.includes('must be between') ||
+    m.includes('invalid value') ||
+    m.includes('validation failed') ||
+    m.includes('not allowed') ||
+    m.includes('unsupported') ||
+    m.includes('invalid prompt') ||
+    m.includes('content policy') ||
+    m.includes('400 bad request')
+  )
+}
+
 // Video polling
 const VID_POLL_INTERVAL_MS = 10_000
 const VID_POLL_TIMEOUT_MS = 30 * 60_000
@@ -201,6 +216,16 @@ async function runSceneImage(sceneId: number) {
       console.warn(`[tiktok-img:${sceneId}] Error attempt ${attempts}: ${lastError}`)
     }
 
+    if (isPermanentValidationError(lastError)) {
+      await db.update(tiktokScenes).set({
+        imageStatus: 'error',
+        imageErrorMsg: `Validation error (no retry): ${lastError}`,
+        updatedAt: new Date(),
+      }).where(eq(tiktokScenes.id, sceneId))
+      console.warn(`[tiktok-img:${sceneId}] PERMANENT validation error, not retrying: ${lastError}`)
+      return
+    }
+
     await db.update(tiktokScenes).set({
       imageErrorMsg: `Attempt ${attempts}: ${lastError}. Retrying...`,
       updatedAt: new Date(),
@@ -284,7 +309,8 @@ async function runSceneVideo(sceneId: number) {
             resolution: (campaign.resolution === '1080p' ? '720p' : campaign.resolution) as GrokResolution,
             aspectRatio: mapVeoAspectToGrok(campaign.aspectRatio as '16:9' | '9:16' | '1:1'),
             // Grok allowed: 6/10/15 — snap our 8s default to 10
-            duration: (scene.duration <= 6 ? 6 : scene.duration >= 15 ? 15 : 10) as GrokDuration,
+            // Real Grok API caps duration at 10s despite the docs listing 15.
+            duration: (scene.duration <= 6 ? 6 : 10) as GrokDuration,
             mode: 'normal',
             refImagePaths: firstImagePath ? [firstImagePath] : [],
           })
@@ -329,6 +355,22 @@ async function runSceneVideo(sceneId: number) {
     } catch (err) {
       lastError = err instanceof Error ? err.message : String(err)
       console.warn(`[tiktok-vid:${sceneId}] Error attempt ${attempts}: ${lastError}`)
+    }
+
+    if (isPermanentValidationError(lastError)) {
+      await db.update(tiktokScenes).set({
+        status: 'error',
+        errorMsg: `Validation error (no retry): ${lastError}`,
+        updatedAt: new Date(),
+      }).where(eq(tiktokScenes.id, sceneId))
+      await notify({
+        userId: campaign.userId,
+        type: 'tiktok_scene_failed',
+        title: `TikTok scene ${scene.sceneNumber} validation error`,
+        message: `"${campaign.title}" Scene ${scene.sceneNumber}: ${lastError}`,
+      })
+      console.warn(`[tiktok-vid:${sceneId}] PERMANENT validation error, not retrying: ${lastError}`)
+      return
     }
 
     await db.update(tiktokScenes).set({

@@ -400,7 +400,8 @@ function CreateSceneForm({
 
   // Per-model constraints (Grok has different allowed values than Veo)
   const isGrok = model === 'grok-3'
-  const durationOptions = isGrok ? [6, 10, 15] : [4, 6, 8]
+  // Note: docs claim 15 is allowed but real API rejects with "must be 4-10s"
+  const durationOptions = isGrok ? [6, 10] : [4, 6, 8]
   const resolutionOptions: VeoResolution[] = isGrok ? ['720p'] : ['720p', '1080p']
   const aspectRatioOptions: VeoAspectRatio[] = ['16:9', '9:16']
 
@@ -457,7 +458,7 @@ function CreateSceneForm({
               setModel(next)
               // Snap duration + resolution to valid values for the new model
               if (next === 'grok-3') {
-                if (![6, 10, 15].includes(duration)) setDuration(10)
+                if (![6, 10].includes(duration)) setDuration(10)
                 if (resolution !== '720p') setResolution('720p')
               } else {
                 if (![4, 6, 8].includes(duration)) setDuration(8)
