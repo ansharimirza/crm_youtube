@@ -2,6 +2,7 @@ import { Elysia, t } from 'elysia'
 import { and, desc, eq } from 'drizzle-orm'
 import { mkdir } from 'node:fs/promises'
 import { join } from 'node:path'
+import JSZip from 'jszip'
 import { db, users, tiktokCampaigns, tiktokScenes } from '../db'
 import { authMiddleware } from '../middleware/auth'
 import { enqueueTiktokImage, enqueueTiktokVideo } from '../lib/tiktok-worker'
@@ -531,6 +532,66 @@ export const tiktokRoutes = new Elysia({ prefix: '/api/tiktok' })
     }).where(eq(tiktokScenes.id, id))
     enqueueTiktokImage(id)
     return { ok: true }
+  })
+
+  // === DOWNLOAD ALL DONE VIDEOS AS ZIP ===
+  .get('/campaigns/:id/download-zip', async ({ params, user, set }) => {
+    const id = Number(params.id)
+    const campaign = await db.query.tiktokCampaigns.findFirst({
+      where: and(eq(tiktokCampaigns.id, id), eq(tiktokCampaigns.userId, user.id)),
+      with: { scenes: { orderBy: [tiktokScenes.sceneNumber] } },
+    })
+    if (!campaign) {
+      set.status = 404
+      return { error: 'Campaign tidak ditemukan' }
+    }
+
+    const doneScenes = campaign.scenes.filter(s => s.status === 'done' && s.videoUrl)
+    if (doneScenes.length === 0) {
+      set.status = 400
+      return { error: 'Belum ada video scene yang selesai untuk di-download' }
+    }
+
+    const zip = new JSZip()
+    let added = 0
+
+    const BATCH = 5
+    for (let i = 0; i < doneScenes.length; i += BATCH) {
+      const batch = doneScenes.slice(i, i + BATCH)
+      const results = await Promise.allSettled(
+        batch.map(async (scene) => {
+          const res = await fetch(scene.videoUrl!)
+          if (!res.ok) throw new Error(`HTTP ${res.status}`)
+          const buf = await res.arrayBuffer()
+          return { scene, buf }
+        })
+      )
+      for (const r of results) {
+        if (r.status === 'fulfilled') {
+          const { scene, buf } = r.value
+          const filename = `scene-${String(scene.sceneNumber).padStart(2, '0')}.mp4`
+          zip.file(filename, buf)
+          added++
+        }
+      }
+    }
+
+    if (added === 0) {
+      set.status = 500
+      return { error: 'Gagal download semua video' }
+    }
+
+    const safeTitle = campaign.title.replace(/[^\w\s-]/g, '').trim().slice(0, 60) || 'tiktok-campaign'
+    const zipBuf = await zip.generateAsync({
+      type: 'uint8array',
+      compression: 'DEFLATE',
+      compressionOptions: { level: 1 },
+    })
+
+    set.headers['Content-Type'] = 'application/zip'
+    set.headers['Content-Disposition'] = `attachment; filename="${safeTitle}.zip"`
+    set.headers['Content-Length'] = String(zipBuf.byteLength)
+    return new Response(zipBuf)
   })
 
   // === DELETE CAMPAIGN ===

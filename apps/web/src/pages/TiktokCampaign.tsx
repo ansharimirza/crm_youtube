@@ -12,7 +12,7 @@ import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Badge } from '@/components/ui/badge'
 import { Switch } from '@/components/ui/switch'
-import { api } from '@/lib/api'
+import { api, getToken } from '@/lib/api'
 import { cn, formatRelativeTime } from '@/lib/utils'
 import { toast } from 'sonner'
 import type { TiktokCampaign, TiktokScene, TiktokMode, TiktokContentType } from '@/lib/types'
@@ -48,6 +48,35 @@ export function TiktokCampaignPage() {
     },
     onError: (e: Error) => toast.error(e.message),
   })
+
+  const [downloading, setDownloading] = useState(false)
+  async function handleDownloadZip() {
+    if (!data?.campaign) return
+    setDownloading(true)
+    try {
+      const res = await fetch(`/api/tiktok/campaigns/${id}/download-zip`, {
+        headers: { Authorization: `Bearer ${getToken()}` },
+      })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        throw new Error(err.error || `HTTP ${res.status}`)
+      }
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `${data.campaign.title.replace(/[^\w\s-]/g, '').trim() || 'tiktok-campaign'}.zip`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+      toast.success('Download dimulai')
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Download gagal')
+    } finally {
+      setDownloading(false)
+    }
+  }
 
   const deleteMutation = useMutation({
     mutationFn: () => api.delete(`/api/tiktok/campaigns/${id}`),
@@ -107,11 +136,9 @@ export function TiktokCampaignPage() {
           </div>
           <div className="flex gap-2">
             {videosDone > 0 && (
-              <Button asChild variant="outline" size="sm">
-                <a href={`/api/tiktok/campaigns/${campaign.id}/download-zip`}>
-                  <Download className="h-4 w-4" />
-                  ZIP
-                </a>
+              <Button variant="outline" size="sm" onClick={handleDownloadZip} disabled={downloading}>
+                {downloading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+                ZIP
               </Button>
             )}
             <Button
