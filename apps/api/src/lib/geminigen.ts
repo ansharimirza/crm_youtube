@@ -229,6 +229,63 @@ export async function generateGrok(params: GenerateGrokParams): Promise<Generate
   return data as GenerateVeoResponse
 }
 
+// ===== KLING VIDEO GENERATION =====
+// Separate endpoint with its own field conventions:
+//  - reference images go in 'ref_images' (NOT 'files' like Grok)
+//  - mode: standard / professional / professional_audio (2.6 only) / relax (2.5 only)
+
+export type KlingModel = 'kling-video-3-0' | 'kling-video-2-6' | 'kling-video-motion-3'
+export type KlingAspectRatio = '16:9' | '9:16' | '1:1'
+export type KlingMode = 'standard' | 'professional' | 'professional_audio' | 'relax'
+
+export interface GenerateKlingParams {
+  apiKey: string
+  prompt: string
+  model?: KlingModel
+  mode?: KlingMode
+  aspectRatio?: KlingAspectRatio
+  duration?: number   // 3-15s
+  refImagePaths?: string[]
+  refVideoPaths?: string[]   // required for motion-control models
+}
+
+export async function generateKling(params: GenerateKlingParams): Promise<GenerateVeoResponse> {
+  const form = new FormData()
+  form.append('prompt', params.prompt)
+  form.append('model', params.model ?? 'kling-video-3-0')
+  form.append('mode', params.mode ?? 'professional')
+  form.append('aspect_ratio', params.aspectRatio ?? '9:16')
+  form.append('duration', String(params.duration ?? 8))
+
+  for (const refPath of params.refImagePaths ?? []) {
+    await appendFileToForm(form, 'ref_images', refPath)
+  }
+  for (const refPath of params.refVideoPaths ?? []) {
+    await appendFileToForm(form, 'ref_videos', refPath)
+  }
+
+  const res = await fetch(`${BASE_URL}/video-gen/kling`, {
+    method: 'POST',
+    headers: { 'x-api-key': params.apiKey },
+    body: form,
+  })
+
+  const data = await res.json().catch(() => null) as
+    | GenerateVeoResponse
+    | { detail?: { error_code?: string; error_message?: string } }
+    | null
+
+  if (!res.ok || !data || 'detail' in data) {
+    const errMsg = data && 'detail' in data
+      ? (data.detail?.error_message ?? `HTTP ${res.status}`)
+      : `HTTP ${res.status}`
+    const errCode = data && 'detail' in data ? data.detail?.error_code : undefined
+    throw new GeminigenError(errMsg, res.status, errCode)
+  }
+
+  return data as GenerateVeoResponse
+}
+
 // ===== IMAGE GENERATION =====
 
 export type ImageModel = 'nano-banana-pro' | 'nano-banana-2' | 'imagen-4'

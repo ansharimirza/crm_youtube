@@ -287,6 +287,7 @@ export const veoRoutes = new Elysia({ prefix: '/api/veo' })
 
     const firstImagePath = body.first_image ? await saveFile(body.first_image, 'first') : null
     const lastImagePath = body.last_image ? await saveFile(body.last_image, 'last') : null
+    const referenceVideoPath = body.reference_video ? await saveFile(body.reference_video, 'ref-video') : null
 
     const [scene] = await db.insert(veoScenes).values({
       projectId,
@@ -299,6 +300,7 @@ export const veoRoutes = new Elysia({ prefix: '/api/veo' })
       modeImage: body.mode_image ?? 'frame',
       firstImagePath,
       lastImagePath,
+      referenceVideoPath,
       status: 'queued',
     }).returning()
 
@@ -310,8 +312,13 @@ export const veoRoutes = new Elysia({ prefix: '/api/veo' })
     body: t.Object({
       first_image: t.Optional(t.File()),
       last_image: t.Optional(t.File()),
+      reference_video: t.Optional(t.File()),  // for Kling motion-control models
       prompt: t.String({ minLength: 1, maxLength: 4000 }),
-      model: t.Union([t.Literal('veo-3.1'), t.Literal('veo-3.1-fast'), t.Literal('veo-3.1-lite'), t.Literal('veo-2'), t.Literal('grok-3')]),
+      model: t.Union([
+        t.Literal('veo-3.1'), t.Literal('veo-3.1-fast'), t.Literal('veo-3.1-lite'), t.Literal('veo-2'),
+        t.Literal('grok-3'),
+        t.Literal('kling-video-3-0'), t.Literal('kling-video-2-6'), t.Literal('kling-video-motion-3'),
+      ]),
       resolution: t.Union([t.Literal('720p'), t.Literal('1080p')]),
       duration: t.String(),
       aspect_ratio: t.Union([t.Literal('16:9'), t.Literal('9:16')]),
@@ -414,6 +421,7 @@ export const veoRoutes = new Elysia({ prefix: '/api/veo' })
         t.Literal('veo-2'), t.Literal('veo-3.1'),
         t.Literal('veo-3.1-fast'), t.Literal('veo-3.1-lite'),
         t.Literal('grok-3'),
+        t.Literal('kling-video-3-0'), t.Literal('kling-video-2-6'), t.Literal('kling-video-motion-3'),
       ])),
       resolution: t.Optional(t.Union([t.Literal('720p'), t.Literal('1080p')])),
       aspect_ratio: t.Optional(t.Union([t.Literal('16:9'), t.Literal('9:16')])),

@@ -35,7 +35,10 @@ export interface VeoProject {
   scenes: VeoScene[]
 }
 
-export type VeoModel = 'veo-3.1' | 'veo-3.1-fast' | 'veo-3.1-lite' | 'veo-2' | 'grok-3'
+export type VeoModel =
+  | 'veo-3.1' | 'veo-3.1-fast' | 'veo-3.1-lite' | 'veo-2'
+  | 'grok-3'
+  | 'kling-video-3-0' | 'kling-video-2-6' | 'kling-video-motion-3'
 export type VeoResolution = '720p' | '1080p'
 export type VeoAspectRatio = '16:9' | '9:16'
 export type VeoSceneStatus = 'queued' | 'processing' | 'done' | 'error'

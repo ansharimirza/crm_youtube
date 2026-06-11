@@ -1,0 +1,1 @@
+ALTER TABLE "veo_scenes" ADD COLUMN "reference_video_path" text;

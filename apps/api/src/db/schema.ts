@@ -40,6 +40,8 @@ export const veoScenes = pgTable('veo_scenes', {
   modeImage: varchar('mode_image', { length: 16, enum: ['frame', 'ingredient'] }).default('frame').notNull(),
   firstImagePath: text('first_image_path'),
   lastImagePath: text('last_image_path'),
+  // For Kling motion-control models — reference video driving the motion
+  referenceVideoPath: text('reference_video_path'),
   // State
   status: varchar('status', { length: 16, enum: ['queued', 'processing', 'done', 'error'] }).default('queued').notNull(),
   progress: integer('progress').default(0).notNull(),

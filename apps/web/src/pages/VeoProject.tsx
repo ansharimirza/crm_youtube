@@ -34,11 +34,14 @@ import { toast } from 'sonner'
 import type { VeoProject, VeoScene, VeoModel, VeoAspectRatio, VeoResolution } from '@/lib/types'
 
 const MODELS: { value: VeoModel; label: string; desc: string }[] = [
-  { value: 'veo-3.1',       label: 'Veo 3.1',       desc: 'Latest highest quality (8s, 720p/1080p)' },
-  { value: 'veo-3.1-fast',  label: 'Veo 3.1 Fast',  desc: 'Lebih cepat (8s, 720p/1080p)' },
-  { value: 'veo-3.1-lite',  label: 'Veo 3.1 Lite',  desc: 'Dengan audio sinkron' },
-  { value: 'veo-2',         label: 'Veo 2',         desc: 'Flexible duration (4/6/8s), 720p only' },
-  { value: 'grok-3',        label: 'Grok 3',        desc: 'xAI (6/10/15s, 720p) — creative style' },
+  { value: 'veo-3.1',              label: 'Veo 3.1',                desc: 'Latest highest quality (8s, 720p/1080p)' },
+  { value: 'veo-3.1-fast',         label: 'Veo 3.1 Fast',           desc: 'Lebih cepat (8s, 720p/1080p)' },
+  { value: 'veo-3.1-lite',         label: 'Veo 3.1 Lite',           desc: 'Dengan audio sinkron' },
+  { value: 'veo-2',                label: 'Veo 2',                  desc: 'Flexible duration (4/6/8s), 720p only' },
+  { value: 'grok-3',               label: 'Grok 3',                 desc: 'xAI (6/10s, 720p) — creative style' },
+  { value: 'kling-video-3-0',      label: 'Kling 3.0',              desc: 'Best quality text-to-video (3-15s)' },
+  { value: 'kling-video-2-6',      label: 'Kling 2.6 (Audio)',      desc: 'Built-in voiceover/audio sync' },
+  { value: 'kling-video-motion-3', label: 'Kling Motion 3',         desc: 'Motion control — needs reference VIDEO + image' },
 ]
 
 export function VeoProjectPage() {
@@ -339,6 +342,7 @@ function CreateSceneForm({
   const [lastImage, setLastImage] = useState<File | null>(null)
   const [firstPreview, setFirstPreview] = useState<string | null>(null)
   const [lastPreview, setLastPreview] = useState<string | null>(null)
+  const [referenceVideo, setReferenceVideo] = useState<File | null>(null)
   const [prompt, setPrompt] = useState('')
   const [model, setModel] = useState<VeoModel>('veo-2')
   const [aspectRatio, setAspectRatio] = useState<VeoAspectRatio>('16:9')
@@ -350,6 +354,7 @@ function CreateSceneForm({
       const fd = new FormData()
       if (firstImage) fd.append('first_image', firstImage)
       if (lastImage) fd.append('last_image', lastImage)
+      if (referenceVideo) fd.append('reference_video', referenceVideo)
       fd.append('prompt', prompt)
       fd.append('model', model)
       fd.append('resolution', resolution)
@@ -398,10 +403,12 @@ function CreateSceneForm({
     mutation.mutate()
   }
 
-  // Per-model constraints (Grok has different allowed values than Veo)
+  // Per-model constraints
   const isGrok = model === 'grok-3'
-  // Note: docs claim 15 is allowed but real API rejects with "must be 4-10s"
-  const durationOptions = isGrok ? [6, 10] : [4, 6, 8]
+  const isKling = model.startsWith('kling')
+  const isKlingMotion = model === 'kling-video-motion-3'
+  // Grok docs claim 15 but real API rejects with "must be 4-10s"
+  const durationOptions = isGrok ? [6, 10] : isKling ? [5, 8, 10] : [4, 6, 8]
   const resolutionOptions: VeoResolution[] = isGrok ? ['720p'] : ['720p', '1080p']
   const aspectRatioOptions: VeoAspectRatio[] = ['16:9', '9:16']
 
@@ -433,6 +440,42 @@ function CreateSceneForm({
             </p>
           </div>
 
+          {/* Reference Video — only for Kling motion-control */}
+          {isKlingMotion && (
+            <div className="space-y-2">
+              <Label className="text-amber-300">Reference Video <span className="text-primary">*</span></Label>
+              {referenceVideo ? (
+                <div className="relative inline-block">
+                  <video
+                    src={URL.createObjectURL(referenceVideo)}
+                    controls
+                    className="rounded-lg max-h-48 border"
+                  />
+                  <Button
+                    type="button" size="icon" variant="secondary"
+                    className="absolute top-2 right-2 h-7 w-7"
+                    onClick={() => setReferenceVideo(null)}
+                  >
+                    ×
+                  </Button>
+                </div>
+              ) : (
+                <label className="flex items-center gap-3 border-2 border-dashed border-amber-500/30 rounded-lg p-6 cursor-pointer hover:bg-amber-500/5">
+                  <span className="text-sm text-muted-foreground">Upload video referensi (gerakannya akan diikuti)...</span>
+                  <input
+                    type="file"
+                    accept="video/mp4,video/mov,video/webm"
+                    className="hidden"
+                    onChange={(e) => setReferenceVideo(e.target.files?.[0] ?? null)}
+                  />
+                </label>
+              )}
+              <p className="text-xs text-muted-foreground">
+                MP4/MOV/WebM, max 100MB, max 120s. Karakter dari First Image akan meniru gerakan video ini.
+              </p>
+            </div>
+          )}
+
           {/* Prompt */}
           <div className="space-y-2">
             <Label htmlFor="prompt">
@@ -460,6 +503,8 @@ function CreateSceneForm({
               if (next === 'grok-3') {
                 if (![6, 10].includes(duration)) setDuration(10)
                 if (resolution !== '720p') setResolution('720p')
+              } else if (next.startsWith('kling')) {
+                if (![5, 8, 10].includes(duration)) setDuration(8)
               } else {
                 if (![4, 6, 8].includes(duration)) setDuration(8)
               }

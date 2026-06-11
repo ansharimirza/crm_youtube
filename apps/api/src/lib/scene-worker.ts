@@ -6,10 +6,11 @@
 import { eq } from 'drizzle-orm'
 import { db, veoScenes, users } from '../db'
 import {
-  generateVeo, generateGrok, mapVeoAspectToGrok,
+  generateVeo, generateGrok, generateKling, mapVeoAspectToGrok,
   getHistory, isTerminalStatus, GeminigenError,
   type VeoModel, type VeoResolution, type VeoAspectRatio, type VeoModeImage,
   type GrokDuration, type GrokResolution,
+  type KlingModel, type KlingMode,
 } from './geminigen'
 import { notify } from './notifications'
 
@@ -113,31 +114,51 @@ async function runScene(sceneId: number) {
       }).where(eq(veoScenes.id, sceneId))
 
       const isGrok = scene.model.startsWith('grok')
-      console.log(`[scene-worker:${sceneId}] Attempt ${attempts}/${MAX_ATTEMPTS} via ${isGrok ? 'Grok' : 'Veo'}`)
+      const isKling = scene.model.startsWith('kling')
+      const provider = isKling ? 'Kling' : isGrok ? 'Grok' : 'Veo'
+      console.log(`[scene-worker:${sceneId}] Attempt ${attempts}/${MAX_ATTEMPTS} via ${provider}`)
 
-      const generated = isGrok
-        ? await generateGrok({
-            apiKey,
-            prompt: scene.prompt,
-            model: 'grok-3',
-            resolution: (scene.resolution === '1080p' ? '720p' : scene.resolution) as GrokResolution,
-            aspectRatio: mapVeoAspectToGrok(scene.aspectRatio as '16:9' | '9:16'),
-            // Real Grok API caps duration at 10s despite the docs listing 15.
-            duration: (scene.duration <= 6 ? 6 : 10) as GrokDuration,
-            mode: 'normal',
-            refImagePaths: [scene.firstImagePath, scene.lastImagePath].filter((p): p is string => !!p),
-          })
-        : await generateVeo({
-            apiKey,
-            prompt: scene.prompt,
-            model: scene.model as VeoModel,
-            resolution: scene.resolution as VeoResolution,
-            duration: scene.duration,
-            aspectRatio: scene.aspectRatio as VeoAspectRatio,
-            modeImage: scene.modeImage as VeoModeImage,
-            firstImagePath: scene.firstImagePath,
-            lastImagePath: scene.lastImagePath,
-          })
+      let generated
+      if (isKling) {
+        // Audio-aware model gets professional_audio mode for VO sync
+        const klingMode: KlingMode = scene.model === 'kling-video-2-6'
+          ? 'professional_audio'
+          : (scene.resolution === '1080p' ? 'professional' : 'standard')
+        generated = await generateKling({
+          apiKey,
+          prompt: scene.prompt,
+          model: scene.model as KlingModel,
+          mode: klingMode,
+          aspectRatio: scene.aspectRatio as '16:9' | '9:16',
+          duration: Math.min(Math.max(scene.duration, 3), 15),
+          refImagePaths: [scene.firstImagePath].filter((p): p is string => !!p),
+          refVideoPaths: scene.referenceVideoPath ? [scene.referenceVideoPath] : [],
+        })
+      } else if (isGrok) {
+        generated = await generateGrok({
+          apiKey,
+          prompt: scene.prompt,
+          model: 'grok-3',
+          resolution: (scene.resolution === '1080p' ? '720p' : scene.resolution) as GrokResolution,
+          aspectRatio: mapVeoAspectToGrok(scene.aspectRatio as '16:9' | '9:16'),
+          // Real Grok API caps duration at 10s despite the docs listing 15.
+          duration: (scene.duration <= 6 ? 6 : 10) as GrokDuration,
+          mode: 'normal',
+          refImagePaths: [scene.firstImagePath, scene.lastImagePath].filter((p): p is string => !!p),
+        })
+      } else {
+        generated = await generateVeo({
+          apiKey,
+          prompt: scene.prompt,
+          model: scene.model as VeoModel,
+          resolution: scene.resolution as VeoResolution,
+          duration: scene.duration,
+          aspectRatio: scene.aspectRatio as VeoAspectRatio,
+          modeImage: scene.modeImage as VeoModeImage,
+          firstImagePath: scene.firstImagePath,
+          lastImagePath: scene.lastImagePath,
+        })
+      }
 
       await db.update(veoScenes).set({
         geminigenUuid: generated.uuid,
