@@ -155,6 +155,38 @@ export interface AnalyzeResult {
   scenes: AnalyzedScene[]
 }
 
+export type AiInfluencerStatus = 'queued' | 'processing' | 'done' | 'error'
+
+export interface AiInfluencer {
+  id: number
+  userId: number
+  name: string
+  gender: 'female' | 'male'
+  age: number
+  niches: string  // pipe-separated
+  faceRefPath: string | null
+  styleRefPath: string | null
+  backstory: string
+  personality: number
+  ethnicity: string
+  skinTone: string
+  hairColor: string
+  hairLength: string
+  hairTexture: string
+  eyeColor: string
+  build: string
+  customDescription: string
+  aestheticVibe: string | null
+  imagePrompt: string
+  imageUrl: string | null
+  imagePath: string | null
+  status: AiInfluencerStatus
+  attempts: number
+  errorMsg: string | null
+  createdAt: string
+  updatedAt: string
+}
+
 export type Platform = 'tiktok' | 'reels' | 'shorts'
 
 export type TiktokMode = 'ugc' | 'pov_hand' | 'mirror_check'

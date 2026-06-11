@@ -43,6 +43,13 @@
       "when": 1781195283815,
       "tag": "0005_dazzling_ghost_rider",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1781196114595,
+      "tag": "0006_colossal_harpoon",
+      "breakpoints": true
     }
   ]
 }

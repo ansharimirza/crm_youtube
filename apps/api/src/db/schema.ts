@@ -173,6 +173,47 @@ export const tiktokScenes = pgTable('tiktok_scenes', {
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
 })
 
+// AI Influencer — persona builder + Nano Banana image generation
+export const aiInfluencers = pgTable('ai_influencers', {
+  id: serial('id').primaryKey(),
+  userId: integer('user_id').references(() => users.id, { onDelete: 'cascade' }).notNull(),
+  // Step 1: basics
+  name: varchar('name', { length: 100 }).notNull(),
+  gender: varchar('gender', { length: 16, enum: ['female', 'male'] }).notNull(),
+  age: integer('age').notNull(),
+  niches: text('niches').default('').notNull(), // pipe-separated
+  // Step 2: references
+  faceRefPath: text('face_ref_path'),
+  styleRefPath: text('style_ref_path'),
+  // Step 3: persona
+  backstory: text('backstory').default('').notNull(),
+  personality: integer('personality').default(50).notNull(), // 0 = introvert, 100 = extrovert
+  // Step 4: looks
+  ethnicity: varchar('ethnicity', { length: 32 }).notNull(),
+  skinTone: varchar('skin_tone', { length: 16 }).notNull(),
+  hairColor: varchar('hair_color', { length: 16 }).notNull(),
+  hairLength: varchar('hair_length', { length: 16 }).notNull(),
+  hairTexture: varchar('hair_texture', { length: 16 }).notNull(),
+  eyeColor: varchar('eye_color', { length: 16 }).notNull(),
+  build: varchar('build', { length: 16 }).notNull(),
+  customDescription: text('custom_description').default('').notNull(),
+  aestheticVibe: varchar('aesthetic_vibe', { length: 24 }),
+  // Generation results
+  imagePrompt: text('image_prompt').default('').notNull(),
+  imageUrl: text('image_url'),
+  imagePath: text('image_path'),
+  imageGeminigenUuid: varchar('image_geminigen_uuid', { length: 64 }),
+  status: varchar('status', { length: 16, enum: ['queued', 'processing', 'done', 'error'] }).default('queued').notNull(),
+  attempts: integer('attempts').default(0).notNull(),
+  errorMsg: text('error_msg'),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+})
+
+export const aiInfluencersRelations = relations(aiInfluencers, ({ one }) => ({
+  user: one(users, { fields: [aiInfluencers.userId], references: [users.id] }),
+}))
+
 export const uploadLogs = pgTable('upload_logs', {
   id: serial('id').primaryKey(),
   videoId: integer('video_id').references(() => videos.id, { onDelete: 'cascade' }).notNull(),
@@ -234,3 +275,4 @@ export type VeoProject = typeof veoProjects.$inferSelect
 export type VeoScene = typeof veoScenes.$inferSelect
 export type TiktokCampaign = typeof tiktokCampaigns.$inferSelect
 export type TiktokScene = typeof tiktokScenes.$inferSelect
+export type AiInfluencer = typeof aiInfluencers.$inferSelect
