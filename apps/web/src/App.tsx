@@ -23,6 +23,9 @@ import { TiktokCampaignPage } from '@/pages/TiktokCampaign'
 import { AiInfluencerStudioPage } from '@/pages/AiInfluencerStudio'
 import { AiInfluencerNewPage } from '@/pages/AiInfluencerNew'
 import { AiInfluencerDetailPage } from '@/pages/AiInfluencerDetail'
+import { MotionStudioPage } from '@/pages/MotionStudio'
+import { MotionNewPage } from '@/pages/MotionNew'
+import { MotionDetailPage } from '@/pages/MotionDetail'
 
 const qc = new QueryClient({
   defaultOptions: {
@@ -88,6 +91,9 @@ export default function App() {
               <Route path="/influencer" element={<AiInfluencerStudioPage />} />
               <Route path="/influencer/new" element={<AiInfluencerNewPage />} />
               <Route path="/influencer/:id" element={<AiInfluencerDetailPage />} />
+              <Route path="/motion" element={<MotionStudioPage />} />
+              <Route path="/motion/new" element={<MotionNewPage />} />
+              <Route path="/motion/:id" element={<MotionDetailPage />} />
               <Route path="/settings" element={<SettingsPage />} />
               <Route element={<AdminGuard />}>
                 <Route path="/admin" element={<AdminPage />} />

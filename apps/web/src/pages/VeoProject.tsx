@@ -41,7 +41,7 @@ const MODELS: { value: VeoModel; label: string; desc: string }[] = [
   { value: 'grok-3',               label: 'Grok 3',                 desc: 'xAI (6/10s, 720p) — creative style' },
   { value: 'kling-video-3-0',      label: 'Kling 3.0',              desc: 'Best quality text-to-video (3-15s)' },
   { value: 'kling-video-2-6',      label: 'Kling 2.6 (Audio)',      desc: 'Built-in voiceover/audio sync' },
-  { value: 'kling-video-motion-3', label: 'Kling Motion 3',         desc: 'Motion control — needs reference VIDEO + image' },
+  // Kling Motion 3 lives in the dedicated /motion tab now — needs its own workflow
 ]
 
 export function VeoProjectPage() {

@@ -155,6 +155,28 @@ export interface AnalyzeResult {
   scenes: AnalyzedScene[]
 }
 
+export type MotionStatus = 'queued' | 'processing' | 'done' | 'error'
+
+export interface MotionVideo {
+  id: number
+  userId: number
+  title: string
+  characterImagePath: string
+  referenceVideoPath: string
+  prompt: string
+  aspectRatio: '16:9' | '9:16' | '1:1'
+  duration: number
+  model: string
+  status: MotionStatus
+  progress: number
+  attempts: number
+  videoUrl: string | null
+  thumbnailUrl: string | null
+  errorMsg: string | null
+  createdAt: string
+  updatedAt: string
+}
+
 export type AiInfluencerStatus = 'queued' | 'processing' | 'done' | 'error'
 
 export interface AiInfluencer {

@@ -173,6 +173,35 @@ export const tiktokScenes = pgTable('tiktok_scenes', {
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
 })
 
+// Motion Studio — Kling motion control (character image + reference video → animated clip)
+export const motionVideos = pgTable('motion_videos', {
+  id: serial('id').primaryKey(),
+  userId: integer('user_id').references(() => users.id, { onDelete: 'cascade' }).notNull(),
+  title: varchar('title', { length: 200 }).default('').notNull(),
+  // Inputs
+  characterImagePath: text('character_image_path').notNull(),
+  referenceVideoPath: text('reference_video_path').notNull(),
+  prompt: text('prompt').default('').notNull(),
+  // Settings
+  aspectRatio: varchar('aspect_ratio', { length: 8, enum: ['16:9', '9:16', '1:1'] }).default('9:16').notNull(),
+  duration: integer('duration').default(5).notNull(),
+  model: varchar('model', { length: 32 }).default('kling-video-motion-3').notNull(),
+  // Result
+  status: varchar('status', { length: 16, enum: ['queued', 'processing', 'done', 'error'] }).default('queued').notNull(),
+  progress: integer('progress').default(0).notNull(),
+  attempts: integer('attempts').default(0).notNull(),
+  geminigenUuid: varchar('geminigen_uuid', { length: 64 }),
+  videoUrl: text('video_url'),
+  thumbnailUrl: text('thumbnail_url'),
+  errorMsg: text('error_msg'),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+})
+
+export const motionVideosRelations = relations(motionVideos, ({ one }) => ({
+  user: one(users, { fields: [motionVideos.userId], references: [users.id] }),
+}))
+
 // AI Influencer — persona builder + Nano Banana image generation
 export const aiInfluencers = pgTable('ai_influencers', {
   id: serial('id').primaryKey(),
@@ -276,3 +305,4 @@ export type VeoScene = typeof veoScenes.$inferSelect
 export type TiktokCampaign = typeof tiktokCampaigns.$inferSelect
 export type TiktokScene = typeof tiktokScenes.$inferSelect
 export type AiInfluencer = typeof aiInfluencers.$inferSelect
+export type MotionVideo = typeof motionVideos.$inferSelect

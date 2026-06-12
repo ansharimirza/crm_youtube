@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom'
-import { LayoutDashboard, Upload, Settings, Youtube, LogOut, Users, Layers, Film, Wand2, Flame, FileText, Video, Sparkles } from 'lucide-react'
+import { LayoutDashboard, Upload, Settings, Youtube, LogOut, Users, Layers, Film, Wand2, Flame, FileText, Video, Sparkles, PersonStanding } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { useAuth } from '@/contexts/auth'
@@ -18,6 +18,7 @@ const navItems: NavItem[] = [
   { to: '/veo', icon: Film, label: 'Veo Studio' },
   { to: '/tiktok', icon: Video, label: 'TikTok Studio' },
   { to: '/influencer', icon: Sparkles, label: 'AI Influencer' },
+  { to: '/motion', icon: PersonStanding, label: 'Motion Studio' },
   { to: '/analyzer', icon: Wand2, label: 'Video to Prompt' },
   { to: '/virality', icon: Flame, label: 'Virality Score' },
   { to: '/resume', icon: FileText, label: 'Resume Generator' },

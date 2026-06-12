@@ -50,6 +50,13 @@
       "when": 1781196114595,
       "tag": "0006_colossal_harpoon",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1781239285957,
+      "tag": "0007_deep_stephen_strange",
+      "breakpoints": true
     }
   ]
 }

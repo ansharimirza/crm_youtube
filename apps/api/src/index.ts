@@ -14,6 +14,7 @@ import { viralityRoutes } from './routes/virality'
 import { resumeRoutes } from './routes/resume'
 import { tiktokRoutes } from './routes/tiktok'
 import { aiInfluencerRoutes, recoverPendingInfluencers } from './routes/ai-influencer'
+import { motionRoutes, recoverPendingMotion } from './routes/motion'
 import { recoverPendingTiktokScenes } from './lib/tiktok-worker'
 import { recoverPendingScenes } from './lib/scene-worker'
 
@@ -54,6 +55,7 @@ const app = new Elysia()
   .use(resumeRoutes)
   .use(tiktokRoutes)
   .use(aiInfluencerRoutes)
+  .use(motionRoutes)
   .onError(({ code, error, set, path, request }) => {
     if (code === 'VALIDATION') {
       set.status = 400
@@ -78,5 +80,6 @@ console.log(`🚀 API listening on http://0.0.0.0:${PORT}`)
 recoverPendingScenes().catch(err => console.error('[recover]', err))
 recoverPendingTiktokScenes().catch(err => console.error('[tiktok-recover]', err))
 recoverPendingInfluencers().catch(err => console.error('[influencer-recover]', err))
+recoverPendingMotion().catch(err => console.error('[motion-recover]', err))
 
 export type App = typeof app
