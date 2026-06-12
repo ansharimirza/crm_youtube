@@ -182,9 +182,10 @@ export const motionVideos = pgTable('motion_videos', {
   characterImagePath: text('character_image_path').notNull(),
   referenceVideoPath: text('reference_video_path').notNull(),
   prompt: text('prompt').default('').notNull(),
-  // Settings
+  // Settings — duration is auto-derived from the reference video by Kling,
+  // resolution maps to mode (standard=720p, professional=1080p)
   aspectRatio: varchar('aspect_ratio', { length: 8, enum: ['16:9', '9:16', '1:1'] }).default('9:16').notNull(),
-  duration: integer('duration').default(5).notNull(),
+  resolution: varchar('resolution', { length: 8, enum: ['720p', '1080p'] }).default('720p').notNull(),
   model: varchar('model', { length: 32 }).default('kling-video-motion-3').notNull(),
   // Result
   status: varchar('status', { length: 16, enum: ['queued', 'processing', 'done', 'error'] }).default('queued').notNull(),

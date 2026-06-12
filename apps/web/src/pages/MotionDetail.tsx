@@ -78,7 +78,7 @@ export function MotionDetailPage() {
                 {s.label}
               </Badge>
               <Badge variant="outline">{mv.aspectRatio}</Badge>
-              <Badge variant="outline">{mv.duration}s</Badge>
+              <Badge variant="outline">{mv.resolution}</Badge>
               <Badge variant="outline">Kling Motion 3</Badge>
             </div>
             <div className="text-xs text-muted-foreground/60 mt-2">{formatRelativeTime(mv.createdAt)}</div>

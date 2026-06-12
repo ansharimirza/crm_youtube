@@ -80,9 +80,10 @@ async function runMotion(videoId: number) {
       apiKey,
       prompt: mv.prompt || 'Animate the character following the reference video motion exactly.',
       model: 'kling-video-motion-3',
-      mode: 'professional',
+      // 1080p = professional, 720p = standard — Kling determines duration from the
+      // reference video automatically for motion-control models.
+      mode: mv.resolution === '1080p' ? 'professional' : 'standard',
       aspectRatio: mv.aspectRatio as '16:9' | '9:16' | '1:1',
-      duration: mv.duration,
       refImagePaths: [mv.characterImagePath],
       refVideoPaths: [mv.referenceVideoPath],
     })
@@ -135,9 +136,18 @@ export const motionRoutes = new Elysia({ prefix: '/api/motion' })
       return { error: 'Character image dan reference video wajib' }
     }
 
+    // Validate against Kling motion-control real limits (per docs + geminigen web UI)
+    if (body.character_image.size > 15 * 1024 * 1024) {
+      set.status = 400
+      return { error: 'Foto karakter terlalu besar — max 15MB' }
+    }
+    if (body.reference_video.size > 50 * 1024 * 1024) {
+      set.status = 400
+      return { error: 'Video referensi terlalu besar — max 50MB' }
+    }
+
     const characterImagePath = await saveUpload(body.character_image, 'character')
     const referenceVideoPath = await saveUpload(body.reference_video, 'refvideo')
-    const duration = Math.min(Math.max(Number(body.duration ?? '5'), 3), 10)
 
     const [mv] = await db.insert(motionVideos).values({
       userId: user.id,
@@ -146,7 +156,7 @@ export const motionRoutes = new Elysia({ prefix: '/api/motion' })
       referenceVideoPath,
       prompt: body.prompt ?? '',
       aspectRatio: (body.aspect_ratio ?? '9:16') as '16:9' | '9:16' | '1:1',
-      duration,
+      resolution: (body.resolution ?? '720p') as '720p' | '1080p',
       model: 'kling-video-motion-3',
       status: 'queued',
     }).returning()
@@ -160,7 +170,7 @@ export const motionRoutes = new Elysia({ prefix: '/api/motion' })
       reference_video: t.File(),
       prompt: t.Optional(t.String({ maxLength: 2000 })),
       aspect_ratio: t.Optional(t.Union([t.Literal('16:9'), t.Literal('9:16'), t.Literal('1:1')])),
-      duration: t.Optional(t.String()),
+      resolution: t.Optional(t.Union([t.Literal('720p'), t.Literal('1080p')])),
     }),
   })
 

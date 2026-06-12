@@ -108,7 +108,7 @@ export function MotionStudioPage() {
                     <div className="text-xs text-muted-foreground mt-1 flex items-center gap-2 flex-wrap">
                       <span>{mv.aspectRatio}</span>
                       <span>·</span>
-                      <span>{mv.duration}s</span>
+                      <span>{mv.resolution}</span>
                     </div>
                     <div className="text-[10px] text-muted-foreground/60 mt-2">
                       {formatRelativeTime(mv.createdAt)}

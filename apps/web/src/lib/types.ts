@@ -165,7 +165,7 @@ export interface MotionVideo {
   referenceVideoPath: string
   prompt: string
   aspectRatio: '16:9' | '9:16' | '1:1'
-  duration: number
+  resolution: '720p' | '1080p'
   model: string
   status: MotionStatus
   progress: number

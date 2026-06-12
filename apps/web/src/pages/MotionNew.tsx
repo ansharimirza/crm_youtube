@@ -19,7 +19,7 @@ const ASPECT_RATIOS = [
   { value: '1:1' as const,  label: '1:1',  desc: 'Square',    icon: SquareIcon },
   { value: '16:9' as const, label: '16:9', desc: 'Landscape', icon: RectangleVertical },
 ]
-const DURATIONS = [5, 10]
+const RESOLUTIONS = ['720p', '1080p'] as const
 
 export function MotionNewPage() {
   const navigate = useNavigate()
@@ -30,7 +30,7 @@ export function MotionNewPage() {
   const [referenceVideo, setReferenceVideo] = useState<File | null>(null)
   const [prompt, setPrompt] = useState('')
   const [aspectRatio, setAspectRatio] = useState<'9:16' | '1:1' | '16:9'>('9:16')
-  const [duration, setDuration] = useState(5)
+  const [resolution, setResolution] = useState<'720p' | '1080p'>('720p')
 
   function handleCharacter(file: File | null) {
     if (!file) return
@@ -48,7 +48,7 @@ export function MotionNewPage() {
       fd.append('reference_video', referenceVideo!)
       if (prompt.trim()) fd.append('prompt', prompt.trim())
       fd.append('aspect_ratio', aspectRatio)
-      fd.append('duration', String(duration))
+      fd.append('resolution', resolution)
 
       const res = await fetch('/api/motion', {
         method: 'POST',
@@ -104,7 +104,7 @@ export function MotionNewPage() {
               1. Foto Karakter <span className="text-red-400">*</span>
             </Label>
             <p className="text-[11px] text-muted-foreground/70 mt-0.5">
-              Siapa yang akan dianimasikan — identitas wajah & pakaian dari foto ini akan dipertahankan
+              Siapa yang akan dianimasikan — identitas wajah & pakaian dari foto ini akan dipertahankan. JPG/PNG, max 15MB, 1K resolution+ disarankan
             </p>
           </div>
           {characterPreview ? (
@@ -140,7 +140,7 @@ export function MotionNewPage() {
               2. Video Referensi <span className="text-red-400">*</span>
             </Label>
             <p className="text-[11px] text-muted-foreground/70 mt-0.5">
-              Gerakan yang akan ditiru — MP4/MOV/WebM, max 100MB, max 120 detik
+              Gerakan yang akan ditiru — MP4/MOV/WebM, max 50MB, max 30 detik, 720p+ disarankan. Durasi output otomatis ngikutin video ini
             </p>
           </div>
           {referenceVideo ? (
@@ -217,22 +217,23 @@ export function MotionNewPage() {
             </div>
 
             <div className="space-y-2">
-              <Label className="text-xs uppercase tracking-wide text-muted-foreground">Duration</Label>
+              <Label className="text-xs uppercase tracking-wide text-muted-foreground">Resolution</Label>
               <div className="grid grid-cols-2 gap-2">
-                {DURATIONS.map(d => (
+                {RESOLUTIONS.map(r => (
                   <button
-                    key={d}
+                    key={r}
                     type="button"
-                    onClick={() => setDuration(d)}
+                    onClick={() => setResolution(r)}
                     className={cn(
                       'rounded-lg border p-3 text-sm font-medium transition-colors',
-                      duration === d ? 'border-primary bg-primary/10' : 'border-border hover:border-primary/30'
+                      resolution === r ? 'border-primary bg-primary/10' : 'border-border hover:border-primary/30'
                     )}
                   >
-                    {d}s
+                    {r}
                   </button>
                 ))}
               </div>
+              <p className="text-[10px] text-muted-foreground/60">1080p = lebih mahal kredit, kualitas lebih tinggi</p>
             </div>
           </div>
         </CardContent>
