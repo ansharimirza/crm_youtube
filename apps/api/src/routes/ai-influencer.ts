@@ -225,6 +225,8 @@ export const aiInfluencerRoutes = new Elysia({ prefix: '/api/ai-influencer' })
   })
 
   // === REGENERATE (with optional instruction) ===
+  // Rebuilds the prompt from the persisted spec so improvements to the prompt
+  // builder (e.g. safety-filter fixes) apply on every regen.
   .post('/:id/regenerate', async ({ params, body, user, set }) => {
     const id = Number(params.id)
     const inf = await db.query.aiInfluencers.findFirst({
@@ -235,10 +237,28 @@ export const aiInfluencerRoutes = new Elysia({ prefix: '/api/ai-influencer' })
       return { error: 'Not found' }
     }
 
+    const spec: InfluencerSpec = {
+      name: inf.name,
+      gender: inf.gender as 'female' | 'male',
+      age: inf.age,
+      niches: inf.niches.split('|').filter(Boolean),
+      backstory: inf.backstory,
+      personality: inf.personality,
+      ethnicity: inf.ethnicity,
+      skinTone: inf.skinTone,
+      hairColor: inf.hairColor,
+      hairLength: inf.hairLength,
+      hairTexture: inf.hairTexture,
+      eyeColor: inf.eyeColor,
+      build: inf.build,
+      customDescription: inf.customDescription,
+      aestheticVibe: inf.aestheticVibe,
+      hasFaceRef: !!inf.faceRefPath,
+      hasStyleRef: !!inf.styleRefPath,
+    }
+    const fresh = buildInfluencerImagePrompt(spec)
     const instruction = body.instruction?.trim() ?? ''
-    const newPrompt = instruction
-      ? `${inf.imagePrompt}\n\nADJUSTMENT: ${instruction}`
-      : inf.imagePrompt
+    const newPrompt = instruction ? `${fresh}\n\nADJUSTMENT: ${instruction}` : fresh
 
     await db.update(aiInfluencers).set({
       imagePrompt: newPrompt,
