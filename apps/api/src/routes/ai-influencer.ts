@@ -459,25 +459,41 @@ async function generateInfluencerVariantImage(variantId: number) {
 
 function buildVariantPrompt(changeDescription: string, hasStyleRef: boolean): string {
   const lines: string[] = []
+
+  // Lock identity HARD — the model often blends two faces if both refs have people
   lines.push(
-    'Maintain exact facial identity, body proportions, hairstyle, and skin tone ' +
-    'from reference image 1 — do not invent a new face, do not change identity. ' +
-    'Treat reference image 1 as the persistent character.'
+    'CRITICAL IDENTITY LOCK — read carefully:\n' +
+    '- Reference image 1 IS THE SUBJECT. The final output must show this exact person.\n' +
+    '- Keep their face geometry, eye shape, nose, lip shape, jaw, hairstyle, hair color, ' +
+    'hair length, skin tone, body proportions, and overall identity 100% identical to reference image 1.\n' +
+    '- DO NOT invent a new face. DO NOT blend faces. DO NOT swap to a different person.\n' +
+    '- If the result face looks even slightly different from reference image 1, the output is WRONG.'
   )
+
   if (hasStyleRef) {
     lines.push(
-      'Reference image 2 shows the new outfit / setting / styling. Apply ITS clothing, ' +
-      'colors, accessories, or environment to the character from reference image 1.'
+      'Reference image 2 is a SCENE / STYLE / OUTFIT INSPIRATION ONLY — it is NOT the subject.\n' +
+      '- It may contain other people. COMPLETELY IGNORE any person in reference image 2: ' +
+      'ignore their face, ignore their hair, ignore their body, ignore their identity.\n' +
+      '- From reference image 2 ONLY extract NON-IDENTITY elements: background, walls, furniture, ' +
+      'wall posters, room layout, lighting direction, color palette, time of day, mood, props, ' +
+      'AND if appropriate, the clothing item style/color/print/cut.\n' +
+      '- Apply those extracted non-identity elements TO THE SUBJECT FROM REFERENCE IMAGE 1.\n' +
+      '- The final output must look like the person from reference image 1 inside the scene / wearing ' +
+      'the outfit inspired by reference image 2 — NOT like the person in reference image 2.'
     )
   }
+
   if (changeDescription.trim()) {
-    lines.push(`Change: ${changeDescription.trim()}`)
+    lines.push(`Specific request from user: ${changeDescription.trim()}`)
   }
+
   lines.push(
     'Photography: shot on iPhone 15 Pro, vertical 9:16, candid framing, natural ' +
     'skin texture with visible pores, ambient natural lighting, slightly desaturated ' +
     'color grading. NOT studio-perfect, NOT glossy magazine retouching.'
   )
+
   return lines.join('\n\n')
 }
 

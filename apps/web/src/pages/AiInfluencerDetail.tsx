@@ -316,6 +316,9 @@ function VariantsSection({ influencerId, influencerImageUrl }: { influencerId: n
               <label className="text-xs uppercase tracking-wide text-muted-foreground">
                 Reference image (opsional) — outfit / background inspo
               </label>
+              <p className="text-[11px] text-amber-300/80">
+                ⚠️ Tip: kalau reference punya orang lain, deskripsi ekstrak yang spesifik (cth: <em>"ambil background-nya saja"</em> atau <em>"ambil baju-nya saja"</em>) — jangan biarkan AI nebak.
+              </p>
               {refPreview ? (
                 <div className="relative inline-block">
                   <img src={refPreview} className="rounded-lg max-h-48 border" alt="" />
