@@ -64,6 +64,13 @@
       "when": 1781240059598,
       "tag": "0008_whole_ego",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1781327000000,
+      "tag": "0009_motion_resolution",
+      "breakpoints": true
     }
   ]
 }
