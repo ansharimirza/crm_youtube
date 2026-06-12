@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
-  ArrowLeft, Loader2, AlertCircle, Trash2, Wand2, Download, Sparkles,
+  ArrowLeft, Loader2, AlertCircle, Trash2, Wand2, Download, Sparkles, RefreshCw,
 } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -115,9 +115,21 @@ export function AiInfluencerDetailPage() {
               </div>
             ) : inf.status === 'error' ? (
               <div className="w-full h-full flex items-center justify-center px-4">
-                <div className="text-center">
+                <div className="text-center max-w-xs">
                   <AlertCircle className="h-12 w-12 text-red-400 mx-auto" />
-                  <p className="text-sm text-red-400 mt-3 max-w-xs">{inf.errorMsg ?? 'Error'}</p>
+                  <p className="text-sm text-red-400 mt-3">{inf.errorMsg ?? 'Error'}</p>
+                  <Button
+                    onClick={() => regenerateMutation.mutate('')}
+                    disabled={regenerateMutation.isPending}
+                    className="mt-4 bg-gradient-to-r from-pink-500 to-violet-500 hover:opacity-90"
+                  >
+                    {regenerateMutation.isPending ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <RefreshCw className="h-4 w-4" />
+                    )}
+                    Coba lagi
+                  </Button>
                 </div>
               </div>
             ) : null}
