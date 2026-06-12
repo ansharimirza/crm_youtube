@@ -23,16 +23,19 @@ export interface InfluencerSpec {
   hasStyleRef: boolean
 }
 
+// Aesthetic vibe descriptions cover CLOTHING / MAKEUP / ACCESSORIES only.
+// Hair-related cues are intentionally omitted so the user's explicit hair
+// length / color / texture choices always win.
 const AESTHETIC_DESCRIPTIONS: Record<string, string> = {
   Minimalist:   'clean, simple styling — neutral palette, no-fuss outfits, less is more',
   'Old Money':  'understated luxury — tailored basics, quiet wealth, heritage textures',
-  'Clean Girl': 'effortless dewy no-makeup-makeup look, slicked-back hair, gold hoops',
+  'Clean Girl': 'effortless dewy no-makeup-makeup look, minimal jewelry like gold hoops',
   Editorial:    'high-fashion bold structured looks, dramatic silhouettes, magazine energy',
   Streetwear:   'urban casual street style — sneakers, oversized fits, graphic tees',
   Bohemian:     'earthy free-spirited textures — flowing fabric, layered jewelry, natural tones',
-  Glam:         'dressy dramatic glamour — sequins, sleek hair, full beat makeup',
+  Glam:         'dressy dramatic glamour — sequins, full beat makeup, statement jewelry',
   Preppy:       'classic collegiate polished — knits, loafers, structured pieces',
-  Sporty:       'athletic activewear vibes — tracksuits, sneakers, baseball caps',
+  Sporty:       'athletic activewear vibes — tracksuits, sneakers',
   'Dark & Moody': 'alternative edgy dramatic — leather, dark palette, moody lighting',
   Y2K:          '2000s nostalgia and pop culture — low-rise, baby tees, frosted lips',
   Cottagecore:  'romantic vintage nature aesthetic — florals, prairie dresses, soft tones',
