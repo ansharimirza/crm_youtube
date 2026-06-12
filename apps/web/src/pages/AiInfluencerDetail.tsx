@@ -3,15 +3,17 @@ import { useParams, Link, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   ArrowLeft, Loader2, AlertCircle, Trash2, Wand2, Download, Sparkles, RefreshCw,
+  Lock, ImagePlus, Plus, X,
 } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
-import { api } from '@/lib/api'
+import { api, getToken } from '@/lib/api'
 import { cn, formatRelativeTime } from '@/lib/utils'
 import { toast } from 'sonner'
-import type { AiInfluencer } from '@/lib/types'
+import { Textarea } from '@/components/ui/textarea'
+import type { AiInfluencer, AiInfluencerVariant } from '@/lib/types'
 
 export function AiInfluencerDetailPage() {
   const { id } = useParams<{ id: string }>()
@@ -164,6 +166,20 @@ export function AiInfluencerDetailPage() {
             </CardContent>
           </Card>
 
+          {inf.status === 'done' && inf.imageUrl && (
+            <Card className="border-emerald-500/30 bg-emerald-500/5">
+              <CardContent className="p-4 flex items-start gap-2">
+                <Lock className="h-4 w-4 text-emerald-400 shrink-0 mt-0.5" />
+                <div className="text-xs">
+                  <p className="font-medium text-emerald-300">Identity locked</p>
+                  <p className="text-muted-foreground mt-0.5">
+                    Image utama dipakai sebagai face/body reference. Bikin variant di bawah untuk ganti outfit/background tanpa ngubah identitas.
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
           <Card>
             <CardContent className="p-4 space-y-3 text-sm">
               <div className="text-xs uppercase tracking-wide text-muted-foreground">Physical</div>
@@ -194,6 +210,214 @@ export function AiInfluencerDetailPage() {
           </Card>
         </div>
       </div>
+
+      {inf.status === 'done' && inf.imageUrl && (
+        <VariantsSection influencerId={inf.id} influencerImageUrl={inf.imageUrl} />
+      )}
+    </div>
+  )
+}
+
+function VariantsSection({ influencerId, influencerImageUrl }: { influencerId: number; influencerImageUrl: string }) {
+  const qc = useQueryClient()
+  const [showForm, setShowForm] = useState(false)
+  const [changeDesc, setChangeDesc] = useState('')
+  const [refImage, setRefImage] = useState<File | null>(null)
+  const [refPreview, setRefPreview] = useState<string | null>(null)
+
+  const { data } = useQuery({
+    queryKey: ['ai-influencer-variants', influencerId],
+    queryFn: () => api.get<{ variants: AiInfluencerVariant[] }>(`/api/ai-influencer/${influencerId}/variants`),
+    refetchInterval: 3000,
+  })
+  const variants = data?.variants ?? []
+
+  function handleRefFile(file: File | null) {
+    if (!file) return
+    setRefImage(file)
+    const reader = new FileReader()
+    reader.onload = (e) => setRefPreview(e.target?.result as string)
+    reader.readAsDataURL(file)
+  }
+
+  const createMutation = useMutation({
+    mutationFn: async () => {
+      const fd = new FormData()
+      if (changeDesc.trim()) fd.append('change_description', changeDesc.trim())
+      if (refImage) fd.append('reference_image', refImage)
+      const res = await fetch(`/api/ai-influencer/${influencerId}/variants`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${getToken()}` },
+        body: fd,
+      })
+      const data = await res.json()
+      if (!res.ok || !data.ok) throw new Error(data.error || `HTTP ${res.status}`)
+      return data
+    },
+    onSuccess: () => {
+      toast.success('Variant sedang di-generate')
+      setShowForm(false)
+      setChangeDesc('')
+      setRefImage(null)
+      setRefPreview(null)
+      qc.invalidateQueries({ queryKey: ['ai-influencer-variants', influencerId] })
+    },
+    onError: (e: Error) => toast.error(e.message),
+  })
+
+  const deleteMutation = useMutation({
+    mutationFn: (variantId: number) =>
+      api.delete(`/api/ai-influencer/${influencerId}/variants/${variantId}`),
+    onSuccess: () => {
+      toast.success('Variant dihapus')
+      qc.invalidateQueries({ queryKey: ['ai-influencer-variants', influencerId] })
+    },
+    onError: (e: Error) => toast.error(e.message),
+  })
+
+  const canSubmit = changeDesc.trim().length > 0 || refImage
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <h2 className="text-lg font-semibold flex items-center gap-2">
+          <Wand2 className="h-4 w-4 text-violet-400" />
+          Variants <span className="text-xs font-normal text-muted-foreground">({variants.length})</span>
+        </h2>
+        {!showForm && (
+          <Button
+            size="sm"
+            onClick={() => setShowForm(true)}
+            className="bg-gradient-to-r from-pink-500 to-violet-500 hover:opacity-90"
+          >
+            <Plus className="h-4 w-4" />
+            Tambah Variant
+          </Button>
+        )}
+      </div>
+
+      {showForm && (
+        <Card className="border-violet-500/30 bg-violet-500/5">
+          <CardContent className="p-4 space-y-4">
+            <div className="space-y-2">
+              <label className="text-xs uppercase tracking-wide text-muted-foreground">
+                Apa yang berubah?
+              </label>
+              <Textarea
+                value={changeDesc}
+                onChange={(e) => setChangeDesc(e.target.value)}
+                placeholder="Cth: baju kemeja putih oversized, lagi nongkrong di cafe outdoor sore hari"
+                rows={3}
+                maxLength={1000}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-xs uppercase tracking-wide text-muted-foreground">
+                Reference image (opsional) — outfit / background inspo
+              </label>
+              {refPreview ? (
+                <div className="relative inline-block">
+                  <img src={refPreview} className="rounded-lg max-h-48 border" alt="" />
+                  <Button
+                    type="button" size="icon" variant="secondary"
+                    className="absolute top-2 right-2 h-7 w-7"
+                    onClick={() => { setRefImage(null); setRefPreview(null) }}
+                  >
+                    <X className="h-3 w-3" />
+                  </Button>
+                </div>
+              ) : (
+                <label className="flex items-center gap-3 border-2 border-dashed rounded-lg p-4 cursor-pointer hover:border-violet-500/50 w-fit">
+                  <ImagePlus className="h-5 w-5 text-muted-foreground" />
+                  <span className="text-xs text-muted-foreground">Upload outfit / background reference...</span>
+                  <input type="file" accept="image/*" className="hidden" onChange={(e) => handleRefFile(e.target.files?.[0] ?? null)} />
+                </label>
+              )}
+            </div>
+
+            <div className="flex justify-end gap-2">
+              <Button variant="ghost" onClick={() => setShowForm(false)}>Batal</Button>
+              <Button
+                onClick={() => createMutation.mutate()}
+                disabled={!canSubmit || createMutation.isPending}
+                className="bg-gradient-to-r from-pink-500 to-violet-500"
+              >
+                {createMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+                Generate Variant
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {variants.length === 0 && !showForm ? (
+        <Card>
+          <CardContent className="py-10 text-center">
+            <Wand2 className="h-10 w-10 text-muted-foreground/40 mx-auto mb-2" />
+            <p className="text-sm text-muted-foreground">Belum ada variant</p>
+            <p className="text-xs text-muted-foreground/60 mt-1 max-w-sm mx-auto">
+              Generate variasi dengan baju / background berbeda — wajah tetap sama persis
+            </p>
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+          {/* Locked anchor card */}
+          <Card className="overflow-hidden border-emerald-500/30">
+            <div className="relative aspect-[9/16]">
+              <img src={influencerImageUrl} className="w-full h-full object-cover" alt="locked" />
+              <div className="absolute top-2 left-2">
+                <Badge className="bg-emerald-500/30 text-emerald-200 border-0 text-[10px]">
+                  <Lock className="h-2.5 w-2.5" />
+                  ANCHOR
+                </Badge>
+              </div>
+            </div>
+          </Card>
+
+          {variants.map(v => (
+            <Card key={v.id} className="overflow-hidden group">
+              <div className="relative aspect-[9/16] bg-gradient-to-br from-pink-500/10 to-violet-500/10">
+                {v.imageUrl ? (
+                  <img src={v.imageUrl} className="w-full h-full object-cover" alt="" />
+                ) : v.status === 'processing' || v.status === 'queued' ? (
+                  <div className="w-full h-full flex items-center justify-center">
+                    <Loader2 className="h-8 w-8 text-primary/50 animate-spin" />
+                  </div>
+                ) : v.status === 'error' ? (
+                  <div className="w-full h-full flex items-center justify-center px-2">
+                    <div className="text-center">
+                      <AlertCircle className="h-8 w-8 text-red-400 mx-auto" />
+                      <p className="text-[10px] text-red-400 mt-1 line-clamp-2">{v.errorMsg}</p>
+                    </div>
+                  </div>
+                ) : null}
+                <Button
+                  size="icon" variant="secondary"
+                  className="absolute top-2 right-2 h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
+                  onClick={() => { if (confirm('Hapus variant?')) deleteMutation.mutate(v.id) }}
+                >
+                  <Trash2 className="h-3 w-3" />
+                </Button>
+              </div>
+              <CardContent className="p-2">
+                <p className="text-[11px] line-clamp-2 leading-tight">
+                  {v.changeDescription || (v.referenceImagePath ? '(from reference)' : '(no description)')}
+                </p>
+                {v.imageUrl && (
+                  <Button asChild size="sm" variant="ghost" className="h-6 mt-1 text-[10px] w-full">
+                    <a href={v.imageUrl} download={`variant-${v.id}.jpg`}>
+                      <Download className="h-3 w-3" />
+                      Download
+                    </a>
+                  </Button>
+                )}
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
     </div>
   )
 }

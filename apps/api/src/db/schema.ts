@@ -239,8 +239,32 @@ export const aiInfluencers = pgTable('ai_influencers', {
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
 })
 
-export const aiInfluencersRelations = relations(aiInfluencers, ({ one }) => ({
+// Variants: same character, different outfit / background / pose. The parent
+// influencer's generated image is used as the identity reference, optionally
+// combined with a user-supplied reference image (outfit or scene inspo).
+export const aiInfluencerVariants = pgTable('ai_influencer_variants', {
+  id: serial('id').primaryKey(),
+  influencerId: integer('influencer_id').references(() => aiInfluencers.id, { onDelete: 'cascade' }).notNull(),
+  changeDescription: text('change_description').default('').notNull(),
+  referenceImagePath: text('reference_image_path'),
+  imagePrompt: text('image_prompt').default('').notNull(),
+  imageUrl: text('image_url'),
+  imagePath: text('image_path'),
+  imageGeminigenUuid: varchar('image_geminigen_uuid', { length: 64 }),
+  status: varchar('status', { length: 16, enum: ['queued', 'processing', 'done', 'error'] }).default('queued').notNull(),
+  attempts: integer('attempts').default(0).notNull(),
+  errorMsg: text('error_msg'),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+})
+
+export const aiInfluencersRelations = relations(aiInfluencers, ({ one, many }) => ({
   user: one(users, { fields: [aiInfluencers.userId], references: [users.id] }),
+  variants: many(aiInfluencerVariants),
+}))
+
+export const aiInfluencerVariantsRelations = relations(aiInfluencerVariants, ({ one }) => ({
+  influencer: one(aiInfluencers, { fields: [aiInfluencerVariants.influencerId], references: [aiInfluencers.id] }),
 }))
 
 export const uploadLogs = pgTable('upload_logs', {
@@ -305,4 +329,5 @@ export type VeoScene = typeof veoScenes.$inferSelect
 export type TiktokCampaign = typeof tiktokCampaigns.$inferSelect
 export type TiktokScene = typeof tiktokScenes.$inferSelect
 export type AiInfluencer = typeof aiInfluencers.$inferSelect
+export type AiInfluencerVariant = typeof aiInfluencerVariants.$inferSelect
 export type MotionVideo = typeof motionVideos.$inferSelect

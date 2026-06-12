@@ -179,6 +179,21 @@ export interface MotionVideo {
 
 export type AiInfluencerStatus = 'queued' | 'processing' | 'done' | 'error'
 
+export interface AiInfluencerVariant {
+  id: number
+  influencerId: number
+  changeDescription: string
+  referenceImagePath: string | null
+  imagePrompt: string
+  imageUrl: string | null
+  imagePath: string | null
+  status: AiInfluencerStatus
+  attempts: number
+  errorMsg: string | null
+  createdAt: string
+  updatedAt: string
+}
+
 export interface AiInfluencer {
   id: number
   userId: number

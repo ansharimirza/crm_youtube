@@ -2,7 +2,7 @@ import { Elysia, t } from 'elysia'
 import { and, desc, eq } from 'drizzle-orm'
 import { mkdir, writeFile } from 'node:fs/promises'
 import { join, extname } from 'node:path'
-import { db, users, aiInfluencers } from '../db'
+import { db, users, aiInfluencers, aiInfluencerVariants } from '../db'
 import { authMiddleware } from '../middleware/auth'
 import { generateImage, getImageHistory, GeminigenError } from '../lib/geminigen'
 import { buildInfluencerImagePrompt, type InfluencerSpec } from '../lib/ai-influencer'
@@ -278,6 +278,79 @@ export const aiInfluencerRoutes = new Elysia({ prefix: '/api/ai-influencer' })
     }),
   })
 
+  // === LIST VARIANTS ===
+  .get('/:id/variants', async ({ params, user, set }) => {
+    const id = Number(params.id)
+    const inf = await db.query.aiInfluencers.findFirst({
+      where: and(eq(aiInfluencers.id, id), eq(aiInfluencers.userId, user.id)),
+    })
+    if (!inf) {
+      set.status = 404
+      return { error: 'Not found' }
+    }
+    const variants = await db.query.aiInfluencerVariants.findMany({
+      where: eq(aiInfluencerVariants.influencerId, id),
+      orderBy: [desc(aiInfluencerVariants.createdAt)],
+    })
+    return { variants }
+  })
+
+  // === CREATE VARIANT ===
+  .post('/:id/variants', async ({ params, body, user, set }) => {
+    const id = Number(params.id)
+    const inf = await db.query.aiInfluencers.findFirst({
+      where: and(eq(aiInfluencers.id, id), eq(aiInfluencers.userId, user.id)),
+    })
+    if (!inf) {
+      set.status = 404
+      return { error: 'Not found' }
+    }
+    if (!inf.imagePath || inf.status !== 'done') {
+      set.status = 400
+      return { error: 'Influencer utama belum selesai — tidak bisa bikin variant' }
+    }
+
+    const referenceImagePath = body.reference_image
+      ? await saveUpload(body.reference_image, 'variant-ref')
+      : null
+
+    const imagePrompt = buildVariantPrompt(body.change_description ?? '', !!referenceImagePath)
+
+    const [variant] = await db.insert(aiInfluencerVariants).values({
+      influencerId: id,
+      changeDescription: body.change_description ?? '',
+      referenceImagePath,
+      imagePrompt,
+      status: 'queued',
+    }).returning()
+
+    generateInfluencerVariantImage(variant.id).catch((err) =>
+      console.error('[ai-variant:bg]', err)
+    )
+
+    return { ok: true, variant }
+  }, {
+    body: t.Object({
+      change_description: t.Optional(t.String({ maxLength: 1000 })),
+      reference_image: t.Optional(t.File()),
+    }),
+  })
+
+  // === DELETE VARIANT ===
+  .delete('/:id/variants/:variantId', async ({ params, user, set }) => {
+    const variantId = Number(params.variantId)
+    const variant = await db.query.aiInfluencerVariants.findFirst({
+      where: eq(aiInfluencerVariants.id, variantId),
+      with: { influencer: true },
+    })
+    if (!variant || variant.influencer.userId !== user.id) {
+      set.status = 404
+      return { error: 'Not found' }
+    }
+    await db.delete(aiInfluencerVariants).where(eq(aiInfluencerVariants.id, variantId))
+    return { ok: true }
+  })
+
   // === DELETE ===
   .delete('/:id', async ({ params, user, set }) => {
     const id = Number(params.id)
@@ -292,6 +365,133 @@ export const aiInfluencerRoutes = new Elysia({ prefix: '/api/ai-influencer' })
     return { ok: true }
   })
 
+/* ==========================================================
+   VARIANTS — same identity, different outfit / background
+   ========================================================== */
+
+async function generateInfluencerVariantImage(variantId: number) {
+  const variant = await db.query.aiInfluencerVariants.findFirst({
+    where: eq(aiInfluencerVariants.id, variantId),
+    with: { influencer: true },
+  })
+  if (!variant) return
+
+  const apiKey = await getGeminigenKey(variant.influencer.userId)
+  if (!apiKey) {
+    await db.update(aiInfluencerVariants).set({
+      status: 'error',
+      errorMsg: 'GeminiGen API key belum diatur. Set di Settings.',
+      updatedAt: new Date(),
+    }).where(eq(aiInfluencerVariants.id, variantId))
+    return
+  }
+
+  // Identity ref = parent's locked image. Style ref = the optional uploaded image.
+  const refs = [
+    variant.influencer.imagePath,
+    variant.referenceImagePath,
+  ].filter((p): p is string => !!p)
+
+  try {
+    await db.update(aiInfluencerVariants).set({
+      status: 'processing',
+      attempts: (variant.attempts ?? 0) + 1,
+      errorMsg: null,
+      updatedAt: new Date(),
+    }).where(eq(aiInfluencerVariants.id, variantId))
+
+    const initial = await generateImage({
+      apiKey,
+      prompt: variant.imagePrompt,
+      model: 'nano-banana-pro',
+      aspectRatio: '9:16',
+      resolution: '2K',
+      outputFormat: 'jpeg',
+      refImagePaths: refs,
+    })
+
+    await db.update(aiInfluencerVariants).set({
+      imageGeminigenUuid: initial.uuid,
+      updatedAt: new Date(),
+    }).where(eq(aiInfluencerVariants.id, variantId))
+
+    let imageUrl: string | null = null
+    if (initial.status === 2 && initial.generate_result) {
+      imageUrl = initial.generate_result
+    } else if (initial.status === 3) {
+      throw new GeminigenError(initial.error_message || 'Image gen failed')
+    } else {
+      const start = Date.now()
+      while (Date.now() - start < IMG_POLL_TIMEOUT_MS) {
+        await new Promise(r => setTimeout(r, IMG_POLL_INTERVAL_MS))
+        const h = await getImageHistory(initial.uuid, apiKey)
+        if (h.status === 2) {
+          imageUrl = h.generate_result
+            ?? h.generated_image?.[0]?.image_url
+            ?? h.generated_image?.[0]?.file_download_url
+            ?? null
+          break
+        }
+        if (h.status === 3) throw new GeminigenError(h.error_message || 'Image gen failed')
+      }
+      if (!imageUrl) throw new GeminigenError('Image polling timeout')
+    }
+
+    const localPath = await downloadToLocal(imageUrl)
+
+    await db.update(aiInfluencerVariants).set({
+      status: 'done',
+      imageUrl,
+      imagePath: localPath,
+      errorMsg: null,
+      updatedAt: new Date(),
+    }).where(eq(aiInfluencerVariants.id, variantId))
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    console.error(`[ai-variant:${variantId}]`, msg)
+    await db.update(aiInfluencerVariants).set({
+      status: 'error',
+      errorMsg: msg,
+      updatedAt: new Date(),
+    }).where(eq(aiInfluencerVariants.id, variantId))
+  }
+}
+
+function buildVariantPrompt(changeDescription: string, hasStyleRef: boolean): string {
+  const lines: string[] = []
+  lines.push(
+    'Maintain exact facial identity, body proportions, hairstyle, and skin tone ' +
+    'from reference image 1 — do not invent a new face, do not change identity. ' +
+    'Treat reference image 1 as the persistent character.'
+  )
+  if (hasStyleRef) {
+    lines.push(
+      'Reference image 2 shows the new outfit / setting / styling. Apply ITS clothing, ' +
+      'colors, accessories, or environment to the character from reference image 1.'
+    )
+  }
+  if (changeDescription.trim()) {
+    lines.push(`Change: ${changeDescription.trim()}`)
+  }
+  lines.push(
+    'Photography: shot on iPhone 15 Pro, vertical 9:16, candid framing, natural ' +
+    'skin texture with visible pores, ambient natural lighting, slightly desaturated ' +
+    'color grading. NOT studio-perfect, NOT glossy magazine retouching.'
+  )
+  return lines.join('\n\n')
+}
+
+// Schedule recovery for orphaned variants on startup
+async function recoverPendingVariants() {
+  const pending = await db.query.aiInfluencerVariants.findMany({
+    where: (v, { or, eq }) => or(eq(v.status, 'queued'), eq(v.status, 'processing')),
+  })
+  for (const v of pending) {
+    console.log(`[ai-variant] Recovering #${v.id}`)
+    generateInfluencerVariantImage(v.id).catch((err) => console.error('[ai-variant]', err))
+  }
+}
+
 // Recovery helper
 export async function recoverPendingInfluencers() {
   const pending = await db.query.aiInfluencers.findMany({
@@ -301,4 +501,5 @@ export async function recoverPendingInfluencers() {
     console.log(`[ai-influencer] Recovering #${i.id}`)
     generateInfluencerImage(i.id).catch((err) => console.error('[ai-influencer]', err))
   }
+  await recoverPendingVariants()
 }
