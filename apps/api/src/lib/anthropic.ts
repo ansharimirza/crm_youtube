@@ -381,55 +381,52 @@ The entire script across ALL scenes is ONE continuous moment from ONE person's l
 6. Each scene's script is 1-2 short conversational sentences with NATURAL Indonesian fillers ("eh", "tuh", "deh", "kayanya", "ya", "sih").
 7. The character can TALK TO THE CAMERA naturally — VO equals what they actually say (lipsync).
 
-═══ NARRATIVE STRUCTURE — SOFT SELLING (read carefully) ═══
+═══ NARRATIVE STRUCTURE — MOMENT-DRIVEN STORYTELLING ═══
 
-Goal: feel like a friend casually recommending a useful product mid-life, NOT a vendor pitching. NOT a personal vlog talking to themselves. The viewer is in the room — speak to them naturally.
+Goal: open with a SPECIFIC CONCRETE MOMENT (not vague advice) that creates a curiosity gap. The product is revealed as the ANSWER to that moment. Soft, story-first, not sales-first.
 
-PRINCIPLES (apply across all scenes):
-1. Address the viewer occasionally with "kalian" (or implied "you") — but don't force it every line
-2. Frame the product as a small, relatable LIFE SOLUTION — not as a hero hero product
-3. Mention the brand ONCE naturally, max twice across all scenes
-4. Tone: warm, helpful, slightly casual — like sharing a tip with a friend
-5. Avoid both extremes:
-   - ❌ Pure self-talk that ignores viewer: "Eh bentar aku cari dulu" (feels weird, no context)
-   - ❌ Aggressive sales: "Kalian wajib beli ini! Diskon hari ini!" (hard sell)
+═══ TWO ANCHOR PATTERNS — pick one that fits the product ═══
 
-SCENE-BY-SCENE RHYTHM:
+PATTERN 1 — RELATIONSHIP / EMOTION ANCHOR (best for personal-use products: parfum, skincare, clothes, accessories)
+  Scene 1: someone close to the user (pacar/temen/keluarga/kantor) reacts unexpectedly to something — create curiosity about WHY
+  Scene 2: reveal product as the cause, casual brand mention, describe characteristic
+  Scene 3: target persona benefit + soft CTA (affiliate only)
 
-Scene 1 — Open with a relatable CONTEXT or TIP for the viewer:
-  - Connect to a real situation viewer recognizes (going out, gym, meeting)
-  - Briefly hint at the solution without showing product yet
-  - It's okay to start an action ("let me grab it") to fill the rest
+  EXAMPLE (parfum, affiliate):
+    Scene 1: "Pacarku tadi pagi peluk-peluk terus, padahal aku belum mandi sih..."
+    Scene 2: "Ternyata gara-gara ini, parfum Octarine Elixir One. Wanginya tuh kayak campuran kayu sama vanilla, soft tapi nyangkut"
+    Scene 3: "Buat kalian yang lagi PDKT atau LDR-an, parfum kayak gini investment banget. Link-nya aku taro di keranjang kuning ya"
 
-  ✓ "Sebelum kalian keluar buat hangout malam, ada satu hal yang sering kelupaan nih. Bentar aku ambilin contohnya"
-  ✓ "Kalian pernah ngerasa pas dateng ke acara orang suka kelupaan satu hal? Aku punya solusi gampangnya"
-  ✓ "Ngomongin soal first impression, satu detail kecil ini sering banget di-overlook. Bentar tak tunjukin"
-  ✗ "Eh bentar aku cari dulu" (no viewer context — too self-focused)
-  ✗ "Hai guys hari ini aku mau review" (greeting + intro — banned)
+  VARIATION ideas: "Adek aku sampe iri liat...", "Bos aku tiba-tiba puji...", "Sahabat aku ngerasa ada yang beda dari aku..."
 
-Scene 2 — Reveal + casual brand mention + tie back to benefit:
-  - Show/hold product naturally
-  - Drop brand name as if mentioning a friend's name
-  - Connect product back to the scenario from scene 1
-  - Don't hard sell — just describe what it does for you
+PATTERN 2 — STORYTELLING MOMENT ANCHOR (best for everyday/utility products + parfum)
+  Scene 1: drop into a very specific past moment that creates an open loop ("kemarin di X, ada Y yang Z...")
+  Scene 2: reveal what they asked / what the product is, casual brand mention + characteristic
+  Scene 3: technical benefit + use case + soft CTA (affiliate only)
 
-  ✓ "Nah ini dia, parfum Octarine Elixir One. Wanginya pas banget buat dipake yang ga over tapi tetep noticeable"
-  ✓ "Ini yang aku maksud — parfum dari Octarine. Setiap kali pake, mood-ku ikutan naik"
+  EXAMPLE (parfum, affiliate):
+    Scene 1: "Kemarin di lift kantor, ada cowok dari lantai 5 sengaja nyamperin gue cuma buat satu pertanyaan..."
+    Scene 2: "'Parfum lo apa?' — ini nih jawabannya, Octarine Elixir One. Aromanya bukan tipe yang nendang langsung, tapi nyangkut lama"
+    Scene 3: "Notes-nya woody-fresh, kemasannya travel-size jadi gampang ditenteng. Kalo penasaran, link-nya aku taro di bio"
 
-Final scene — Light benefit closing + soft CTA (affiliate only):
-  - Describe one specific benefit + use case
-  - For affiliate: ONE casual CTA. For review/unboxing: zero CTA, just emotional closing
-  - Tone: like recommending a coffee shop to a friend, not selling
+  VARIATION ideas: "Tadi pagi di Starbucks, barista nanya...", "Di gym kemarin, satu PT sampe...", "Kemarin nonton bareng temen, dia tiba-tiba..."
 
-  ✓ affiliate: "Aroma-nya tahan lama dan kemasannya travel-friendly banget. Kalo penasaran kalian bisa cek di keranjang kuning bawah ya"
-  ✓ review:   "Aroma-nya tahan lama dan kemasannya travel-friendly banget. Worth it untuk daily use sih"
+═══ HOW TO BUILD THE SCRIPT ═══
 
-═══ ANTI-EXAMPLES (do NOT generate these styles) ═══
-- Pure self-talk without viewer context: "Aku tadi nyimpen sesuatu di sini"
-- Greeting opener: "Hai guys", "Halo semua", "PSA"
-- Hard sell: "Kalian wajib beli ini", "Diskon hari ini"
-- Multiple CTAs across scenes (only one allowed, only in final scene, only for affiliate)
-- Brand name repeated more than twice across the script
+Step 1: Pick the pattern (1 or 2) that fits the product type and content_type best.
+Step 2: Generate a SPECIFIC, BELIEVABLE moment from someone's daily life. NOT generic ("dimana-mana orang") — SPECIFIC (named location, specific person type, concrete action).
+Step 3: Make the product the answer / cause / resolution in scene 2.
+Step 4: For scene 3, give ONE specific benefit (notes, finish, packaging detail, longevity) + use case for the target persona. For affiliate: ONE casual CTA. For review/unboxing: NO CTA.
+
+═══ CRITICAL RULES (apply to both patterns) ═══
+- NO greeting whatsoever ("Hai guys", "Halo", "PSA")
+- Scene 1 has ZERO product visibility — story first
+- Brand name appears exactly ONCE in scene 2, MAX twice in the whole script
+- ONE CTA total, only in the final scene, only for affiliate content type
+- For review / unboxing: ZERO CTA, just emotional closing
+- Specific > vague: name the location, the person type, the specific action
+- The moment must be BELIEVABLE — could plausibly have happened
+- Tone: warm friend sharing, NOT vendor pitching
 
 ═══════════════════════════════════════════════════
 START-FRAME / END-FRAME STRUCTURE (CRITICAL — this is how the video is built)
