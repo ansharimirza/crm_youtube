@@ -209,11 +209,19 @@ export async function extractProductFromHtml(
    3. ENVIRONMENT SUGGESTION
    =========================================================== */
 
-const ENV_SUGGEST_SYSTEM = `You are a TikTok content production designer. Given a product, suggest exactly 10 environment/backdrop options that fit THIS SPECIFIC PRODUCT'S USE CONTEXT.
+const ENV_SUGGEST_SYSTEM = `You are a TikTok content production designer. Given a product, suggest EXACTLY 10 environment/backdrop options that fit THIS SPECIFIC PRODUCT'S USE CONTEXT.
+
+⚠️ HARD COUNT REQUIREMENT — count your output before responding:
+- The "environments" array MUST contain exactly 10 items. Not 5, not 7, not 9. EXACTLY 10.
+- Before emitting the final JSON, count the entries. If less than 10, GENERATE MORE until you have 10.
+- This is non-negotiable. The schema is invalid if length ≠ 10.
 
 Each suggestion: 5-15 words in the requested language. Output JSON ONLY:
 {
-  "environments": ["env 1", ..., "env 10"]
+  "environments": [
+    "env 1", "env 2", "env 3", "env 4", "env 5",
+    "env 6", "env 7", "env 8", "env 9", "env 10"
+  ]
 }
 
 ═══ MOST IMPORTANT RULE — every single suggestion must pass this test ═══
@@ -299,7 +307,11 @@ Suggest 5 environments for a TikTok video featuring this product. ${langInstr}`,
 
   try {
     const parsed = JSON.parse(stripJsonFences(text.text)) as { environments: string[] }
-    return parsed.environments.slice(0, 10)
+    const cleaned = parsed.environments.map(s => s.trim()).filter(Boolean)
+    if (cleaned.length < 10) {
+      console.warn(`[suggestEnvironments] Claude only returned ${cleaned.length} — expected 10`)
+    }
+    return cleaned.slice(0, 10)
   } catch (err) {
     throw new AnthropicError(`Failed to parse environment JSON: ${err instanceof Error ? err.message : err}`)
   }
