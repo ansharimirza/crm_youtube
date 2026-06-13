@@ -381,23 +381,55 @@ The entire script across ALL scenes is ONE continuous moment from ONE person's l
 6. Each scene's script is 1-2 short conversational sentences with NATURAL Indonesian fillers ("eh", "tuh", "deh", "kayanya", "ya", "sih").
 7. The character can TALK TO THE CAMERA naturally — VO equals what they actually say (lipsync).
 
-═══ NARRATIVE STRUCTURE TEMPLATE ═══
-Use this 3-act flow scaled to scene count:
+═══ NARRATIVE STRUCTURE — SOFT SELLING (read carefully) ═══
 
-ACT 1 — HOOK (scene 1, sometimes scene 2):
-  Open mid-moment. Establish location + tiny action.
-  No product. No greeting. No selling.
-  Example: "Eh bentar, aku cari dulu..." (searching for something)
+Goal: feel like a friend casually recommending a useful product mid-life, NOT a vendor pitching. NOT a personal vlog talking to themselves. The viewer is in the room — speak to them naturally.
 
-ACT 2 — REVEAL (middle scenes):
-  Find / pick up / use the product. Brand name drops naturally ONCE.
-  Example: "Nah ini nih, ketemu juga, parfum aku..."
+PRINCIPLES (apply across all scenes):
+1. Address the viewer occasionally with "kalian" (or implied "you") — but don't force it every line
+2. Frame the product as a small, relatable LIFE SOLUTION — not as a hero hero product
+3. Mention the brand ONCE naturally, max twice across all scenes
+4. Tone: warm, helpful, slightly casual — like sharing a tip with a friend
+5. Avoid both extremes:
+   - ❌ Pure self-talk that ignores viewer: "Eh bentar aku cari dulu" (feels weird, no context)
+   - ❌ Aggressive sales: "Kalian wajib beli ini! Diskon hari ini!" (hard sell)
 
-ACT 3 — SOFT ENDORSEMENT + (optional) CTA (final scene):
-  Quick emotional reaction OR specific use case.
-  If content type = affiliate: ONE soft CTA line.
-  Example: "Wanginya seger gini, cocok buat ke kantor"
-  Or affiliate ending: "...kalian coba deh di keranjang kuning di bawah ya"
+SCENE-BY-SCENE RHYTHM:
+
+Scene 1 — Open with a relatable CONTEXT or TIP for the viewer:
+  - Connect to a real situation viewer recognizes (going out, gym, meeting)
+  - Briefly hint at the solution without showing product yet
+  - It's okay to start an action ("let me grab it") to fill the rest
+
+  ✓ "Sebelum kalian keluar buat hangout malam, ada satu hal yang sering kelupaan nih. Bentar aku ambilin contohnya"
+  ✓ "Kalian pernah ngerasa pas dateng ke acara orang suka kelupaan satu hal? Aku punya solusi gampangnya"
+  ✓ "Ngomongin soal first impression, satu detail kecil ini sering banget di-overlook. Bentar tak tunjukin"
+  ✗ "Eh bentar aku cari dulu" (no viewer context — too self-focused)
+  ✗ "Hai guys hari ini aku mau review" (greeting + intro — banned)
+
+Scene 2 — Reveal + casual brand mention + tie back to benefit:
+  - Show/hold product naturally
+  - Drop brand name as if mentioning a friend's name
+  - Connect product back to the scenario from scene 1
+  - Don't hard sell — just describe what it does for you
+
+  ✓ "Nah ini dia, parfum Octarine Elixir One. Wanginya pas banget buat dipake yang ga over tapi tetep noticeable"
+  ✓ "Ini yang aku maksud — parfum dari Octarine. Setiap kali pake, mood-ku ikutan naik"
+
+Final scene — Light benefit closing + soft CTA (affiliate only):
+  - Describe one specific benefit + use case
+  - For affiliate: ONE casual CTA. For review/unboxing: zero CTA, just emotional closing
+  - Tone: like recommending a coffee shop to a friend, not selling
+
+  ✓ affiliate: "Aroma-nya tahan lama dan kemasannya travel-friendly banget. Kalo penasaran kalian bisa cek di keranjang kuning bawah ya"
+  ✓ review:   "Aroma-nya tahan lama dan kemasannya travel-friendly banget. Worth it untuk daily use sih"
+
+═══ ANTI-EXAMPLES (do NOT generate these styles) ═══
+- Pure self-talk without viewer context: "Aku tadi nyimpen sesuatu di sini"
+- Greeting opener: "Hai guys", "Halo semua", "PSA"
+- Hard sell: "Kalian wajib beli ini", "Diskon hari ini"
+- Multiple CTAs across scenes (only one allowed, only in final scene, only for affiliate)
+- Brand name repeated more than twice across the script
 
 ═══════════════════════════════════════════════════
 START-FRAME / END-FRAME STRUCTURE (CRITICAL — this is how the video is built)
