@@ -252,10 +252,12 @@ export const tiktokRoutes = new Elysia({ prefix: '/api/tiktok' })
         campaignId: campaign.id,
         sceneNumber: s.scene_number,
         script: s.script,
-        imagePrompt: s.image_prompt,
+        imagePrompt: s.start_image_prompt,
+        endImagePrompt: s.end_image_prompt,
         veoPrompt: s.veo_prompt,
         duration: s.duration,
         imageStatus: 'queued',
+        endImageStatus: 'queued',
         status: 'pending',
       }).returning()
       sceneIds.push(scene.id)
@@ -297,7 +299,7 @@ export const tiktokRoutes = new Elysia({ prefix: '/api/tiktok' })
       where: eq(tiktokCampaigns.userId, user.id),
       orderBy: [desc(tiktokCampaigns.createdAt)],
       with: {
-        scenes: { columns: { id: true, status: true, imageStatus: true, imageUrl: true, videoUrl: true, thumbnailUrl: true } },
+        scenes: { columns: { id: true, status: true, imageStatus: true, endImageStatus: true, imageUrl: true, videoUrl: true, thumbnailUrl: true } },
       },
     })
     const campaigns = list.map(c => ({
@@ -309,13 +311,14 @@ export const tiktokRoutes = new Elysia({ prefix: '/api/tiktok' })
       productName: c.productName,
       status: c.status,
       sceneCount: c.sceneCount,
-      imageDoneCount: c.scenes.filter(s => s.imageStatus === 'done').length,
+      imageDoneCount: c.scenes.filter(s => s.imageStatus === 'done' && s.endImageStatus === 'done').length,
       doneCount: c.scenes.filter(s => s.status === 'done').length,
       processingCount: c.scenes.filter(s =>
         s.imageStatus === 'processing' || s.imageStatus === 'queued' ||
+        s.endImageStatus === 'processing' || s.endImageStatus === 'queued' ||
         s.status === 'processing' || s.status === 'queued'
       ).length,
-      errorCount: c.scenes.filter(s => s.imageStatus === 'error' || s.status === 'error').length,
+      errorCount: c.scenes.filter(s => s.imageStatus === 'error' || s.endImageStatus === 'error' || s.status === 'error').length,
       thumbnail: c.scenes.find(s => s.thumbnailUrl)?.thumbnailUrl
         ?? c.scenes.find(s => s.imageUrl)?.imageUrl
         ?? null,
@@ -351,32 +354,47 @@ export const tiktokRoutes = new Elysia({ prefix: '/api/tiktok' })
       set.status = 404
       return { error: 'Not found' }
     }
-    if (scene.imageStatus === 'processing' || scene.imageStatus === 'queued') {
+
+    const kind = body.frame === 'end' ? 'end' : 'start'
+    const currentStatus = kind === 'end' ? scene.endImageStatus : scene.imageStatus
+    if (currentStatus === 'processing' || currentStatus === 'queued') {
       set.status = 400
-      return { error: 'Image masih dalam proses' }
+      return { error: `${kind === 'end' ? 'End' : 'Start'} frame masih dalam proses` }
     }
 
     const instruction = body.instruction?.trim() ?? ''
-    const newPrompt = instruction
-      ? `${scene.imagePrompt}\n\nADJUSTMENT: ${instruction}`
-      : scene.imagePrompt
+    const basePrompt = kind === 'end' ? scene.endImagePrompt : scene.imagePrompt
+    const newPrompt = instruction ? `${basePrompt}\n\nADJUSTMENT: ${instruction}` : basePrompt
 
-    await db.update(tiktokScenes).set({
-      imagePrompt: newPrompt,
-      imageStatus: 'queued',
-      imageAttempts: 0,
-      imageErrorMsg: null,
-      imageUrl: null,
-      imagePath: null,
-      imageGeminigenUuid: null,
-      updatedAt: new Date(),
-    }).where(eq(tiktokScenes.id, id))
+    const updates = kind === 'end'
+      ? {
+          endImagePrompt: newPrompt,
+          endImageStatus: 'queued' as const,
+          endImageAttempts: 0,
+          endImageErrorMsg: null,
+          endImageUrl: null,
+          endImagePath: null,
+          endImageGeminigenUuid: null,
+          updatedAt: new Date(),
+        }
+      : {
+          imagePrompt: newPrompt,
+          imageStatus: 'queued' as const,
+          imageAttempts: 0,
+          imageErrorMsg: null,
+          imageUrl: null,
+          imagePath: null,
+          imageGeminigenUuid: null,
+          updatedAt: new Date(),
+        }
+    await db.update(tiktokScenes).set(updates).where(eq(tiktokScenes.id, id))
 
     enqueueTiktokImage(id)
     return { ok: true }
   }, {
     body: t.Object({
       instruction: t.Optional(t.String({ maxLength: 1000 })),
+      frame: t.Optional(t.Union([t.Literal('start'), t.Literal('end')])),
     }),
   })
 
@@ -445,9 +463,9 @@ export const tiktokRoutes = new Elysia({ prefix: '/api/tiktok' })
       set.status = 404
       return { error: 'Not found' }
     }
-    if (scene.imageStatus !== 'done') {
+    if (scene.imageStatus !== 'done' || scene.endImageStatus !== 'done') {
       set.status = 400
-      return { error: 'Image belum selesai. Tunggu image generate dulu.' }
+      return { error: 'Start dan end frame belum selesai semua. Tunggu image generate dulu.' }
     }
     if (scene.status === 'processing' || scene.status === 'queued') {
       set.status = 400
@@ -484,7 +502,7 @@ export const tiktokRoutes = new Elysia({ prefix: '/api/tiktok' })
 
     // Only kick scenes whose image is done and video is pending/error
     const eligible = campaign.scenes.filter(s =>
-      s.imageStatus === 'done' && (s.status === 'pending' || s.status === 'error')
+      s.imageStatus === 'done' && s.endImageStatus === 'done' && (s.status === 'pending' || s.status === 'error')
     )
     if (eligible.length === 0) {
       set.status = 400

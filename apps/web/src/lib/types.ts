@@ -246,14 +246,20 @@ export interface TiktokScene {
   campaignId: number
   sceneNumber: number
   script: string
-  imagePrompt: string
+  imagePrompt: string        // start frame prompt
+  endImagePrompt: string     // end frame prompt
   veoPrompt: string
   duration: number
-  // Image phase
+  // Image phase — START frame
   imageStatus: TiktokImageStatus
   imageUrl: string | null
   imageAttempts: number
   imageErrorMsg: string | null
+  // Image phase — END frame
+  endImageStatus: TiktokImageStatus
+  endImageUrl: string | null
+  endImageAttempts: number
+  endImageErrorMsg: string | null
   // Video phase
   status: TiktokSceneStatus
   progress: number

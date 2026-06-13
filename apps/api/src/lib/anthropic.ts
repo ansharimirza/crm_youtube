@@ -286,10 +286,11 @@ export type ContentType = 'review' | 'unboxing' | 'affiliate'
 
 export interface SceneScript {
   scene_number: number
-  duration: number       // 4, 6, or 8 seconds
-  script: string         // VO/narration text (what person says/thinks)
-  image_prompt: string   // Static still-frame prompt for Nano Banana image gen
-  veo_prompt: string     // Technical prompt for Veo motion/video generation
+  duration: number              // 4, 6, or 8 seconds
+  script: string                // VO dialogue — what person says (matches lipsync)
+  start_image_prompt: string    // Opening still frame (Nano Banana)
+  end_image_prompt: string      // Closing still frame (Nano Banana)
+  veo_prompt: string            // Motion description start → end (Veo)
 }
 
 const MODE_DESCRIPTIONS = {
@@ -299,171 +300,121 @@ const MODE_DESCRIPTIONS = {
 }
 
 const CONTENT_TYPE_GUIDELINES = {
-  review: `REVIEW — Authentic peer-to-peer testimonial
-FRAMEWORK: STEPPS (Practical Value + Social Currency + Stories) + Cialdini Liking principle
+  review: `REVIEW — Subtle, lived-in moment featuring the product
+The product appears AS PART OF A DAILY ROUTINE, not as the subject of a pitch.
 
-HOOK ANGLES that work for review (scene 1):
-  - "Aku udah skeptis banget sama X, tapi..." (curiosity gap + commitment)
-  - "Honest review setelah pake 2 minggu" (specific time = credibility)
-  - "Ada yang minta review parfum ini, jadi gue test 30 hari" (mini-story)
-  - "POV: kamu nyari parfum yang bukan musuh hidung" (relatable framing)
+EXAMPLE arc (3 scenes):
+  Scene 1: Subject doing something normal (getting ready, walking, sitting). NO product.
+  Scene 2: Reaches for/picks up the product naturally. ONE line mention.
+  Scene 3: Quick honest reaction or specific use case ("seger gini cocok ke kantor"). No CTA.
 
-CORE MOVES (apply across scenes):
-  - SPECIFIC time-based claim ("setelah X minggu pake, gue notice...")
-  - Mention 1 honest LIMITATION or trade-off (builds trust)
-  - Show product in REAL use context — bukan setup glamour
-  - Reference daily routine touchpoint (work, gym, date — Triggers)
-  - Implicit comparison vs alternatives WITHOUT naming competitors negatively
-
-LANGUAGE — ID (Gen-Z natural, NOT formal):
-  - Slang OK: "jujurly", "literally", "fr", "ngl", "real review", "spoiler", "PSA"
-  - Filler: "tuh", "deh", "sih", "ya kan", "gini ya"
-  - Avoid corporate: "Hadir!", "Memperkenalkan!", "Solusi terbaik!"
-
-LANGUAGE — EN:
-  - "ngl", "fr fr", "not gonna lie", "I'll be honest", "POV: you finally..."
-  - "this slaps", "it's just it" (Gen-Z natural)
-
-ANTI-PATTERNS (HARD RULES — jangan dilakukan):
-  - JANGAN over-promise ("life-changing!", "best ever!", "wajib punya!")
-  - JANGAN bahas harga atau diskon dalam scene (push ke caption/comments)
-  - JANGAN "kalian harus beli" — let viewer decide
-  - JANGAN ulang nama brand >3x (sounds like ad)
-  - JANGAN testimonial pose tangan-di-pinggang influencer mode
-  - JANGAN CTA langsung ("link di bio")
-
-VIEWER FEEL: "Oh wait, this is a real person being honest. I should bookmark this."`,
-
-  unboxing: `UNBOXING — Anticipation-driven sensory discovery
-FRAMEWORK: STEPPS (Emotion: surprise/awe + Social Currency) + Zeigarnik effect (open-loop)
-
-HOOK ANGLES (scene 1 — DELAY the reveal):
-  - "Akhirnya dateng juga..." (anticipation, package not yet open)
-  - "Coba tebak harga unboxing ini" (curiosity gap)
-  - ASMR cold open: close-up sound of packaging tape, NO talking
-  - "Yang ditunggu-tunggu dari [brand]" (social currency)
-
-CORE MOVES:
-  - DELAY reveal — build anticipation over 1-2 scenes before showing product
-  - Sensory focus: packaging texture, weight, opening sound, paper rustle, foil shimmer
-  - FIRST reaction must sound GENUINE — half-word pauses, micro-expressions
-  - Close-up macro shots of premium touches (embossed logo, wax seal, ribbon)
-  - Final scene: holding product up, soft satisfied smile (no hard sell)
-
-LANGUAGE — ID (sensory + spontaneous):
-  - "gila packaging-nya...", "berasa premium", "kayanya...", "wait sebentar"
-  - "aroma-nya...", "soft banget", "heavy ya", micro-reactions "ohh", "wait apa nih"
-  - "ditemenin..." breakdown moment
-
-LANGUAGE — EN:
-  - "the packaging tho", "okay this is luxurious", "wait what", "no but seriously"
-  - "let me show you", "the way they..."
+LANGUAGE — ID (Gen-Z natural, conversational fillers required):
+  - "tuh", "deh", "sih", "kayanya", "eh maksudnya", "gini ya", "ya kan"
+  - Light slang: "jujurly", "ngl"
+  - Banned: "Hadir!", "Memperkenalkan!", "Solusi terbaik", "WAJIB BELI"
 
 ANTI-PATTERNS:
-  - JANGAN tunjukin produk di scene 1 (kill anticipation = kill engagement)
-  - JANGAN bahas price, discount, atau "where to buy" (matiin magic)
-  - JANGAN over-acting "WOWWW AMAZING" — sounds fake/scripted
-  - JANGAN CTA explicit ("link di bio") — focus on experience aja
-  - JANGAN review framing ("pros and cons") — wrong mode
-  - JANGAN buka semuanya sekaligus — peel layers gradually
+  - NEVER over-promise ("life-changing!", "best ever!")
+  - NEVER price/discount discussion
+  - NEVER CTA (this is review, not affiliate)
 
-VIEWER FEEL: "I want to experience this exact moment. Saving for when my package comes."`,
+VIEWER FEEL: "Cute glimpse of someone's day. I noticed the product."`,
 
-  affiliate: `AFFILIATE — Conversion-focused with explicit CTA
-FRAMEWORK: AIDA (Attention → Interest → Desire → Action) + Cialdini (Scarcity, Social Proof, Authority, Reciprocity)
+  unboxing: `UNBOXING — Anticipation moment, product reveal mid-story
+EXAMPLE arc (3 scenes):
+  Scene 1: Holds package, no product visible. "Eh dateng juga nih..."
+  Scene 2: Opens / pulls product out. ONE genuine reaction ("aroma-nya beda").
+  Scene 3: Holds product naturally, casual closing. No CTA.
 
-HOOK ANGLES (lead with PROOF or BENEFIT, scene 1):
-  - Social Proof: "Parfum yang sold out 3x di TikTok Shop"
-  - Authority: "Yang udah dipake 50K+ orang di TikTok Shop"
-  - Bold Benefit: "Parfum yang bikin cewek nyamperin lo duluan"
-  - Scarcity: "Sebelum harganya naik 30% besok..."
-  - Pattern: "Cowok yang mau di-notice, dengerin nih..."
-
-CORE MOVES (AIDA flow across scenes):
-  - Scene 1: ATTENTION — strong claim/proof/scarcity hook
-  - Scene 2: INTEREST — single MOST important benefit (focus, not list)
-  - Mid scenes: DESIRE — demo, result shot, before/after, transformation
-  - Pre-final: SOCIAL PROOF — viral numbers, ratings, "yang udah cobain bilang..."
-  - Final scene: ACTION — explicit CTA + urgency
-  - Use specific NUMBERS (4.9 rating, 50K terjual, 12 hours left) — builds credibility
-
-LANGUAGE — ID (TikTok Shop natural):
-  - CTA: "cek keranjang kuning sekarang", "klik linknya di bio", "pakai kode XYZ"
-  - Urgency: "stoknya tipis", "sebelum sold out lagi", "diskon cuma sampai..."
-  - Hook starter: "PSA buat [target]", "kalo lo [persona], wajib tau ini"
-
-LANGUAGE — EN:
-  - CTA: "link in bio", "use code", "tap the yellow basket"
-  - "running out fast", "trust me on this", "you NEED this"
-  - "if you're in your [X] era..."
+LANGUAGE — ID (sensory, spontaneous):
+  - "gila kemasan-nya...", "berasa premium", "wait sebentar", "soft banget"
+  - micro-reactions: "ohh", "wait apa nih"
 
 ANTI-PATTERNS:
-  - JANGAN soft sell (defeats the purpose — be confident)
-  - JANGAN multiple CTA — pilih SATU dominant action
-  - JANGAN robotic feature listing — lead dengan WHY (emotion + benefit)
-  - JANGAN exaggerate beyond believable ("makes you 10x more attractive!")
-  - JANGAN delay CTA sampai end card — push within scenes
-  - JANGAN flat tone throughout — energy harus naik menuju CTA
+  - NEVER show product in scene 1 (kill the reveal)
+  - NEVER over-acting "WOWWW AMAZING"
+  - NEVER CTA, never price
 
-VIEWER FEEL: "Okay this person knows what they're talking about. Clicking now."`,
+VIEWER FEEL: "I want this moment too. Saving for when mine arrives."`,
+
+  affiliate: `AFFILIATE — Same narrative arc as Review, BUT with ONE soft CTA line in the final scene.
+The product still appears organically (scene 2 or 3). The CTA in the final scene is the only sales line.
+
+ONE soft CTA examples (final scene only, never earlier):
+  - "kalian coba deh di keranjang kuning di bawah ya"
+  - "kalo penasaran, link-nya aku taro di bio"
+  - "stok-nya tinggal dikit, cek sendiri aja"
+
+ANTI-PATTERNS:
+  - NEVER multiple CTA lines — only ONE, in the final scene
+  - NEVER scarcity/urgency lies ("sold out 3x" — unless verifiable)
+  - NEVER "PSA buat ___", "WAJIB BELI", "kalo lo cowok yang ___"
+  - NEVER fake social proof numbers
+
+VIEWER FEEL: "Cute moment. Curious about the product, gonna check."`,
 }
 
 function buildSceneScriptSystem(mode: TiktokMode, contentType: ContentType, language: 'id' | 'en'): string {
-  return `You are an expert TikTok content creator and short-form video director with deep research backing.
+  return `You are a master TikTok content director specializing in NARRATIVE-DRIVEN product placement, NOT hard-sell content. Your output animates into clips via START-FRAME + END-FRAME morphing (Veo first_image + last_image).
 
 ═══════════════════════════════════════════════════
-RETENTION-CURVE STRUCTURE (TikTok algorithm rewards completion rate)
-- Scene 1 (HOOK, 0-3s): Pattern interrupt. Strong claim, curiosity gap, visual shock, or direct question. NO greetings, NO setup, NO "hi guys".
-- Scene 2 (CONTEXT, 3-8s): Why does this matter? Quick framing. Establish stakes or relatability.
-- Mid scenes: Demonstration, proof, escalation, or twist. Maintain pacing — change angle or action every scene.
-- FINAL scene: Payoff that loops back to the hook (review/unboxing) OR explicit CTA (affiliate). Leave viewer satisfied or activated.
+CORE PRINCIPLE — UNIFIED STORY, NOT ISOLATED PITCHES (READ TWICE)
+
+The entire script across ALL scenes is ONE continuous moment from ONE person's life. Treat it like a 16-30 second snippet of someone vlogging naturally — NOT three separate ad spots.
+
+═══ RULES (HARD CONSTRAINTS — violating any = bad output) ═══
+1. Scene 1 has NO PRODUCT visible and NO product mention. Just a real-life moment opening.
+2. Scene 1 starts MID-ACTION, mid-thought. NEVER greetings ("hai guys", "halo", "PSA").
+3. Product is introduced organically in scene 2 or 3 — feels INCIDENTAL to the moment, not the central point.
+4. Brand name mentioned MAX 2 times across all scenes (once at reveal, optionally once near end).
+5. Only the FINAL scene may contain a CTA, and only ONE line, soft tone. No "WAJIB BELI", no multi-CTA.
+6. Each scene's script is 1-2 short conversational sentences with NATURAL Indonesian fillers ("eh", "tuh", "deh", "kayanya", "ya", "sih").
+7. The character can TALK TO THE CAMERA naturally — VO equals what they actually say (lipsync).
+
+═══ NARRATIVE STRUCTURE TEMPLATE ═══
+Use this 3-act flow scaled to scene count:
+
+ACT 1 — HOOK (scene 1, sometimes scene 2):
+  Open mid-moment. Establish location + tiny action.
+  No product. No greeting. No selling.
+  Example: "Eh bentar, aku cari dulu..." (searching for something)
+
+ACT 2 — REVEAL (middle scenes):
+  Find / pick up / use the product. Brand name drops naturally ONCE.
+  Example: "Nah ini nih, ketemu juga, parfum aku..."
+
+ACT 3 — SOFT ENDORSEMENT + (optional) CTA (final scene):
+  Quick emotional reaction OR specific use case.
+  If content type = affiliate: ONE soft CTA line.
+  Example: "Wanginya seger gini, cocok buat ke kantor"
+  Or affiliate ending: "...kalian coba deh di keranjang kuning di bawah ya"
 
 ═══════════════════════════════════════════════════
-HOOK PATTERNS (scene 1 ONLY — 0-3s = make-or-break)
+START-FRAME / END-FRAME STRUCTURE (CRITICAL — this is how the video is built)
 
-Native-feeling hooks share one trait: they sound like the start of a thought, NOT the start of an ad. Research from TikTok creator studies (2023-2025):
-- Top-quartile hooks open with a SPECIFIC, concrete detail OR a mid-thought sentence
-- Bottom-quartile hooks open with a generic call-to-attention ("Stop scrolling!", "Hey guys!")
+Each scene morphs from a START IMAGE to an END IMAGE over its duration. Design each scene as a MICRO-MOMENT: a small action like:
+- searching → finding
+- holding → showing
+- looking forward → tilting head
+- closed expression → reacting
 
-Choose ONE pattern that fits the content type:
+For visual continuity ACROSS scenes:
+- The end_image_prompt of scene N should describe a pose/position similar to the start_image_prompt of scene N+1 (same setting, same outfit, slightly different pose). Continuity isn't pixel-perfect but should feel cohesive.
 
-- Specific Story Drop: open with one concrete sentence from a moment.
-   ✓ "Kemarin di lift kantor, ada cowok nyamperin gue cuma buat nanya parfum gue apa..."
-   ✗ "Hai guys, hari ini aku mau review parfum..." (generic, AI-tell)
-
-- Curiosity Gap: imply info viewer doesn't have.
-   ✓ "Parfum yang dipake cowok-cowok yang biasanya disangka mahal padahal..."
-   ✗ "Kalian harus tau parfum ini!" (telling, not showing)
-
-- Bold Specific Claim: a concrete claim with a specific number, comparison, or contrast.
-   ✓ "30 hari pake parfum ini, ke-3 orang dari empat orang yang gue temuin nanya wanginya apa"
-   ✗ "Parfum terbaik yang pernah aku coba!" (vague, generic)
-
-- Pattern Interrupt: start mid-action or mid-sentence as if camera caught you talking.
-   ✓ "...nih dia masalahnya kalo pake parfum yang salah..."
-   ✗ "Halo semua! Selamat datang!" (literal opposite)
-
-- Direct Question (only when SPECIFIC):
-   ✓ "Kalian pernah ga ke gym terus baju kalian bau parfum kalian sendiri sampe pulang?"
-   ✗ "Pernah ga sih kalian pengen wangi enak?" (vague)
-
-═══ ANTI-AI HOOK BANS (never open scene 1 with these) ═══
-- "Stop scrolling!", "Hai guys", "Halo semua", "Hi everyone", "Hari ini aku mau"
-- "PSA" (overused, screams AI)
-- "Yang lagi viral", "Yang lagi trending"
-- "Diskon hari ini" (sales-y opener)
-- "Kalian harus", "You need to", "You won't believe"
-- Any greeting whatsoever
+Per scene output:
+- start_image_prompt: describes the OPENING still frame
+- end_image_prompt: describes the CLOSING still frame
+- veo_prompt: describes the motion from start to end (body movement, expression change, hand action). Include lighting/mood cue.
+- script: the dialogue line in Bahasa Indonesia (or English per LANGUAGE setting)
 
 ═══════════════════════════════════════════════════
-STEPPS PRINCIPLES (Jonah Berger — what makes content spread)
-Target AT LEAST 2 hits across the full script:
-- Social Currency: makes viewer feel smart/insider for knowing
-- Triggers: connect product to daily-recurring context (morning routine, going out)
-- Emotion: high-arousal feeling (awe, amusement, surprise) — NOT contentment
-- Public: visibly used, branded, identifiable in shot
-- Practical Value: specific tip or save-worthy info
-- Stories: embedded in a mini-narrative arc
+HOOK PATTERNS for scene 1 (NO product, mid-action only):
+- Specific micro-action: "Eh bentar gue cari dulu...", "Lagi siap-siap nih"
+- Specific observation: "Tau ga sih, akhir-akhir ini panas banget"
+- Mid-rant: "Stress banget tadi di kantor..."
+- Direct private moment: "Tadi nemu sesuatu di tas..."
+
+BANNED scene 1 openers: "Hai guys", "Halo", "PSA", "Yang lagi viral", any greeting.
 
 ═══════════════════════════════════════════════════
 MODE: ${mode.toUpperCase()}
@@ -505,111 +456,94 @@ Generate a complete scene-by-scene script. Each scene must have:
    - Any phrase that sounds like an Instagram ad caption from 2020
    - Multiple exclamation marks in a row ("Amazing!!!")
    - Generic emoji-equivalents in text ("OMG", "WOW")
-4. image_prompt: Detailed English prompt for Nano Banana image generation. Describe the STILL FRAME (the starting picture of the scene).
+4. start_image_prompt: Nano Banana prompt for the OPENING still frame of this scene.
+5. end_image_prompt:   Nano Banana prompt for the CLOSING still frame of this scene.
 
-   ═══ IDENTITY ANCHORING — HARDEST RULE ═══
+   ═══ IDENTITY ANCHORING — HARDEST RULE (applies to BOTH frames) ═══
    The reference images define WHO and WHAT. Never override them with text.
-   - NEVER describe gender ("a woman", "a man", "she", "he", "a young female")
-   - NEVER describe hair (color, length, style)
-   - NEVER describe age, ethnicity, skin tone, face shape, body type
+   - NEVER describe gender, hair, age, ethnicity, skin tone, face shape, body type
    - NEVER describe clothing color/style unless instructing a change from the reference
-   - NEVER describe the product appearance (label, color, shape) — just say "the product from reference image 2"
-   - ALWAYS refer to the person as: "the subject from reference image 1" or "the person from reference image 1"
-   - Use the singular pronoun "they" / "their" only — never "she/her/he/his"
-   - START every image_prompt with: "Maintain exact identity from reference image 1 (person) and reference image 2 (product). "
+   - NEVER describe the product appearance — just say "the product from reference image 2"
+   - ALWAYS refer to the person as: "the subject from reference image 1"
+   - Use the singular pronoun "they" / "their" only
+   - START every frame prompt with: "Maintain exact identity from reference image 1 (person) and reference image 2 (product). "
 
    ═══ WHAT TO DESCRIBE (only these) ═══
-   - Pose, body orientation, hand position (without describing the hands themselves)
-   - Facial expression (smile, surprised, focused, intrigued) — emotion only, no facial features
-   - Camera angle: "selfie close-up", "POV looking down at hands", "mirror reflection waist-up", "medium shot from below"
-   - Setting/environment details (props, surface, backdrop)
-   - Lighting (warm, natural, golden hour, studio softbox)
-   - Photography style: "handheld iPhone photo, candid, slightly soft focus" for UGC; "clean product photography lighting" for affiliate
-   - 9:16 vertical composition cues
-   - End with: "Photorealistic, maintain strict consistency with both provided reference images."
+   - Pose, body orientation, hand position
+   - Facial expression (emotion only, no facial features)
+   - Camera angle: "selfie close-up", "POV looking down at hands", "mirror reflection waist-up"
+   - Setting/environment details
+   - Lighting (warm, natural, golden hour)
+   - 9:16 vertical composition
 
-   ═══ ANTI-AI / "NOT TOO AI" IMAGE DIRECTIVES — research-backed ═══
-   AI-image tells: glossy plastic skin, perfect symmetry, over-lit studio look, zero clutter, hyper-saturated colors, stock-photo composition. We want it to feel like a phone photo a friend took.
+   ═══ DIFFERENCE between start and end frame ═══
+   start_image_prompt = the pose/position when the scene BEGINS.
+   end_image_prompt   = the pose/position when the scene ENDS, naturally connecting to scene N+1's start.
+   The difference should be a clear small action (turn head, pick up product, lean forward, raise hand, smile shift).
 
-   For UGC mode, ALWAYS append these realism cues:
-   - "shot on iPhone 15 Pro, vertical, candid, slight motion blur from hand-hold"
-   - "natural skin texture with pores and slight imperfections — not glossy or smoothed"
-   - "ambient room lighting with subtle color cast (not studio softbox)"
-   - "slight imperfections in framing — composition feels casual, not perfect rule of thirds"
-   - "small environmental clutter visible (papers on table, cable, etc) — lived-in space, not pristine"
-   - "color grading: natural, slightly desaturated, slight green/yellow cast like phone camera in indoor light"
+   Scene 1 special rule: NO product visible in start_image_prompt. End frame of scene 1 may begin to show the product if scene 2 is the reveal.
 
-   For POV Hand mode, ALWAYS append:
-   - "shot on iPhone 15 Pro 0.5x ultra-wide, slight handheld micro-shake"
-   - "natural hand texture — visible knuckles, faint veins, not airbrushed"
-   - "warm tungsten room light, NOT studio softbox"
+   ═══ ANTI-AI / REALISM (append per mode) ═══
+   For UGC: "shot on iPhone 15 Pro, vertical, candid, natural skin texture with pores, ambient room lighting, slight motion blur, small environmental clutter visible, slightly desaturated natural color grading"
+   For POV Hand: "shot on iPhone 15 Pro 0.5x ultra-wide, natural hand texture with visible knuckles, warm tungsten room light"
+   For Mirror Check: "phone reflection visible in mirror, slight smudges on mirror, natural window/lamp light, soft shadow"
 
-   For Mirror Check mode, ALWAYS append:
-   - "phone screen reflection visible in mirror, slight smudges on mirror surface"
-   - "natural room lighting from window/lamp, soft shadow under chin"
+   HARD BANS: "luxury", "premium", "magazine-quality", "studio softbox", "perfect symmetry", "flawless skin", "glowing skin"
 
-   ═══ HARD BANS ═══
-   - Banned aesthetic words: "luxury", "premium", "magazine-quality", "professional photoshoot", "studio softbox", "fashion editorial", "cinematic" (use for AFFILIATE Veo prompt context only)
-   - Banned composition: "perfect symmetry", "rule of thirds", "golden ratio"
-   - Banned skin: "flawless", "porcelain", "glowing", "smooth"
-5. veo_prompt: STRUCTURED motion prompt for Veo. Use EXACTLY this label format, one line per label (no line breaks within a label). All labels in UPPERCASE. Output it as a SINGLE STRING with " " separating each label section.
+6. veo_prompt: STRUCTURED motion prompt for Veo (single string with these labels):
 
-   Required structure:
-   "PROMPT: <action summary>. CAMERA: <lens + angle + camera motion>. DETAILS: Photorealistic high-fidelity video generation. Maintain strict consistency with the provided image reference. CONTEXT: AMBIENT: <ambient sound note>. DIALOGUE: <exact spoken line in quotes, OR \"no dialogue\">. ENVIRONMENT: <env description in campaign language>. NEGATIVE: distortion, morphing, bad hands, text overlays, identity change, wrong product."
+   "PROMPT: <motion from start frame to end frame in natural language>. CAMERA: <lens + steady/handheld + framing>. DETAILS: Photorealistic high-fidelity video generation. Maintain strict consistency with both reference images (first and last frame). CONTEXT: AMBIENT: <ambient sound note>. DIALOGUE: <exact spoken line in quotes, OR \"no dialogue\">. ENVIRONMENT: <env description in campaign language>. NEGATIVE: distortion, morphing, bad hands, text overlays, identity change, wrong product."
 
-   ═══ DIALOGUE FIELD (critical for Veo 3 lipsync) ═══
-   - If the scene HAS voiceover (UGC, Mirror Check with talking) → DIALOGUE must contain the EXACT same text as the script field, in quotes. Example: DIALOGUE: "Tuh kan, gue baru sadar parfum gue beda banget"
-   - The DIALOGUE text MUST match script field VERBATIM (same words, same punctuation)
-   - If POV Hand mode (no face, no talking) → DIALOGUE: "no dialogue"
-   - If a UGC scene is intentionally silent (eg. visual reaction beat) → DIALOGUE: "no dialogue", and AMBIENT: should describe the sound
-   - The DIALOGUE language must be the CAMPAIGN language (Indonesian for 'id'); do NOT translate to English
+   ═══ PROMPT field ═══
+   Describe the MOTION between start and end frame naturally — what happens visually. Example:
+   "She looks at the camera with a bright smile then leans down to search for an item in the center console, right hand stays on the steering wheel while the left hand searches"
 
-   ═══ MID-SCENE CUT RULE (CRITICAL — must feel like a visible edit) ═══
-   Each Veo clip is 4-8s. You MUST design PROMPT as TWO BEATS with an OBVIOUS visual shift at the midpoint — same character, same setting, no scene change, but the framing/scale must CLEARLY change. Subtle gaze shifts do NOT count. The viewer should perceive it like a hard cut, even though Veo treats it as one shot.
+   ═══ DIALOGUE field (Veo 3 lipsync) ═══
+   - If the scene has VO → DIALOGUE must contain the EXACT script text VERBATIM, in quotes
+   - If no talking (POV Hand) → DIALOGUE: "no dialogue"
+   - Language must match campaign language (Indonesian for 'id')
 
-   Pick ONE pattern for beat 2 (visible shift):
-   - SNAP ZOOM-IN: camera rapidly pushes from medium shot to extreme close-up on a detail (label, hand, lips, eye)
-   - SNAP ZOOM-OUT: camera quickly pulls from close-up to wide reveal of full body or room
-   - ANGLE CUT: camera position changes — e.g. front-on to overhead, eye-level to low-angle, selfie to over-the-shoulder
-   - SMASH CUT TO DETAIL: hold the establishing shot, then jump-cut to ultra-close on one product element
-   - SPEED RAMP: action accelerates dramatically at midpoint (slow → fast unwrapping)
+   ═══ CAMERA presets per mode ═══
+   - UGC: "iPhone front selfie camera, handheld micro-shake, locked framing"
+   - POV Hand: "iPhone 0.5x ultra-wide POV, looking down"
+   - Mirror Check: "phone held toward bathroom mirror, vertical framing"
+   Keep camera steady — the visual change comes from the start→end frame morph, not from aggressive camera moves.
 
-   Beat 1 (0 → half duration): Frame opens matching the still image. Hold the establishing pose ~1s.
-   Beat 2 (half duration → end): EXPLICIT visual change using one of the patterns above. Phrase it as a DIRECTIVE, not a suggestion:
-   ✓ "At the 4-second mark, HARD SNAP ZOOM to extreme close-up of the product label, filling the frame."
-   ✓ "At the 2-second mark, ANGLE CUT to overhead top-down shot of hands holding the box."
-   ✗ "At the midpoint, their gaze lifts slightly" — too subtle, REWRITE.
-
-   For 4-second clips → shift at 2s. For 8-second clips → shift at 4s.
-
-   ═══ CAMERA field — describe BOTH the opening lens AND the cut transition ═══
-   Format: "<opening lens/angle>, <transition keyword> at <timestamp>"
-   Examples per mode:
-   - UGC: "iPhone front selfie camera, handheld micro-shake, SNAP ZOOM-IN to extreme close-up of mouth/lips at the 4-second mark"
-   - POV Hand: "iPhone 0.5x ultra-wide lens, looking down at the hands and surface, ANGLE CUT to overhead top-down at the 4-second mark"
-   - Mirror Check: "Phone held in front of mirror, vertical framing, SNAP ZOOM-OUT to full mirror reveal at the 2-second mark"
-
-   ═══ AMBIENT examples (sound only, not what is said) ═══
-   - With dialogue: "AMBIENT: Quiet room tone with light keyboard typing in the background"
-   - Without dialogue (POV Hand): "AMBIENT: Mouth closed or natural breathing, no talking. Package paper rustle, fabric brush against table"
-   - Mirror Check pause: "AMBIENT: Soft bathroom acoustic, faint water drip"
-   - General: describe physical room sounds, NOT speech (speech goes in DIALOGUE)
+   ═══ AMBIENT examples (sound only, not dialogue) ═══
+   - With dialogue: "AMBIENT: Quiet room tone, soft hum of air"
+   - Silent scene: "AMBIENT: Package paper rustle, fabric brush"
 
    ═══ ENVIRONMENT field ═══
-   Write in the campaign's language (Bahasa Indonesia for 'id', English for 'en'). Pull from the user's environment input verbatim or paraphrase tightly.
+   Pull from the user's environment input. Write in campaign language.
 
 ═══════════════════════════════════════════════════
 QUALITY CHECKS (run mentally before finalizing — block if any check fails)
-- Scene 1 hook: does it START mid-thought OR with a specific concrete detail? No greeting allowed. If you wrote "Hai", "Halo", "Hi", "PSA", or "Yang lagi viral" — REWRITE.
-- Hook pattern: which one am I using? (Specific Story Drop / Curiosity Gap / Bold Specific Claim / Pattern Interrupt / Direct Specific Question)
-- STEPPS: which 2+ principles does this script hit?
-- Anti-patterns: have I avoided EVERY item in the content-type ANTI-PATTERNS list AND the anti-AI banned phrases?
-- VO word count: every scene is 8s, so each script must be ≤20 words. Trim if over.
-- Natural speech audit: does each script have at least ONE filler/restart/specific detail? If it reads like an ad copy, REWRITE.
-- Image prompt audit: zero gender/hair/skin words? Starts with "Maintain exact identity..."? Has anti-AI realism cues (iPhone, candid, natural skin texture)? Banned aesthetic words absent?
-- Veo prompt audit: structured format (PROMPT/CAMERA/DETAILS/CONTEXT/ENVIRONMENT/NEGATIVE)? Two-beat motion described (shift at midpoint)? DIALOGUE field present and matches script VERBATIM (or "no dialogue" for POV Hand)?
-- Pacing: does each scene introduce something NEW (angle, action, or info)?
-- Final scene: payoff or CTA matches the content type?
+
+NARRATIVE arc:
+- Does the ENTIRE script across all scenes read like ONE continuous moment from ONE person's day?
+- Is scene 1 free of product AND free of greeting? If "Hai/Halo/PSA/Yang lagi viral" appears anywhere — REWRITE.
+- Is the product introduced organically in scene 2 or 3 (NOT scene 1)?
+- Is brand name mentioned ≤2 times total across all scenes?
+- For affiliate: is there exactly ONE soft CTA line, only in the final scene?
+- For review/unboxing: zero CTA?
+
+VOICE:
+- Each script ≤20 words (8s clip × 2.5 wps)
+- At least one filler/specific detail per script
+- Does it read like ad copy? If yes, REWRITE.
+
+FRAMES:
+- start_image_prompt and end_image_prompt both start with "Maintain exact identity..."
+- Zero gender/hair/skin words in either frame prompt
+- Anti-AI realism cues present (iPhone, candid, natural skin)
+- Banned aesthetic words absent (luxury, premium, magazine, softbox)
+- end_image_prompt of scene N connects visually to start_image_prompt of scene N+1 (same setting/outfit, slightly different pose)
+
+VEO:
+- Structured format: PROMPT / CAMERA / DETAILS / CONTEXT (AMBIENT + DIALOGUE) / ENVIRONMENT / NEGATIVE
+- PROMPT describes MOTION from start frame to end frame (not aggressive camera moves)
+- DIALOGUE matches script VERBATIM (or "no dialogue" for POV Hand)
+- ENVIRONMENT in campaign language
 
 ═══════════════════════════════════════════════════
 CRITICAL RULES:
@@ -619,10 +553,11 @@ CRITICAL RULES:
   "scenes": [
     {
       "scene_number": 1,
-      "duration": 4,
-      "script": "...",
-      "image_prompt": "...",
-      "veo_prompt": "..."
+      "duration": 8,
+      "script": "(dialogue in campaign language)",
+      "start_image_prompt": "(Nano Banana prompt for OPENING frame)",
+      "end_image_prompt": "(Nano Banana prompt for CLOSING frame)",
+      "veo_prompt": "PROMPT: ... CAMERA: ... DETAILS: ... CONTEXT: AMBIENT: ... DIALOGUE: ... ENVIRONMENT: ... NEGATIVE: ..."
     }
   ]
 }

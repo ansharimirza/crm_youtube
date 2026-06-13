@@ -216,6 +216,72 @@ export function TiktokCampaignPage() {
   )
 }
 
+function FramePanel({ label, aspectClass, imageUrl, status, errorMsg, sceneNumber, vidProgress }: {
+  label: 'START' | 'END'
+  aspectClass: string
+  imageUrl: string | null
+  status: 'queued' | 'processing' | 'done' | 'error'
+  errorMsg: string | null
+  sceneNumber: number
+  vidProgress?: number
+}) {
+  const processing = status === 'queued' || status === 'processing'
+  return (
+    <div className={cn('relative bg-gradient-to-br from-pink-500/5 to-violet-500/5', aspectClass)}>
+      {imageUrl ? (
+        <img src={imageUrl} className="w-full h-full object-cover" alt="" />
+      ) : (
+        <div className="w-full h-full flex items-center justify-center">
+          {processing ? (
+            <div className="text-center">
+              <Loader2 className="h-7 w-7 text-primary/50 mx-auto animate-spin" />
+              <p className="text-[10px] text-muted-foreground mt-1">{label}...</p>
+            </div>
+          ) : status === 'error' ? (
+            <div className="text-center px-2">
+              <AlertCircle className="h-7 w-7 text-red-400 mx-auto" />
+              <p className="text-[9px] text-red-400 mt-1 line-clamp-2">{errorMsg ?? 'Error'}</p>
+            </div>
+          ) : (
+            <ImageIcon className="h-7 w-7 text-muted-foreground/30" />
+          )}
+        </div>
+      )}
+      <div className="absolute top-1 left-1 flex gap-1">
+        <Badge className={cn('text-[9px] px-1.5 py-0 border-0',
+          label === 'START' ? 'bg-violet-500/40 text-violet-100' : 'bg-pink-500/40 text-pink-100'
+        )}>
+          {label}
+        </Badge>
+        {label === 'START' && (
+          <Badge className="text-[9px] px-1.5 py-0 bg-black/60 text-white border-0">
+            S{String(sceneNumber).padStart(2, '0')}
+          </Badge>
+        )}
+        {processing && (
+          <Badge className="text-[9px] px-1.5 py-0 bg-blue-500/40 text-blue-100 border-0">
+            <Loader2 className="h-2 w-2 animate-spin" />
+          </Badge>
+        )}
+        {vidProgress !== undefined && label === 'START' && (
+          <Badge className="text-[9px] px-1.5 py-0 bg-purple-500/40 text-purple-100 border-0">
+            VID {vidProgress}%
+          </Badge>
+        )}
+      </div>
+      {imageUrl && (
+        <a
+          href={imageUrl}
+          download={`scene-${sceneNumber}-${label.toLowerCase()}.jpg`}
+          className="absolute top-1 right-1 bg-white/90 hover:bg-white text-black rounded p-1"
+        >
+          <Download className="h-2.5 w-2.5" />
+        </a>
+      )}
+    </div>
+  )
+}
+
 function Stat({ label, value, sub, color }: { label: string; value: number; sub?: string; color?: string }) {
   return (
     <div>
@@ -233,19 +299,31 @@ function SceneCard({
   aspectRatio: '9:16' | '16:9' | '1:1'
   onUpdate: () => void
 }) {
-  const [revInstruction, setRevInstruction] = useState('')
+  const [revStart, setRevStart] = useState('')
+  const [revEnd, setRevEnd] = useState('')
   const [scriptDraft, setScriptDraft] = useState(scene.script)
   const [voiceOn, setVoiceOn] = useState(true)
   const [showPrompt, setShowPrompt] = useState(false)
 
   const aspectClass = aspectRatio === '9:16' ? 'aspect-[9/16]' : aspectRatio === '1:1' ? 'aspect-square' : 'aspect-video'
 
-  const reviseMutation = useMutation({
+  const reviseStartMutation = useMutation({
     mutationFn: (instruction: string) =>
-      api.post(`/api/tiktok/scenes/${scene.id}/revise-image`, { instruction }),
+      api.post(`/api/tiktok/scenes/${scene.id}/revise-image`, { instruction, frame: 'start' }),
     onSuccess: () => {
-      toast.success(`Scene ${scene.sceneNumber}: regenerating image...`)
-      setRevInstruction('')
+      toast.success(`Scene ${scene.sceneNumber} start frame: regenerating...`)
+      setRevStart('')
+      onUpdate()
+    },
+    onError: (e: Error) => toast.error(e.message),
+  })
+
+  const reviseEndMutation = useMutation({
+    mutationFn: (instruction: string) =>
+      api.post(`/api/tiktok/scenes/${scene.id}/revise-image`, { instruction, frame: 'end' }),
+    onSuccess: () => {
+      toast.success(`Scene ${scene.sceneNumber} end frame: regenerating...`)
+      setRevEnd('')
       onUpdate()
     },
     onError: (e: Error) => toast.error(e.message),
@@ -273,100 +351,102 @@ function SceneCard({
     onError: (e: Error) => toast.error(e.message),
   })
 
-  const imgProcessing = scene.imageStatus === 'processing' || scene.imageStatus === 'queued'
+  const startProcessing = scene.imageStatus === 'processing' || scene.imageStatus === 'queued'
+  const endProcessing = scene.endImageStatus === 'processing' || scene.endImageStatus === 'queued'
   const vidProcessing = scene.status === 'processing' || scene.status === 'queued'
   const hasVideo = scene.status === 'done' && scene.videoUrl
+  const bothFramesDone = scene.imageStatus === 'done' && scene.endImageStatus === 'done'
 
   return (
     <Card className="overflow-hidden">
-      {/* Image / Video preview */}
-      <div className={cn('relative bg-gradient-to-br from-pink-500/10 to-violet-500/10 max-h-[480px] mx-auto', aspectClass)}>
-        {hasVideo ? (
+      {/* If video done, show just the video */}
+      {hasVideo ? (
+        <div className={cn('relative bg-gradient-to-br from-pink-500/10 to-violet-500/10 max-h-[480px] mx-auto', aspectClass)}>
           <video src={scene.videoUrl!} controls poster={scene.thumbnailUrl ?? scene.imageUrl ?? undefined} className="w-full h-full object-cover" />
-        ) : scene.imageUrl ? (
-          <img src={scene.imageUrl} className="w-full h-full object-cover" alt="" />
-        ) : (
-          <div className="w-full h-full flex items-center justify-center">
-            {imgProcessing ? (
-              <div className="text-center">
-                <Loader2 className="h-10 w-10 text-primary/50 mx-auto animate-spin" />
-                <p className="text-xs text-muted-foreground mt-2">Generating image...</p>
-              </div>
-            ) : scene.imageStatus === 'error' ? (
-              <div className="text-center px-4">
-                <AlertCircle className="h-10 w-10 text-red-400 mx-auto" />
-                <p className="text-xs text-red-400 mt-2">{scene.imageErrorMsg ?? 'Image error'}</p>
-              </div>
-            ) : (
-              <ImageIcon className="h-10 w-10 text-muted-foreground/40" />
-            )}
-          </div>
-        )}
-
-        {/* Top badges */}
-        <div className="absolute top-2 left-2 flex items-center gap-1.5">
-          <Badge className="text-[10px] bg-black/60 text-white border-0">
-            SCENE {String(scene.sceneNumber).padStart(2, '0')}
-          </Badge>
-          {imgProcessing && (
-            <Badge className="text-[10px] bg-blue-500/30 text-blue-200 border-0">
-              <Loader2 className="h-2.5 w-2.5 animate-spin" />
-              IMG
-            </Badge>
-          )}
-          {vidProcessing && (
-            <Badge className="text-[10px] bg-purple-500/30 text-purple-200 border-0">
-              <Loader2 className="h-2.5 w-2.5 animate-spin" />
-              VID {scene.progress}%
-            </Badge>
-          )}
-          {hasVideo && (
+          <div className="absolute top-2 left-2 flex gap-1.5">
+            <Badge className="text-[10px] bg-black/60 text-white border-0">SCENE {String(scene.sceneNumber).padStart(2, '0')}</Badge>
             <Badge className="text-[10px] bg-emerald-500/30 text-emerald-200 border-0">
-              <Play className="h-2.5 w-2.5" />
-              VIDEO
+              <Play className="h-2.5 w-2.5" /> VIDEO
             </Badge>
-          )}
+          </div>
         </div>
-
-        {/* Top right: download image */}
-        {scene.imageUrl && (
-          <Button
-            asChild size="sm" variant="secondary"
-            className="absolute top-2 right-2 h-7 text-[10px] bg-white/90 text-black hover:bg-white"
-          >
-            <a href={scene.imageUrl} download={`scene-${scene.sceneNumber}.jpg`}>
-              <Download className="h-3 w-3" />
-              IMAGE
-            </a>
-          </Button>
-        )}
-      </div>
+      ) : (
+        // Show two frames side by side: start | end
+        <div className="grid grid-cols-2 gap-px bg-border">
+          <FramePanel
+            label="START"
+            aspectClass={aspectClass}
+            imageUrl={scene.imageUrl}
+            status={scene.imageStatus}
+            errorMsg={scene.imageErrorMsg}
+            sceneNumber={scene.sceneNumber}
+            vidProgress={vidProcessing ? scene.progress : undefined}
+          />
+          <FramePanel
+            label="END"
+            aspectClass={aspectClass}
+            imageUrl={scene.endImageUrl}
+            status={scene.endImageStatus}
+            errorMsg={scene.endImageErrorMsg}
+            sceneNumber={scene.sceneNumber}
+          />
+        </div>
+      )}
 
       <CardContent className="p-3 space-y-3">
-        {/* Revisi Gambar AI */}
-        <div className="rounded-lg border border-violet-500/30 bg-violet-500/5 p-3 space-y-2">
-          <div className="flex items-center gap-1.5 text-xs font-semibold text-violet-300 uppercase tracking-wide">
-            <Wand2 className="h-3.5 w-3.5" />
-            Revisi Gambar AI
+        {/* Revisi START Frame */}
+        {!hasVideo && (
+          <div className="rounded-lg border border-violet-500/30 bg-violet-500/5 p-3 space-y-2">
+            <div className="flex items-center gap-1.5 text-xs font-semibold text-violet-300 uppercase tracking-wide">
+              <Wand2 className="h-3.5 w-3.5" />
+              Revisi Start Frame
+            </div>
+            <div className="flex gap-2">
+              <Input
+                value={revStart}
+                onChange={(e) => setRevStart(e.target.value)}
+                placeholder="Cth: senyum lebih lebar, angle dari atas..."
+                className="text-xs h-9 bg-background/50"
+                disabled={startProcessing}
+              />
+              <Button
+                size="sm"
+                className="bg-violet-600 hover:bg-violet-700 h-9"
+                disabled={startProcessing || !revStart.trim()}
+                onClick={() => reviseStartMutation.mutate(revStart)}
+              >
+                {reviseStartMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : 'REVISI'}
+              </Button>
+            </div>
           </div>
-          <div className="flex gap-2">
-            <Input
-              value={revInstruction}
-              onChange={(e) => setRevInstruction(e.target.value)}
-              placeholder="Cth: Buat lebih terang, ubah angle, senyum..."
-              className="text-xs h-9 bg-background/50"
-              disabled={imgProcessing}
-            />
-            <Button
-              size="sm"
-              className="bg-violet-600 hover:bg-violet-700 h-9"
-              disabled={imgProcessing || !revInstruction.trim()}
-              onClick={() => reviseMutation.mutate(revInstruction)}
-            >
-              {reviseMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : 'REVISI'}
-            </Button>
+        )}
+
+        {/* Revisi END Frame */}
+        {!hasVideo && (
+          <div className="rounded-lg border border-pink-500/30 bg-pink-500/5 p-3 space-y-2">
+            <div className="flex items-center gap-1.5 text-xs font-semibold text-pink-300 uppercase tracking-wide">
+              <Wand2 className="h-3.5 w-3.5" />
+              Revisi End Frame
+            </div>
+            <div className="flex gap-2">
+              <Input
+                value={revEnd}
+                onChange={(e) => setRevEnd(e.target.value)}
+                placeholder="Cth: pegang produk di tangan, mata ke kamera..."
+                className="text-xs h-9 bg-background/50"
+                disabled={endProcessing}
+              />
+              <Button
+                size="sm"
+                className="bg-pink-600 hover:bg-pink-700 h-9"
+                disabled={endProcessing || !revEnd.trim()}
+                onClick={() => reviseEndMutation.mutate(revEnd)}
+              >
+                {reviseEndMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : 'REVISI'}
+              </Button>
+            </div>
           </div>
-        </div>
+        )}
 
         {/* Voice over (script) */}
         <div className="rounded-lg border bg-card p-3 space-y-2">
@@ -428,7 +508,7 @@ function SceneCard({
               Retry Image
             </Button>
           )}
-          {scene.imageStatus === 'done' && (scene.status === 'pending' || scene.status === 'error') && (
+          {bothFramesDone && (scene.status === 'pending' || scene.status === 'error') && (
             <Button
               size="sm" className="flex-1 h-8 text-xs bg-pink-600 hover:bg-pink-700"
               onClick={() => genVideoMutation.mutate()}

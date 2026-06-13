@@ -71,6 +71,13 @@
       "when": 1781327000000,
       "tag": "0009_motion_resolution",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1781413000000,
+      "tag": "0010_tiktok_end_frame",
+      "breakpoints": true
     }
   ]
 }

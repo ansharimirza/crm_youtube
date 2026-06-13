@@ -150,16 +150,25 @@ export const tiktokScenes = pgTable('tiktok_scenes', {
   sceneNumber: integer('scene_number').notNull(),
   // Script (from Claude)
   script: text('script').notNull(),       // VO/narration text — editable
-  imagePrompt: text('image_prompt').default('').notNull(), // for Nano Banana — editable
-  veoPrompt: text('veo_prompt').notNull(), // technical prompt for Veo
-  duration: integer('duration').default(4).notNull(),
-  // Image generation (Phase 1)
+  // Phase 1 frames: start frame uses existing image* columns, end frame is new
+  imagePrompt: text('image_prompt').default('').notNull(),         // START frame prompt
+  endImagePrompt: text('end_image_prompt').default('').notNull(),  // END frame prompt (NEW)
+  veoPrompt: text('veo_prompt').notNull(), // technical prompt for Veo (uses both frames)
+  duration: integer('duration').default(8).notNull(),
+  // Image generation (Phase 1) — START frame
   imageStatus: varchar('image_status', { length: 16, enum: ['queued', 'processing', 'done', 'error'] }).default('queued').notNull(),
   imageUrl: text('image_url'),
   imagePath: text('image_path'),
   imageGeminigenUuid: varchar('image_geminigen_uuid', { length: 64 }),
   imageAttempts: integer('image_attempts').default(0).notNull(),
   imageErrorMsg: text('image_error_msg'),
+  // Image generation (Phase 1) — END frame (NEW)
+  endImageStatus: varchar('end_image_status', { length: 16, enum: ['queued', 'processing', 'done', 'error'] }).default('queued').notNull(),
+  endImageUrl: text('end_image_url'),
+  endImagePath: text('end_image_path'),
+  endImageGeminigenUuid: varchar('end_image_geminigen_uuid', { length: 64 }),
+  endImageAttempts: integer('end_image_attempts').default(0).notNull(),
+  endImageErrorMsg: text('end_image_error_msg'),
   // Video generation (Phase 2 — kicks in when user clicks "Generate Video")
   status: varchar('status', { length: 16, enum: ['pending', 'queued', 'processing', 'done', 'error'] }).default('pending').notNull(),
   progress: integer('progress').default(0).notNull(),
