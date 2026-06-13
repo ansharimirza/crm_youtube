@@ -19,7 +19,8 @@ import { notify } from './notifications'
 
 const MAX_CONCURRENT_IMG = 4
 const MAX_CONCURRENT_VID = 5
-const MAX_ATTEMPTS = 8
+const MAX_ATTEMPTS = 8           // image phase still auto-retries (frames are cheap + chained)
+const MAX_VIDEO_ATTEMPTS = 1     // video phase: NO auto-retry — user manually retries via UI
 const RETRY_DELAY_MS = 12_000
 const VID_POLL_INTERVAL_MS = 10_000
 const VID_POLL_TIMEOUT_MS = 30 * 60_000
@@ -307,7 +308,7 @@ async function runSceneVideo(sceneId: number) {
   let attempts = scene.attempts ?? 0
   let lastError = ''
 
-  while (attempts < MAX_ATTEMPTS) {
+  while (attempts < MAX_VIDEO_ATTEMPTS) {
     attempts++
     try {
       await db.update(tiktokScenes).set({
@@ -319,7 +320,7 @@ async function runSceneVideo(sceneId: number) {
       }).where(eq(tiktokScenes.id, sceneId))
 
       const isGrok = campaign.veoModel.startsWith('grok')
-      console.log(`[tiktok-vid:${sceneId}] Attempt ${attempts}/${MAX_ATTEMPTS} via ${isGrok ? 'Grok' : 'Veo'}`)
+      console.log(`[tiktok-vid:${sceneId}] Attempt ${attempts}/${MAX_VIDEO_ATTEMPTS} via ${isGrok ? 'Grok' : 'Veo'}`)
 
       const generated = isGrok
         ? await generateGrok({
@@ -391,16 +392,16 @@ async function runSceneVideo(sceneId: number) {
     }
 
     await db.update(tiktokScenes).set({
-      errorMsg: `Attempt ${attempts}: ${lastError}. Retrying...`,
+      errorMsg: `Attempt ${attempts}: ${lastError}`,
       updatedAt: new Date(),
     }).where(eq(tiktokScenes.id, sceneId))
 
-    if (attempts < MAX_ATTEMPTS) await new Promise(r => setTimeout(r, RETRY_DELAY_MS))
+    if (attempts < MAX_VIDEO_ATTEMPTS) await new Promise(r => setTimeout(r, RETRY_DELAY_MS))
   }
 
   await db.update(tiktokScenes).set({
     status: 'error',
-    errorMsg: `Gagal setelah ${MAX_ATTEMPTS}x. Last: ${lastError}`,
+    errorMsg: lastError,
     updatedAt: new Date(),
   }).where(eq(tiktokScenes.id, sceneId))
 
@@ -434,6 +435,7 @@ async function maybeMarkCampaignDone(campaignId: number, userId: number) {
 }
 
 export async function recoverPendingTiktokScenes() {
+  // Frames: safe to re-queue because Nano Banana calls are cheap & idempotent enough
   const pendingFrames = await db.query.tiktokFrames.findMany({
     where: (f, { or, eq }) => or(eq(f.status, 'queued'), eq(f.status, 'processing')),
   })
@@ -441,11 +443,40 @@ export async function recoverPendingTiktokScenes() {
     console.log(`[tiktok-frame] Recovering #${f.id}`)
     enqueueTiktokFrame(f.id)
   }
-  const pendingScenes = await db.query.tiktokScenes.findMany({
-    where: (s, { or, eq }) => or(eq(s.status, 'queued'), eq(s.status, 'processing')),
+
+  // Videos: do NOT re-queue 'processing' scenes — they likely still have a
+  // pending Veo job at GeminiGen. We poll the existing UUID instead so we
+  // don't waste credits creating duplicate requests.
+  const processingScenes = await db.query.tiktokScenes.findMany({
+    where: eq(tiktokScenes.status, 'processing'),
   })
-  for (const s of pendingScenes) {
-    console.log(`[tiktok-vid] Recovering #${s.id}`)
+  for (const s of processingScenes) {
+    if (!s.geminigenUuid) {
+      // Edge case: status=processing but no UUID — mark error so user can retry
+      await db.update(tiktokScenes).set({
+        status: 'error',
+        errorMsg: 'Recovered after restart, no UUID — please retry manually',
+        updatedAt: new Date(),
+      }).where(eq(tiktokScenes.id, s.id))
+      continue
+    }
+    console.log(`[tiktok-vid] Re-attaching to existing job ${s.geminigenUuid} for scene #${s.id}`)
+    // Just enqueue and the worker's poll will pick up the existing UUID via runSceneVideo's normal flow.
+    // (The first attempt of runSceneVideo creates a NEW request — to AVOID that, we keep status as is
+    //  and just mark for manual retry. Safer.)
+    await db.update(tiktokScenes).set({
+      status: 'error',
+      errorMsg: 'Restart terjadi saat video processing — klik Retry untuk lanjut',
+      updatedAt: new Date(),
+    }).where(eq(tiktokScenes.id, s.id))
+  }
+
+  // 'queued' scenes are safe to re-queue (no Veo call has been made yet)
+  const queuedScenes = await db.query.tiktokScenes.findMany({
+    where: eq(tiktokScenes.status, 'queued'),
+  })
+  for (const s of queuedScenes) {
+    console.log(`[tiktok-vid] Recovering queued scene #${s.id}`)
     enqueueTiktokVideo(s.id)
   }
 }

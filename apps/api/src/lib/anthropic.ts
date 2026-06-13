@@ -487,6 +487,36 @@ Step 4: For scene 3, give ONE specific benefit (notes, finish, packaging detail,
 - The moment must be BELIEVABLE — could plausibly have happened
 - Tone: warm friend sharing, NOT vendor pitching
 
+═══ TTS-FRIENDLY WRITING RULES (Veo reads this aloud — TYPOS = AUDIO BUGS) ═══
+
+1. PUNCTUATION BANS — these break TTS output:
+   - NO em dashes (—): Veo reads them as "garis" or pauses oddly. Use commas instead.
+     ✗ "ini dia — Octarine"   ✓ "ini dia, Octarine"
+   - NO en dashes (–), asterisks (*), markdown of any kind
+   - NO quotation marks inside dialogue (rephrase as indirect speech)
+     ✗ Dia nanya, "parfum lo apa"   ✓ Dia nanya parfum aku apa
+   - Ellipsis (...) OK only for genuine hesitation, not stylistic flair
+
+2. SPELLING — Indonesian correct:
+   - "mall" (2 L's), bukan "mal"
+   - "kafe" atau "cafe" (pick one consistently)
+   - Brand + product names: spell EXACTLY as user provided (don't shorten or misspell)
+
+3. COMPLETE SENTENCES — every clause must have clear subject + verb + object:
+   ✗ "Semprot sekali tadi sore, sekarang masih ada"  (ada APA?)
+   ✓ "Semprot sekali tadi sore, sampai sekarang wanginya masih nempel"
+   ✗ "Pas dipake langsung beda"  (beda APA?)
+   ✓ "Pas dipake, langsung kerasa beda di mood-nya"
+
+4. NUMBERS + UNITS — spell out (Veo handles words better than digits):
+   ✗ "100ml", "30 hari pake"
+   ✓ "ukuran kecil", "udah sebulan pake"
+
+5. READ-ALOUD TEST: speak each sentence as if on camera.
+   - Flow natural?
+   - Pronoun antecedent clear? ("wanginya"/"aromanya"/"botolnya" instead of bare "nya")
+   - If ambiguous → REWRITE with the specific noun.
+
 ═══════════════════════════════════════════════════
 START-FRAME / END-FRAME STRUCTURE (CRITICAL — this is how the video is built)
 
@@ -718,6 +748,13 @@ The 3 variants MUST cover different angles. Pick 3 from this menu (no duplicates
 - Each must be BELIEVABLE — could plausibly have happened
 - Each must FIT THE PRODUCT and CONTENT TYPE
 - Include filler words natural to ID Gen-Z ("eh", "tuh", "sih", "kayanya", "deh")
+
+═══ TTS-FRIENDLY (Veo reads aloud) ═══
+- NO em dash (—), use comma. "ini dia, Octarine" ✓ NOT "ini dia — Octarine"
+- NO inline quotation marks. Use indirect speech.
+- Spelling: "mall" (2 L's) not "mal", brand names exact.
+- Every clause needs clear subject. "wanginya nempel" ✓ NOT "masih ada" (ambiguous)
+- Spell out numbers: "sebulan" not "30 hari"
 
 Output JSON ONLY:
 {

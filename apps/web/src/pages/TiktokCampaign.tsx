@@ -564,8 +564,8 @@ function VideoSceneCard({ scene, startFrame, endFrame, aspectClass, onUpdate }: 
           {(scene.status === 'pending' || scene.status === 'error') && startFrame?.status === 'done' && endFrame?.status === 'done' && (
             <Button size="sm" className="flex-1 h-8 text-xs bg-pink-600 hover:bg-pink-700"
               onClick={() => genVideoMutation.mutate()} disabled={genVideoMutation.isPending}>
-              {genVideoMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Sparkles className="h-3 w-3" />}
-              Generate Video
+              {genVideoMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : scene.status === 'error' ? <RefreshCw className="h-3 w-3" /> : <Sparkles className="h-3 w-3" />}
+              {scene.status === 'error' ? 'Retry Video' : 'Generate Video'}
             </Button>
           )}
           {hasVideo && (
