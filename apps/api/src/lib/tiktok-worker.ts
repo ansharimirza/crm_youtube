@@ -122,9 +122,20 @@ async function runFrame(frameId: number) {
     return
   }
 
+  // Chain reference: frame N uses the previous frame's image as an extra anchor
+  // so consecutive frames stay visually consistent.
+  let prevFramePath: string | null = null
+  if (frame.frameNumber > 0) {
+    const prev = await db.query.tiktokFrames.findFirst({
+      where: (f, { and, eq }) => and(eq(f.campaignId, campaign.id), eq(f.frameNumber, frame.frameNumber - 1)),
+    })
+    if (prev?.imagePath) prevFramePath = prev.imagePath
+  }
+
   const refs = [
     campaign.baseModelPath,
     campaign.productImagePath,
+    prevFramePath,
   ].filter((p): p is string => !!p)
 
   let attempts = frame.attempts ?? 0
@@ -196,6 +207,17 @@ async function runFrame(frameId: number) {
       }).where(eq(tiktokFrames.id, frameId))
 
       console.log(`[tiktok-frame:${frameId}] DONE`)
+      // Auto-chain: queue the next frame in this campaign so it can reference
+      // this frame's image. Only triggers if the next frame is still 'draft'.
+      const next = await db.query.tiktokFrames.findFirst({
+        where: (f, { and, eq }) => and(eq(f.campaignId, campaign.id), eq(f.frameNumber, frame.frameNumber + 1)),
+      })
+      if (next && next.status === 'draft') {
+        await db.update(tiktokFrames)
+          .set({ status: 'queued', attempts: 0, errorMsg: null, updatedAt: new Date() })
+          .where(eq(tiktokFrames.id, next.id))
+        enqueueTiktokFrame(next.id)
+      }
       await maybeMarkImagesDone(campaign.id)
       return
     } catch (err) {

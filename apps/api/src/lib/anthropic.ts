@@ -487,10 +487,23 @@ Generate a complete scene-by-scene script. Each scene must have:
 
    ═══ FRAMES ARRAY — design rules ═══
    For N scenes, you generate N+1 frames numbered 0..N.
-   Frame 0 = scene 1 opening (NO product visible)
-   Frame N = scene N closing
-   Frame i (0<i<N) is BOTH the end of scene i AND the start of scene i+1 — describe it once, used twice.
-   Consecutive frames should show small action progression: turn head, pick up product, lean forward, raise hand, smile shift.
+
+   FRAME 0 — ESTABLISHING POSE (very specific rules)
+   - This is the OPENING still that appears BEFORE scene 1's action starts.
+   - It must be a CALM, NEUTRAL, ESTABLISHING pose — NO mid-action, NO product, NO hand reaching for something yet.
+   - Think of frame 0 as the "before" snapshot. The action in scene 1's veo_prompt happens BETWEEN frame 0 and frame 1.
+   - Examples of valid frame 0: subject sitting calmly looking at camera, subject standing facing camera, subject seated with hands resting, subject looking out window relaxed.
+   - INVALID frame 0: subject already reaching for something, mouth open mid-word, body twisted mid-action.
+   - Match the script: if scene 1 dialogue is "Sebelum keluar pastiin bawa ini, bentar aku cari", then frame 0 = subject just sitting calmly (the "before going to search" moment); frame 1 = subject now leaned toward bag/searching.
+
+   FRAME N — CLOSING POSE
+   - The final still after the last scene's action completes.
+   - Calm, resolved pose. If the script ends with a soft CTA, this frame shows the subject looking calmly at camera holding the product naturally.
+
+   FRAME i (0 < i < N) — TRANSITION
+   - Each interior frame is BOTH the end of scene i AND the start of scene i+1 — describe it ONCE, used twice.
+   - Consecutive frames show small action progression: turn head, pick up product, lean forward, raise hand, smile shift.
+   - These transitions should be incremental (single action change per step), not jump cuts.
 
    ═══ ANTI-AI / REALISM (append per mode) ═══
    For UGC: "shot on iPhone 15 Pro, vertical, candid, natural skin texture with pores, ambient room lighting, slight motion blur, small environmental clutter visible, slightly desaturated natural color grading"

@@ -470,15 +470,20 @@ export const tiktokRoutes = new Elysia({ prefix: '/api/tiktok' })
       .set({ status: 'generating_images', updatedAt: new Date() })
       .where(eq(tiktokCampaigns.id, id))
 
-    for (const f of campaign.frames) {
-      await db.update(tiktokFrames).set({
-        status: 'queued',
-        attempts: 0,
-        errorMsg: null,
-      }).where(eq(tiktokFrames.id, f.id))
-      enqueueTiktokFrame(f.id)
+    // Only queue Frame 0. Each frame, when done, will auto-queue the next so
+    // it can use the previous frame as a reference image (visual chain).
+    const first = campaign.frames.find(f => f.frameNumber === 0)
+    if (!first) {
+      set.status = 400
+      return { error: 'Frame 0 tidak ditemukan' }
     }
-    return { ok: true, queued: campaign.frames.length }
+    await db.update(tiktokFrames).set({
+      status: 'queued',
+      attempts: 0,
+      errorMsg: null,
+    }).where(eq(tiktokFrames.id, first.id))
+    enqueueTiktokFrame(first.id)
+    return { ok: true, queued: 1, total: campaign.frames.length }
   })
 
   // === REROLL DRAFT — regenerate via Claude (only allowed in draft state) ===
