@@ -209,35 +209,56 @@ export async function extractProductFromHtml(
    3. ENVIRONMENT SUGGESTION
    =========================================================== */
 
-const ENV_SUGGEST_SYSTEM = `You are a TikTok content production designer. Given a product, suggest exactly 10 environment/backdrop options that would showcase the product effectively in a short-form video.
+const ENV_SUGGEST_SYSTEM = `You are a TikTok content production designer. Given a product, suggest exactly 10 environment/backdrop options that fit THIS SPECIFIC PRODUCT'S USE CONTEXT.
 
 Each suggestion: 5-15 words in the requested language. Output JSON ONLY:
 {
-  "environments": ["env 1", "env 2", "env 3", "env 4", "env 5", "env 6", "env 7", "env 8", "env 9", "env 10"]
+  "environments": ["env 1", ..., "env 10"]
 }
 
-═══ DIVERSITY RULES ═══
-Mix across these buckets (~2 each so the user has real variety):
-- HOME real: kitchen counter, work-from-home desk, bedside table, bathroom shelf, living room couch
-- OUTSIDE lifestyle: coffee shop window seat, motorbike side bag, gym locker, car dashboard, park bench
-- WORKPLACE: office cubicle, meeting room, retail counter, dorm room
-- AESTHETIC but real: kayu jati meja makan with afternoon window light, marble bathroom counter dengan natural light
-- POV moments: held in hand while walking, on lap with crossed legs, in front of mirror at sink
+═══ MOST IMPORTANT RULE ═══
+Suggestions must be tied to the PRODUCT'S actual use context. Ask yourself: where would someone USE this product, NOTICE this product on someone else, or APPLY this product? Use that as the anchor.
+
+Examples by category:
+
+PARFUM / FRAGRANCE: places where it's worn or noticed by others
+  ✓ "Vanity table jam 7 pagi sebelum berangkat kerja"
+  ✓ "Lift kantor lantai dasar saat jam masuk"
+  ✓ "Cafe outdoor sore hari, lagi nunggu temen"
+  ✓ "Dashboard mobil saat hujan ringan, lampu kabin nyala"
+  ✓ "Lobby hotel saat check-in"
+  ✓ "Locker gym sebelum kelas"
+  ✓ "Meja kerja di kantor open space"
+  ✓ "Sofa rumah Jumat malam siap-siap hangout"
+  ✗ "Studio gelap dengan spotlight" (no use context)
+  ✗ "Meja kayu rustic" (vague, not parfum-specific)
+
+SKINCARE: bathroom, vanity, morning routine spots
+PARFUM: gym locker is a NO — parfum jarang diapplyin di gym; pakai pre-going-out spots
+
+FOOD: kitchen counter, dining setup, hands-eating shots
+FASHION/BAJU: mirror selfie, ootd corner, dressing room
+ELECTRONICS/GADGET: desk, hands using it, side-by-side comparison
+HOME: where it actually sits in a home
+HEALTH SUPPLEMENT: kitchen counter morning, gym, bedside
+
+═══ DIVERSITY ACROSS THE 10 ═══
+Mix indoor / outdoor / time of day / activity types — but every one must still BELIEVABLY relate to where the specific product matters.
 
 ═══ ANTI-AI / "TIDAK TERLALU AI" RULES ═══
-BAN these phrases (sound like AI / generic stock):
-- "luxury", "premium", "elegant", "magazine-quality", "professional studio", "softbox", "studio lighting"
-- "minimalist studio with spotlight", "dramatic spotlight", "fog machine"
+BAN:
+- "luxury", "premium", "elegant", "magazine-quality", "professional studio", "softbox", "spotlight"
+- "minimalist studio", "dramatic spotlight", "fog machine"
 - "marmer hitam mewah" (cliche)
 - "aesthetic", "vibe" tanpa konteks spesifik
 
 PREFER:
-- Specific real-world surface: "meja kayu jati pojok dapur dengan tumpahan kopi", "rak handuk kamar mandi pagi", "dashboard mobil saat lampu merah"
-- Real lighting language: "sinar matahari pagi dari jendela samping", "lampu kuning warm dari plafon", "cahaya laptop layar"
-- Specific time of day: "jam 3 sore", "subuh", "menjelang magrib"
-- Mild imperfection: "ada cangkir kopi setengah penuh", "buku berserakan di sampingnya"
+- Specific surface + lighting + time: "meja rias jam 6 pagi, sinar matahari masuk dari jendela samping"
+- Specific scenario: "cafe outdoor sebelum date jam 5 sore"
+- Real lighting: "lampu kuning warm dari plafon", "cahaya laptop layar"
+- Mild imperfection: "ada tisu sisa makeup", "cangkir kopi setengah penuh di samping"
 
-Quality bar: each environment should feel like a frame from a real friend's phone, NOT a stock photo or studio set.`
+Quality bar: each env should feel like a frame from a real friend's phone where this product would naturally show up, NOT a stock studio set.`
 
 export async function suggestEnvironments(
   productInfo: ProductInfo,
@@ -385,10 +406,13 @@ The entire script across ALL scenes is ONE continuous moment from ONE person's l
 
 Goal: open with a SPECIFIC CONCRETE MOMENT (not vague advice) that creates a curiosity gap. The product is revealed as the ANSWER to that moment. Soft, story-first, not sales-first.
 
-═══ TWO ANCHOR PATTERNS — pick one that fits the product ═══
+═══ PATTERN PICK BY CONTENT TYPE ═══
+- review     → use PATTERN 2 (Storytelling Moment) — honest peer-to-peer feels more credible with self-narrated story
+- affiliate  → use either PATTERN 1 or PATTERN 2 (pick whichever feels more believable for the product)
+- unboxing   → use PATTERN 3 (Anticipation Moment) — the package arriving is the hook
 
-PATTERN 1 — RELATIONSHIP / EMOTION ANCHOR (best for personal-use products: parfum, skincare, clothes, accessories)
-  Scene 1: someone close to the user (pacar/temen/keluarga/kantor) reacts unexpectedly to something — create curiosity about WHY
+PATTERN 1 — RELATIONSHIP / EMOTION ANCHOR
+  Scene 1: someone close (pacar/temen/keluarga/bos) reacts unexpectedly to something — create curiosity WHY
   Scene 2: reveal product as the cause, casual brand mention, describe characteristic
   Scene 3: target persona benefit + soft CTA (affiliate only)
 
@@ -397,19 +421,29 @@ PATTERN 1 — RELATIONSHIP / EMOTION ANCHOR (best for personal-use products: par
     Scene 2: "Ternyata gara-gara ini, parfum Octarine Elixir One. Wanginya tuh kayak campuran kayu sama vanilla, soft tapi nyangkut"
     Scene 3: "Buat kalian yang lagi PDKT atau LDR-an, parfum kayak gini investment banget. Link-nya aku taro di keranjang kuning ya"
 
-  VARIATION ideas: "Adek aku sampe iri liat...", "Bos aku tiba-tiba puji...", "Sahabat aku ngerasa ada yang beda dari aku..."
+  VARIATIONS: "Adek aku sampe iri liat...", "Bos aku tiba-tiba puji...", "Sahabat aku ngerasa ada yang beda dari aku..."
 
-PATTERN 2 — STORYTELLING MOMENT ANCHOR (best for everyday/utility products + parfum)
-  Scene 1: drop into a very specific past moment that creates an open loop ("kemarin di X, ada Y yang Z...")
+PATTERN 2 — STORYTELLING MOMENT ANCHOR
+  Scene 1: drop into a very specific past moment that opens a loop ("kemarin di X, ada Y yang Z...")
   Scene 2: reveal what they asked / what the product is, casual brand mention + characteristic
-  Scene 3: technical benefit + use case + soft CTA (affiliate only)
+  Scene 3: technical benefit + use case + soft CTA (affiliate) OR honest closing (review)
 
-  EXAMPLE (parfum, affiliate):
+  EXAMPLE (parfum, review):
     Scene 1: "Kemarin di lift kantor, ada cowok dari lantai 5 sengaja nyamperin gue cuma buat satu pertanyaan..."
     Scene 2: "'Parfum lo apa?' — ini nih jawabannya, Octarine Elixir One. Aromanya bukan tipe yang nendang langsung, tapi nyangkut lama"
-    Scene 3: "Notes-nya woody-fresh, kemasannya travel-size jadi gampang ditenteng. Kalo penasaran, link-nya aku taro di bio"
+    Scene 3: "Notes-nya woody-fresh, kemasannya travel-size jadi gampang ditenteng. Honestly worth-it sih untuk daily use"
 
-  VARIATION ideas: "Tadi pagi di Starbucks, barista nanya...", "Di gym kemarin, satu PT sampe...", "Kemarin nonton bareng temen, dia tiba-tiba..."
+  VARIATIONS: "Tadi pagi di Starbucks, barista nanya...", "Di gym kemarin, satu PT sampe...", "Kemarin nonton bareng temen, dia tiba-tiba..."
+
+PATTERN 3 — ANTICIPATION MOMENT (UNBOXING only)
+  Scene 1: package just arrived, not opened yet — anticipation, curiosity about what's inside (NO product revealed)
+  Scene 2: open / reveal — genuine first reaction, casual brand mention
+  Scene 3: characteristic / use case / emotional closing, NO CTA
+
+  EXAMPLE (parfum, unboxing):
+    Scene 1: "Akhirnya nyampe juga... berat banget paketnya, padahal yang aku pesen kecil"
+    Scene 2: "Oh ini dia, parfum Octarine Elixir One. Kemasannya berasa premium banget, kayu-kayuan vibe"
+    Scene 3: "Aromanya literally bikin kayak masuk ke butik dewasa. Aku jatuh cinta jujur"
 
 ═══ HOW TO BUILD THE SCRIPT ═══
 
