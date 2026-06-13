@@ -148,10 +148,10 @@ export function TiktokStudioPage() {
                       </p>
                       <div className="flex items-center gap-3 text-xs text-muted-foreground mt-3">
                         <span>{c.sceneCount} scene</span>
-                        {c.doneCount > 0 && (
+                        {c.videoDoneCount > 0 && (
                           <span className="inline-flex items-center gap-1 text-emerald-400">
                             <CheckCircle2 className="h-3 w-3" />
-                            {c.doneCount}
+                            {c.videoDoneCount}
                           </span>
                         )}
                         {c.errorCount > 0 && (

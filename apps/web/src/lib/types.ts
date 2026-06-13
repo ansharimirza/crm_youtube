@@ -230,7 +230,13 @@ export type TiktokMode = 'ugc' | 'pov_hand' | 'mirror_check'
 export type TiktokContentType = 'review' | 'unboxing' | 'affiliate'
 export type TiktokImageStatus = 'queued' | 'processing' | 'done' | 'error'
 export type TiktokSceneStatus = 'pending' | 'queued' | 'processing' | 'done' | 'error'
-export type TiktokCampaignStatus = 'draft' | 'generating' | 'done' | 'error'
+export type TiktokCampaignStatus =
+  | 'draft'               // script generated, awaits user approval
+  | 'generating_images'   // phase 1 in progress
+  | 'images_done'         // phase 1 done, awaits video gen
+  | 'generating_videos'   // phase 2 in progress
+  | 'done'                // all videos done
+  | 'error'
 
 export interface TiktokProductInfo {
   name: string
@@ -241,25 +247,29 @@ export interface TiktokProductInfo {
   detected_text?: string
 }
 
+export interface TiktokFrame {
+  id: number
+  campaignId: number
+  frameNumber: number
+  imagePrompt: string
+  status: 'draft' | 'queued' | 'processing' | 'done' | 'error'
+  imageUrl: string | null
+  imagePath: string | null
+  attempts: number
+  errorMsg: string | null
+  createdAt: string
+  updatedAt: string
+}
+
 export interface TiktokScene {
   id: number
   campaignId: number
   sceneNumber: number
   script: string
-  imagePrompt: string        // start frame prompt
-  endImagePrompt: string     // end frame prompt
   veoPrompt: string
   duration: number
-  // Image phase — START frame
-  imageStatus: TiktokImageStatus
-  imageUrl: string | null
-  imageAttempts: number
-  imageErrorMsg: string | null
-  // Image phase — END frame
-  endImageStatus: TiktokImageStatus
-  endImageUrl: string | null
-  endImageAttempts: number
-  endImageErrorMsg: string | null
+  startFrameId: number | null
+  endFrameId: number | null
   // Video phase
   status: TiktokSceneStatus
   progress: number
@@ -290,6 +300,7 @@ export interface TiktokCampaign {
   baseModelPath: string | null
   productUrl: string | null
   scenes?: TiktokScene[]
+  frames?: TiktokFrame[]
   createdAt: string
   updatedAt: string
 }
@@ -303,8 +314,9 @@ export interface TiktokCampaignSummary {
   productName: string
   status: TiktokCampaignStatus
   sceneCount: number
-  imageDoneCount: number
-  doneCount: number
+  frameDoneCount: number
+  frameTotal: number
+  videoDoneCount: number
   processingCount: number
   errorCount: number
   thumbnail: string | null

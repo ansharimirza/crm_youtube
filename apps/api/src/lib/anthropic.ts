@@ -284,13 +284,23 @@ Suggest 5 environments for a TikTok video featuring this product. ${langInstr}`,
 export type TiktokMode = 'ugc' | 'pov_hand' | 'mirror_check'
 export type ContentType = 'review' | 'unboxing' | 'affiliate'
 
+export interface FrameDescriptor {
+  frame_number: number          // 0-indexed; for N scenes there are N+1 frames
+  image_prompt: string          // Nano Banana prompt for this still frame
+}
+
 export interface SceneScript {
   scene_number: number
   duration: number              // 4, 6, or 8 seconds
-  script: string                // VO dialogue — what person says (matches lipsync)
-  start_image_prompt: string    // Opening still frame (Nano Banana)
-  end_image_prompt: string      // Closing still frame (Nano Banana)
-  veo_prompt: string            // Motion description start → end (Veo)
+  script: string                // VO dialogue
+  start_frame_index: number     // 0-indexed reference into frames[]
+  end_frame_index: number       // 0-indexed reference into frames[]
+  veo_prompt: string            // Motion description from start frame → end frame
+}
+
+export interface ScriptDraft {
+  frames: FrameDescriptor[]
+  scenes: SceneScript[]
 }
 
 const MODE_DESCRIPTIONS = {
@@ -398,14 +408,12 @@ Each scene morphs from a START IMAGE to an END IMAGE over its duration. Design e
 - looking forward → tilting head
 - closed expression → reacting
 
-For visual continuity ACROSS scenes:
-- The end_image_prompt of scene N should describe a pose/position similar to the start_image_prompt of scene N+1 (same setting, same outfit, slightly different pose). Continuity isn't pixel-perfect but should feel cohesive.
+Visual continuity is automatic because consecutive scenes SHARE a frame (frame i = end of scene i = start of scene i+1).
 
 Per scene output:
-- start_image_prompt: describes the OPENING still frame
-- end_image_prompt: describes the CLOSING still frame
-- veo_prompt: describes the motion from start to end (body movement, expression change, hand action). Include lighting/mood cue.
-- script: the dialogue line in Bahasa Indonesia (or English per LANGUAGE setting)
+- start_frame_index, end_frame_index: integer references into frames[] (scene i uses indices i and i+1)
+- veo_prompt: describes the motion from the start frame to the end frame
+- script: the dialogue line in campaign language
 
 ═══════════════════════════════════════════════════
 HOOK PATTERNS for scene 1 (NO product, mid-action only):
@@ -456,10 +464,11 @@ Generate a complete scene-by-scene script. Each scene must have:
    - Any phrase that sounds like an Instagram ad caption from 2020
    - Multiple exclamation marks in a row ("Amazing!!!")
    - Generic emoji-equivalents in text ("OMG", "WOW")
-4. start_image_prompt: Nano Banana prompt for the OPENING still frame of this scene.
-5. end_image_prompt:   Nano Banana prompt for the CLOSING still frame of this scene.
+4. start_frame_index + end_frame_index: integer indices into the frames[] array.
+   For scene i: start_frame_index = i, end_frame_index = i + 1
+   The frames themselves are described in the frames[] array (Nano Banana prompts).
 
-   ═══ IDENTITY ANCHORING — HARDEST RULE (applies to BOTH frames) ═══
+   ═══ IDENTITY ANCHORING — HARDEST RULE (applies to EVERY frame in frames[]) ═══
    The reference images define WHO and WHAT. Never override them with text.
    - NEVER describe gender, hair, age, ethnicity, skin tone, face shape, body type
    - NEVER describe clothing color/style unless instructing a change from the reference
@@ -476,12 +485,12 @@ Generate a complete scene-by-scene script. Each scene must have:
    - Lighting (warm, natural, golden hour)
    - 9:16 vertical composition
 
-   ═══ DIFFERENCE between start and end frame ═══
-   start_image_prompt = the pose/position when the scene BEGINS.
-   end_image_prompt   = the pose/position when the scene ENDS, naturally connecting to scene N+1's start.
-   The difference should be a clear small action (turn head, pick up product, lean forward, raise hand, smile shift).
-
-   Scene 1 special rule: NO product visible in start_image_prompt. End frame of scene 1 may begin to show the product if scene 2 is the reveal.
+   ═══ FRAMES ARRAY — design rules ═══
+   For N scenes, you generate N+1 frames numbered 0..N.
+   Frame 0 = scene 1 opening (NO product visible)
+   Frame N = scene N closing
+   Frame i (0<i<N) is BOTH the end of scene i AND the start of scene i+1 — describe it once, used twice.
+   Consecutive frames should show small action progression: turn head, pick up product, lean forward, raise hand, smile shift.
 
    ═══ ANTI-AI / REALISM (append per mode) ═══
    For UGC: "shot on iPhone 15 Pro, vertical, candid, natural skin texture with pores, ambient room lighting, slight motion blur, small environmental clutter visible, slightly desaturated natural color grading"
@@ -550,15 +559,22 @@ CRITICAL RULES:
 - Output JSON ONLY, no preamble, no markdown
 - Schema:
 {
+  "frames": [
+    { "frame_number": 0, "image_prompt": "(Nano Banana prompt for opening still)" },
+    { "frame_number": 1, "image_prompt": "(Nano Banana prompt for next still — same setting as frame 0, slightly different pose)" },
+    { "frame_number": 2, "image_prompt": "..." }
+    // ... N+1 frames total for N scenes
+  ],
   "scenes": [
     {
       "scene_number": 1,
       "duration": 8,
       "script": "(dialogue in campaign language)",
-      "start_image_prompt": "(Nano Banana prompt for OPENING frame)",
-      "end_image_prompt": "(Nano Banana prompt for CLOSING frame)",
-      "veo_prompt": "PROMPT: ... CAMERA: ... DETAILS: ... CONTEXT: AMBIENT: ... DIALOGUE: ... ENVIRONMENT: ... NEGATIVE: ..."
+      "start_frame_index": 0,
+      "end_frame_index": 1,
+      "veo_prompt": "PROMPT: <motion from frame 0 to frame 1>. CAMERA: ... DETAILS: ... CONTEXT: AMBIENT: ... DIALOGUE: ... ENVIRONMENT: ... NEGATIVE: ..."
     }
+    // ... N scenes total
   ]
 }
 - Each scene must flow into the next (narrative arc)
@@ -580,8 +596,9 @@ export async function generateSceneScripts(params: {
   environment: string
   sceneCount: number
   aspectRatio: '9:16' | '16:9' | '1:1'
-}): Promise<SceneScript[]> {
+}): Promise<ScriptDraft> {
   const { apiKey, mode, contentType, language, productInfo, environment, sceneCount, aspectRatio } = params
+  const frameCount = sceneCount + 1
 
   const system = buildSceneScriptSystem(mode, contentType, language)
 
@@ -596,7 +613,18 @@ export async function generateSceneScripts(params: {
     messages: [
       {
         role: 'user',
-        content: `Generate a ${sceneCount}-scene TikTok video script for this product:
+        content: `Generate a ${sceneCount}-scene TikTok video script using ${frameCount} shared frames.
+
+Frame ${frameCount} is sole frame ${sceneCount}'s end frame. Frames in between are SHARED — frame[i+1] is the end of scene[i] AND the start of scene[i+1]. This makes the visual flow seamless.
+
+For each scene[i]:
+- start_frame_index = i
+- end_frame_index = i + 1
+- script: dialogue spoken during this scene
+- veo_prompt: motion from frame[i] to frame[i+1]
+
+Frame 0 (scene 1 opening): NO product visible. Mid-action moment.
+Frame 1-${sceneCount}: product may appear organically starting around frame 1 or 2.
 
 PRODUCT:
 Name: ${productInfo.name}
@@ -607,9 +635,20 @@ Key Features: ${productInfo.key_features.join(', ')}
 
 ENVIRONMENT: ${environment}
 
-FORMAT: ${aspectRatio} aspect ratio (${aspectRatio === '9:16' ? 'vertical for TikTok/Reels/Shorts' : aspectRatio === '1:1' ? 'square' : 'horizontal'})
+FORMAT: ${aspectRatio} aspect ratio
 
-Generate exactly ${sceneCount} scenes that tell a cohesive story matching the mode and content type guidelines.`,
+Output JSON with both arrays. Schema:
+{
+  "frames": [
+    { "frame_number": 0, "image_prompt": "..." },
+    { "frame_number": 1, "image_prompt": "..." },
+    ...${frameCount - 1} more
+  ],
+  "scenes": [
+    { "scene_number": 1, "duration": 8, "script": "...", "start_frame_index": 0, "end_frame_index": 1, "veo_prompt": "..." },
+    ...${sceneCount - 1} more
+  ]
+}`,
       },
     ],
   })
@@ -618,13 +657,17 @@ Generate exactly ${sceneCount} scenes that tell a cohesive story matching the mo
   if (!text || text.type !== 'text') throw new AnthropicError('No text in response')
 
   try {
-    const parsed = JSON.parse(stripJsonFences(text.text)) as { scenes: SceneScript[] }
-    // Force 8s per scene (Veo max) so the mid-scene cut has room to breathe
-    return parsed.scenes.slice(0, sceneCount).map((s, i) => ({
+    const parsed = JSON.parse(stripJsonFences(text.text)) as ScriptDraft
+    // Clamp arrays + enforce 8s
+    const frames = parsed.frames.slice(0, frameCount).map((f, i) => ({ ...f, frame_number: i }))
+    const scenes = parsed.scenes.slice(0, sceneCount).map((s, i) => ({
       ...s,
       scene_number: i + 1,
       duration: 8,
+      start_frame_index: i,
+      end_frame_index: i + 1,
     }))
+    return { frames, scenes }
   } catch (err) {
     throw new AnthropicError(`Failed to parse scene JSON: ${err instanceof Error ? err.message : err}`)
   }

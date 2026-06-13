@@ -1,13 +1,12 @@
-// TikTok Studio worker — two-phase orchestration:
-// Phase 1 (image): Nano Banana generates a still frame per scene using
-//   character + product reference images. Runs automatically after campaign create.
-// Phase 2 (video): Veo animates the still frame into a 4-8s clip when the user
-//   clicks "Generate Video".
+// TikTok Studio worker — frame-based pipeline.
+// Phase 1: each frame in tiktok_frames is generated independently (Nano Banana).
+// Phase 2: each scene uses scene.startFrame.imagePath + scene.endFrame.imagePath
+//          as Veo first_image + last_image so the clip morphs between them.
 
 import { eq } from 'drizzle-orm'
 import { writeFile, mkdir } from 'node:fs/promises'
 import { join, extname } from 'node:path'
-import { db, tiktokScenes, tiktokCampaigns, users } from '../db'
+import { db, tiktokScenes, tiktokCampaigns, tiktokFrames, users } from '../db'
 import {
   generateVeo, generateGrok, mapVeoAspectToGrok,
   getHistory, isTerminalStatus, GeminigenError,
@@ -22,8 +21,13 @@ const MAX_CONCURRENT_IMG = 4
 const MAX_CONCURRENT_VID = 5
 const MAX_ATTEMPTS = 8
 const RETRY_DELAY_MS = 12_000
+const VID_POLL_INTERVAL_MS = 10_000
+const VID_POLL_TIMEOUT_MS = 30 * 60_000
+const IMG_POLL_INTERVAL_MS = 3_000
+const IMG_POLL_TIMEOUT_MS = 5 * 60_000
 
-// Validation errors are deterministic — retrying 8x won't help. Stop early.
+const UPLOADS_DIR = process.env.UPLOADS_DIR || '/app/data/uploads'
+
 function isPermanentValidationError(msg: string): boolean {
   const m = msg.toLowerCase()
   return (
@@ -32,34 +36,23 @@ function isPermanentValidationError(msg: string): boolean {
     m.includes('validation failed') ||
     m.includes('not allowed') ||
     m.includes('unsupported') ||
-    m.includes('invalid prompt') ||
     m.includes('content policy') ||
     m.includes('400 bad request')
   )
 }
 
-// Video polling
-const VID_POLL_INTERVAL_MS = 10_000
-const VID_POLL_TIMEOUT_MS = 30 * 60_000
-
-// Image polling
-const IMG_POLL_INTERVAL_MS = 3_000
-const IMG_POLL_TIMEOUT_MS = 5 * 60_000
-
-const UPLOADS_DIR = process.env.UPLOADS_DIR || '/app/data/uploads'
-
 // =========== queues ===========
 let imgActive = 0
 let vidActive = 0
-const imgQueue: number[] = []
-const vidQueue: number[] = []
+const imgQueue: number[] = []  // frame IDs
+const vidQueue: number[] = []  // scene IDs
 
 function pumpImg() {
   while (imgActive < MAX_CONCURRENT_IMG && imgQueue.length > 0) {
     const id = imgQueue.shift()!
     imgActive++
-    runSceneImage(id)
-      .catch((err) => console.error(`[tiktok-img:${id}]`, err))
+    runFrame(id)
+      .catch((err) => console.error(`[tiktok-frame:${id}]`, err))
       .finally(() => { imgActive--; pumpImg() })
   }
 }
@@ -74,8 +67,8 @@ function pumpVid() {
   }
 }
 
-export function enqueueTiktokImage(sceneId: number) {
-  if (!imgQueue.includes(sceneId)) imgQueue.push(sceneId)
+export function enqueueTiktokFrame(frameId: number) {
+  if (!imgQueue.includes(frameId)) imgQueue.push(frameId)
   pumpImg()
 }
 
@@ -90,7 +83,6 @@ async function getApiKey(userId: number): Promise<string | null> {
   return process.env.GEMINIGEN_API_KEY ?? null
 }
 
-// Helper: download a URL and save to local uploads dir, return local path
 async function downloadToLocal(url: string, subdir: string): Promise<string> {
   const res = await fetch(url)
   if (!res.ok) throw new Error(`Download failed: HTTP ${res.status}`)
@@ -109,36 +101,24 @@ function mapAspectImage(a: '9:16' | '16:9' | '1:1'): ImageAspectRatio {
 }
 
 /* ==========================================================
-   PHASE 1 — IMAGE GENERATION (Nano Banana) for START + END frames
+   PHASE 1 — FRAME GENERATION (Nano Banana)
    ========================================================== */
 
-type FrameKind = 'start' | 'end'
-
-async function runSceneFrame(sceneId: number, kind: FrameKind) {
-  const scene = await db.query.tiktokScenes.findFirst({
-    where: eq(tiktokScenes.id, sceneId),
+async function runFrame(frameId: number) {
+  const frame = await db.query.tiktokFrames.findFirst({
+    where: eq(tiktokFrames.id, frameId),
     with: { campaign: true },
   })
-  if (!scene) return
-  const campaign = scene.campaign
-
-  const isEnd = kind === 'end'
-  const prompt = isEnd ? scene.endImagePrompt : scene.imagePrompt
-  // Skip end frame entirely if Claude didn't produce one (e.g. legacy scenes)
-  if (!prompt?.trim()) {
-    const setField = isEnd
-      ? { endImageStatus: 'done' as const, updatedAt: new Date() }
-      : { imageStatus: 'done' as const, updatedAt: new Date() }
-    await db.update(tiktokScenes).set(setField).where(eq(tiktokScenes.id, sceneId))
-    return
-  }
+  if (!frame) return
+  const campaign = frame.campaign
 
   const apiKey = await getApiKey(campaign.userId)
   if (!apiKey) {
-    const setField = isEnd
-      ? { endImageStatus: 'error' as const, endImageErrorMsg: 'GeminiGen API key belum diatur. Set di Settings.', updatedAt: new Date() }
-      : { imageStatus: 'error' as const, imageErrorMsg: 'GeminiGen API key belum diatur. Set di Settings.', updatedAt: new Date() }
-    await db.update(tiktokScenes).set(setField).where(eq(tiktokScenes.id, sceneId))
+    await db.update(tiktokFrames).set({
+      status: 'error',
+      errorMsg: 'GeminiGen API key belum diatur. Set di Settings.',
+      updatedAt: new Date(),
+    }).where(eq(tiktokFrames.id, frameId))
     return
   }
 
@@ -147,28 +127,30 @@ async function runSceneFrame(sceneId: number, kind: FrameKind) {
     campaign.productImagePath,
   ].filter((p): p is string => !!p)
 
-  let attempts = (isEnd ? scene.endImageAttempts : scene.imageAttempts) ?? 0
+  let attempts = frame.attempts ?? 0
   let lastError = ''
 
   while (attempts < MAX_ATTEMPTS) {
     attempts++
     try {
-      const startSet = isEnd
-        ? { endImageStatus: 'processing' as const, endImageAttempts: attempts, endImageErrorMsg: null, updatedAt: new Date() }
-        : { imageStatus: 'processing' as const, imageAttempts: attempts, imageErrorMsg: null, updatedAt: new Date() }
-      await db.update(tiktokScenes).set(startSet).where(eq(tiktokScenes.id, sceneId))
+      await db.update(tiktokFrames).set({
+        status: 'processing',
+        attempts,
+        errorMsg: null,
+        updatedAt: new Date(),
+      }).where(eq(tiktokFrames.id, frameId))
 
-      console.log(`[tiktok-img:${sceneId}:${kind}] Attempt ${attempts}/${MAX_ATTEMPTS}, ${refs.length} ref images`)
+      console.log(`[tiktok-frame:${frameId}] Attempt ${attempts}/${MAX_ATTEMPTS}, ${refs.length} ref images`)
 
       const refHints = refs.length === 2
-        ? 'CRITICAL: Reference image 1 is the PERSON\'s face/body — keep their exact facial features, skin tone, hair, and build. Reference image 2 is the PRODUCT — keep its exact packaging, label text, color, and shape. The output must show THIS person holding THIS product. Do not invent new face or new product.\n\n'
+        ? 'CRITICAL: Reference image 1 is the PERSON\'s face/body — keep their exact facial features, skin tone, hair, and build. Reference image 2 is the PRODUCT — keep its exact packaging, label text, color, and shape.\n\n'
         : refs.length === 1
-        ? 'CRITICAL: Use the reference image as the SOURCE identity — keep its exact appearance, do not reinterpret.\n\n'
+        ? 'CRITICAL: Use the reference image as the SOURCE identity — keep its exact appearance.\n\n'
         : ''
 
       const initial = await generateImage({
         apiKey,
-        prompt: refHints + prompt,
+        prompt: refHints + frame.imagePrompt,
         model: 'nano-banana-pro',
         aspectRatio: mapAspectImage(campaign.aspectRatio as '9:16' | '16:9' | '1:1'),
         resolution: campaign.resolution === '1080p' ? '2K' : '1K',
@@ -176,10 +158,10 @@ async function runSceneFrame(sceneId: number, kind: FrameKind) {
         refImagePaths: refs,
       })
 
-      const uuidSet = isEnd
-        ? { endImageGeminigenUuid: initial.uuid, updatedAt: new Date() }
-        : { imageGeminigenUuid: initial.uuid, updatedAt: new Date() }
-      await db.update(tiktokScenes).set(uuidSet).where(eq(tiktokScenes.id, sceneId))
+      await db.update(tiktokFrames).set({
+        geminigenUuid: initial.uuid,
+        updatedAt: new Date(),
+      }).where(eq(tiktokFrames.id, frameId))
 
       let imageUrl: string | null = null
       if (initial.status === 2 && initial.generate_result) {
@@ -198,60 +180,66 @@ async function runSceneFrame(sceneId: number, kind: FrameKind) {
               ?? null
             break
           }
-          if (h.status === 3) {
-            throw new GeminigenError(h.error_message || 'Image gen failed')
-          }
+          if (h.status === 3) throw new GeminigenError(h.error_message || 'Image gen failed')
         }
         if (!imageUrl) throw new GeminigenError('Image polling timeout')
       }
 
-      const localPath = await downloadToLocal(imageUrl, 'tiktok-images')
+      const localPath = await downloadToLocal(imageUrl, 'tiktok-frames')
 
-      const doneSet = isEnd
-        ? { endImageStatus: 'done' as const, endImageUrl: imageUrl, endImagePath: localPath, endImageErrorMsg: null, updatedAt: new Date() }
-        : { imageStatus: 'done' as const, imageUrl, imagePath: localPath, imageErrorMsg: null, updatedAt: new Date() }
-      await db.update(tiktokScenes).set(doneSet).where(eq(tiktokScenes.id, sceneId))
+      await db.update(tiktokFrames).set({
+        status: 'done',
+        imageUrl,
+        imagePath: localPath,
+        errorMsg: null,
+        updatedAt: new Date(),
+      }).where(eq(tiktokFrames.id, frameId))
 
-      console.log(`[tiktok-img:${sceneId}:${kind}] DONE`)
+      console.log(`[tiktok-frame:${frameId}] DONE`)
+      await maybeMarkImagesDone(campaign.id)
       return
     } catch (err) {
       lastError = err instanceof Error ? err.message : String(err)
-      console.warn(`[tiktok-img:${sceneId}:${kind}] Error attempt ${attempts}: ${lastError}`)
+      console.warn(`[tiktok-frame:${frameId}] Error attempt ${attempts}: ${lastError}`)
     }
 
     if (isPermanentValidationError(lastError)) {
-      const errSet = isEnd
-        ? { endImageStatus: 'error' as const, endImageErrorMsg: `Validation error (no retry): ${lastError}`, updatedAt: new Date() }
-        : { imageStatus: 'error' as const, imageErrorMsg: `Validation error (no retry): ${lastError}`, updatedAt: new Date() }
-      await db.update(tiktokScenes).set(errSet).where(eq(tiktokScenes.id, sceneId))
-      console.warn(`[tiktok-img:${sceneId}] PERMANENT validation error, not retrying: ${lastError}`)
+      await db.update(tiktokFrames).set({
+        status: 'error',
+        errorMsg: `Validation error (no retry): ${lastError}`,
+        updatedAt: new Date(),
+      }).where(eq(tiktokFrames.id, frameId))
       return
     }
 
-    await db.update(tiktokScenes).set({
-      imageErrorMsg: `Attempt ${attempts}: ${lastError}. Retrying...`,
+    await db.update(tiktokFrames).set({
+      errorMsg: `Attempt ${attempts}: ${lastError}. Retrying...`,
       updatedAt: new Date(),
-    }).where(eq(tiktokScenes.id, sceneId))
+    }).where(eq(tiktokFrames.id, frameId))
 
-    if (attempts < MAX_ATTEMPTS) {
-      await new Promise(r => setTimeout(r, RETRY_DELAY_MS))
-    }
+    if (attempts < MAX_ATTEMPTS) await new Promise(r => setTimeout(r, RETRY_DELAY_MS))
   }
 
-  const finalSet = isEnd
-    ? { endImageStatus: 'error' as const, endImageErrorMsg: `Gagal setelah ${MAX_ATTEMPTS}x. Last: ${lastError}`, updatedAt: new Date() }
-    : { imageStatus: 'error' as const, imageErrorMsg: `Gagal setelah ${MAX_ATTEMPTS}x. Last: ${lastError}`, updatedAt: new Date() }
-  await db.update(tiktokScenes).set(finalSet).where(eq(tiktokScenes.id, sceneId))
+  await db.update(tiktokFrames).set({
+    status: 'error',
+    errorMsg: `Gagal setelah ${MAX_ATTEMPTS}x. Last: ${lastError}`,
+    updatedAt: new Date(),
+  }).where(eq(tiktokFrames.id, frameId))
 }
 
-// Wrapper called by the queue: generates BOTH start and end frames sequentially
-async function runSceneImage(sceneId: number) {
-  await runSceneFrame(sceneId, 'start')
-  await runSceneFrame(sceneId, 'end')
+async function maybeMarkImagesDone(campaignId: number) {
+  const frames = await db.query.tiktokFrames.findMany({ where: eq(tiktokFrames.campaignId, campaignId) })
+  if (frames.length === 0) return
+  const allDone = frames.every(f => f.status === 'done')
+  if (allDone) {
+    await db.update(tiktokCampaigns)
+      .set({ status: 'images_done', updatedAt: new Date() })
+      .where(eq(tiktokCampaigns.id, campaignId))
+  }
 }
 
 /* ==========================================================
-   PHASE 2 — VIDEO GENERATION (Veo)
+   PHASE 2 — VIDEO GENERATION (Veo / Grok / Kling)
    ========================================================== */
 
 async function pollVideoUntilDone(uuid: string, apiKey: string, sceneId: number) {
@@ -270,7 +258,11 @@ async function pollVideoUntilDone(uuid: string, apiKey: string, sceneId: number)
 async function runSceneVideo(sceneId: number) {
   const scene = await db.query.tiktokScenes.findFirst({
     where: eq(tiktokScenes.id, sceneId),
-    with: { campaign: true },
+    with: {
+      campaign: true,
+      startFrame: true,
+      endFrame: true,
+    },
   })
   if (!scene) return
   const campaign = scene.campaign
@@ -285,18 +277,16 @@ async function runSceneVideo(sceneId: number) {
     return
   }
 
-  // Start frame and end frame become Veo's first_image and last_image, so
-  // the clip morphs from one to the other (the user's "start/end frame" workflow).
-  // Fall back to product image when a frame failed to generate.
-  const firstImagePath = scene.imagePath ?? campaign.productImagePath ?? null
-  const lastImagePath = scene.endImagePath ?? null
+  // Veo first_image = scene's start frame, last_image = scene's end frame.
+  // Fall back to product image if a frame is missing for some reason.
+  const firstImagePath = scene.startFrame?.imagePath ?? campaign.productImagePath ?? null
+  const lastImagePath = scene.endFrame?.imagePath ?? null
 
   let attempts = scene.attempts ?? 0
   let lastError = ''
 
   while (attempts < MAX_ATTEMPTS) {
     attempts++
-
     try {
       await db.update(tiktokScenes).set({
         status: 'processing',
@@ -314,11 +304,8 @@ async function runSceneVideo(sceneId: number) {
             apiKey,
             prompt: scene.veoPrompt,
             model: 'grok-3',
-            // Grok max is 720p; downshift 1080p requests
             resolution: (campaign.resolution === '1080p' ? '720p' : campaign.resolution) as GrokResolution,
             aspectRatio: mapVeoAspectToGrok(campaign.aspectRatio as '16:9' | '9:16' | '1:1'),
-            // Grok allowed: 6/10/15 — snap our 8s default to 10
-            // Real Grok API caps duration at 10s despite the docs listing 15.
             duration: (scene.duration <= 6 ? 6 : 10) as GrokDuration,
             mode: 'normal',
             refImagePaths: [firstImagePath, lastImagePath].filter((p): p is string => !!p),
@@ -378,7 +365,6 @@ async function runSceneVideo(sceneId: number) {
         title: `TikTok scene ${scene.sceneNumber} validation error`,
         message: `"${campaign.title}" Scene ${scene.sceneNumber}: ${lastError}`,
       })
-      console.warn(`[tiktok-vid:${sceneId}] PERMANENT validation error, not retrying: ${lastError}`)
       return
     }
 
@@ -387,9 +373,7 @@ async function runSceneVideo(sceneId: number) {
       updatedAt: new Date(),
     }).where(eq(tiktokScenes.id, sceneId))
 
-    if (attempts < MAX_ATTEMPTS) {
-      await new Promise((r) => setTimeout(r, RETRY_DELAY_MS))
-    }
+    if (attempts < MAX_ATTEMPTS) await new Promise(r => setTimeout(r, RETRY_DELAY_MS))
   }
 
   await db.update(tiktokScenes).set({
@@ -410,8 +394,8 @@ async function maybeMarkCampaignDone(campaignId: number, userId: number) {
   const allScenes = await db.query.tiktokScenes.findMany({
     where: eq(tiktokScenes.campaignId, campaignId),
   })
-  const allVideoDone = allScenes.every((s) => s.status === 'done')
-  if (allVideoDone && allScenes.length > 0) {
+  const allDone = allScenes.every((s) => s.status === 'done')
+  if (allDone && allScenes.length > 0) {
     await db.update(tiktokCampaigns)
       .set({ status: 'done', updatedAt: new Date() })
       .where(eq(tiktokCampaigns.id, campaignId))
@@ -421,29 +405,25 @@ async function maybeMarkCampaignDone(campaignId: number, userId: number) {
         userId,
         type: 'tiktok_campaign_done',
         title: `TikTok campaign selesai`,
-        message: `"${campaign.title}" — semua ${allScenes.length} scene berhasil generate video`,
+        message: `"${campaign.title}" — semua ${allScenes.length} scene selesai`,
       })
     }
   }
 }
 
 export async function recoverPendingTiktokScenes() {
-  const pending = await db.query.tiktokScenes.findMany({
-    where: (s, { or, eq }) => or(
-      eq(s.imageStatus, 'queued'),
-      eq(s.imageStatus, 'processing'),
-      eq(s.status, 'queued'),
-      eq(s.status, 'processing'),
-    ),
+  const pendingFrames = await db.query.tiktokFrames.findMany({
+    where: (f, { or, eq }) => or(eq(f.status, 'queued'), eq(f.status, 'processing')),
   })
-  for (const s of pending) {
-    if (s.imageStatus === 'queued' || s.imageStatus === 'processing') {
-      console.log(`[tiktok-img] Recovering scene ${s.id} (image_status: ${s.imageStatus})`)
-      enqueueTiktokImage(s.id)
-    }
-    if (s.status === 'queued' || s.status === 'processing') {
-      console.log(`[tiktok-vid] Recovering scene ${s.id} (status: ${s.status})`)
-      enqueueTiktokVideo(s.id)
-    }
+  for (const f of pendingFrames) {
+    console.log(`[tiktok-frame] Recovering #${f.id}`)
+    enqueueTiktokFrame(f.id)
+  }
+  const pendingScenes = await db.query.tiktokScenes.findMany({
+    where: (s, { or, eq }) => or(eq(s.status, 'queued'), eq(s.status, 'processing')),
+  })
+  for (const s of pendingScenes) {
+    console.log(`[tiktok-vid] Recovering #${s.id}`)
+    enqueueTiktokVideo(s.id)
   }
 }

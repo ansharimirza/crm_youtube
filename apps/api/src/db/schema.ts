@@ -138,8 +138,26 @@ export const tiktokCampaigns = pgTable('tiktok_campaigns', {
   // Video model name — Veo (veo-2, veo-3.1, veo-3.1-fast, veo-3.1-lite) or Grok (grok-3)
   veoModel: varchar('veo_model', { length: 32 }).default('veo-2').notNull(),
   sceneCount: integer('scene_count').default(4).notNull(),
-  // State
-  status: varchar('status', { length: 16, enum: ['draft', 'generating', 'done', 'error'] }).default('draft').notNull(),
+  // State — 'draft' = script generated, awaiting user approval to start image gen;
+  //         'generating_images' = phase 1; 'images_done' = ready for video; 'generating_videos' = phase 2; 'done'/'error'
+  status: varchar('status', { length: 24, enum: ['draft', 'generating_images', 'images_done', 'generating_videos', 'done', 'error'] }).default('draft').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+})
+
+// Frames — shared across scenes. For N scenes, there are N+1 frames where
+// scene[i].endFrameId === scene[i+1].startFrameId (same physical frame).
+export const tiktokFrames = pgTable('tiktok_frames', {
+  id: serial('id').primaryKey(),
+  campaignId: integer('campaign_id').references(() => tiktokCampaigns.id, { onDelete: 'cascade' }).notNull(),
+  frameNumber: integer('frame_number').notNull(), // 0-indexed within campaign
+  imagePrompt: text('image_prompt').default('').notNull(),
+  status: varchar('status', { length: 16, enum: ['draft', 'queued', 'processing', 'done', 'error'] }).default('draft').notNull(),
+  imageUrl: text('image_url'),
+  imagePath: text('image_path'),
+  geminigenUuid: varchar('geminigen_uuid', { length: 64 }),
+  attempts: integer('attempts').default(0).notNull(),
+  errorMsg: text('error_msg'),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
 })
@@ -148,28 +166,14 @@ export const tiktokScenes = pgTable('tiktok_scenes', {
   id: serial('id').primaryKey(),
   campaignId: integer('campaign_id').references(() => tiktokCampaigns.id, { onDelete: 'cascade' }).notNull(),
   sceneNumber: integer('scene_number').notNull(),
-  // Script (from Claude)
-  script: text('script').notNull(),       // VO/narration text — editable
-  // Phase 1 frames: start frame uses existing image* columns, end frame is new
-  imagePrompt: text('image_prompt').default('').notNull(),         // START frame prompt
-  endImagePrompt: text('end_image_prompt').default('').notNull(),  // END frame prompt (NEW)
-  veoPrompt: text('veo_prompt').notNull(), // technical prompt for Veo (uses both frames)
+  // Script (from Claude — editable in review)
+  script: text('script').notNull(),
+  veoPrompt: text('veo_prompt').notNull(),
   duration: integer('duration').default(8).notNull(),
-  // Image generation (Phase 1) — START frame
-  imageStatus: varchar('image_status', { length: 16, enum: ['queued', 'processing', 'done', 'error'] }).default('queued').notNull(),
-  imageUrl: text('image_url'),
-  imagePath: text('image_path'),
-  imageGeminigenUuid: varchar('image_geminigen_uuid', { length: 64 }),
-  imageAttempts: integer('image_attempts').default(0).notNull(),
-  imageErrorMsg: text('image_error_msg'),
-  // Image generation (Phase 1) — END frame (NEW)
-  endImageStatus: varchar('end_image_status', { length: 16, enum: ['queued', 'processing', 'done', 'error'] }).default('queued').notNull(),
-  endImageUrl: text('end_image_url'),
-  endImagePath: text('end_image_path'),
-  endImageGeminigenUuid: varchar('end_image_geminigen_uuid', { length: 64 }),
-  endImageAttempts: integer('end_image_attempts').default(0).notNull(),
-  endImageErrorMsg: text('end_image_error_msg'),
-  // Video generation (Phase 2 — kicks in when user clicks "Generate Video")
+  // References to shared frames
+  startFrameId: integer('start_frame_id').references(() => tiktokFrames.id, { onDelete: 'set null' }),
+  endFrameId: integer('end_frame_id').references(() => tiktokFrames.id, { onDelete: 'set null' }),
+  // Video generation
   status: varchar('status', { length: 16, enum: ['pending', 'queued', 'processing', 'done', 'error'] }).default('pending').notNull(),
   progress: integer('progress').default(0).notNull(),
   attempts: integer('attempts').default(0).notNull(),
@@ -303,10 +307,17 @@ export const veoScenesRelations = relations(veoScenes, ({ one }) => ({
 export const tiktokCampaignsRelations = relations(tiktokCampaigns, ({ one, many }) => ({
   user: one(users, { fields: [tiktokCampaigns.userId], references: [users.id] }),
   scenes: many(tiktokScenes),
+  frames: many(tiktokFrames),
 }))
 
 export const tiktokScenesRelations = relations(tiktokScenes, ({ one }) => ({
   campaign: one(tiktokCampaigns, { fields: [tiktokScenes.campaignId], references: [tiktokCampaigns.id] }),
+  startFrame: one(tiktokFrames, { fields: [tiktokScenes.startFrameId], references: [tiktokFrames.id], relationName: 'startFrame' }),
+  endFrame: one(tiktokFrames, { fields: [tiktokScenes.endFrameId], references: [tiktokFrames.id], relationName: 'endFrame' }),
+}))
+
+export const tiktokFramesRelations = relations(tiktokFrames, ({ one }) => ({
+  campaign: one(tiktokCampaigns, { fields: [tiktokFrames.campaignId], references: [tiktokCampaigns.id] }),
 }))
 
 export const youtubeAccountsRelations = relations(youtubeAccounts, ({ one, many }) => ({
@@ -338,6 +349,7 @@ export type VeoProject = typeof veoProjects.$inferSelect
 export type VeoScene = typeof veoScenes.$inferSelect
 export type TiktokCampaign = typeof tiktokCampaigns.$inferSelect
 export type TiktokScene = typeof tiktokScenes.$inferSelect
+export type TiktokFrame = typeof tiktokFrames.$inferSelect
 export type AiInfluencer = typeof aiInfluencers.$inferSelect
 export type AiInfluencerVariant = typeof aiInfluencerVariants.$inferSelect
 export type MotionVideo = typeof motionVideos.$inferSelect
