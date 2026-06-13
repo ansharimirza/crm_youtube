@@ -216,8 +216,15 @@ Each suggestion: 5-15 words in the requested language. Output JSON ONLY:
   "environments": ["env 1", ..., "env 10"]
 }
 
-═══ MOST IMPORTANT RULE ═══
-Suggestions must be tied to the PRODUCT'S actual use context. Ask yourself: where would someone USE this product, NOTICE this product on someone else, or APPLY this product? Use that as the anchor.
+═══ MOST IMPORTANT RULE — every single suggestion must pass this test ═══
+For EACH of the 10 suggestions, you MUST be able to answer YES to all 3:
+1. Does this location relate to USING / APPLYING / NOTICING this specific product?
+2. Could someone hold or use the product believably in this location?
+3. Is the location specific (with time of day + activity), not just "a wooden table"?
+
+If ANY suggestion fails one of these → DELETE and replace with one that passes.
+
+DO NOT include suggestions like "meja kayu pojok kamar" or "rak buku tebal" unless you also specify the action ("meja kayu pojok kamar lagi siap-siap berangkat ngantor jam 7"). Bare aesthetic locations are REJECTED.
 
 Examples by category:
 
