@@ -12,6 +12,7 @@ import {
   enrichProductFromTitleAndImage,
   suggestEnvironments,
   generateSceneScripts,
+  generateHookVariants,
   AnthropicError,
   type TiktokMode,
   type ContentType,
@@ -349,6 +350,51 @@ export const tiktokRoutes = new Elysia({ prefix: '/api/tiktok' })
   })
 
   // === REVISE SCENE IMAGE (regenerate Nano Banana with appended instruction) ===
+  // === GENERATE HOOK VARIANTS for a scene (Claude gives 3 fresh openers) ===
+  .post('/scenes/:id/hook-variants', async ({ params, user, set }) => {
+    const id = Number(params.id)
+    const scene = await db.query.tiktokScenes.findFirst({
+      where: eq(tiktokScenes.id, id),
+      with: { campaign: true },
+    })
+    if (!scene || scene.campaign.userId !== user.id) {
+      set.status = 404
+      return { error: 'Not found' }
+    }
+    const apiKey = await getAnthropicKey(user.id)
+    if (!apiKey) {
+      set.status = 400
+      return { error: 'Anthropic API key belum diatur' }
+    }
+
+    const product: ProductInfo = {
+      name: scene.campaign.productName,
+      description: scene.campaign.productDescription,
+      category: '',
+      key_features: [],
+      brand: '',
+      detected_text: '',
+    }
+
+    try {
+      const variants = await generateHookVariants({
+        apiKey,
+        mode: scene.campaign.mode as TiktokMode,
+        contentType: scene.campaign.contentType as ContentType,
+        language: scene.campaign.language as 'id' | 'en',
+        productInfo: product,
+        environment: scene.campaign.environment,
+        currentScript: scene.script,
+      })
+      return { ok: true, variants }
+    } catch (err) {
+      const msg = err instanceof AnthropicError ? err.message
+        : err instanceof Error ? err.message : String(err)
+      set.status = 500
+      return { ok: false, error: msg }
+    }
+  })
+
   // === EDIT SCENE (script + veo_prompt) — allowed any time before video gen ===
   .patch('/scenes/:id', async ({ params, body, user, set }) => {
     const id = Number(params.id)

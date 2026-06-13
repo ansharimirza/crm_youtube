@@ -343,6 +343,12 @@ export interface ScriptDraft {
   scenes: SceneScript[]
 }
 
+export interface HookVariant {
+  pattern_label: string  // e.g. "Storytelling Moment", "Relationship", "Fresh Angle"
+  script: string         // dialogue for scene 1
+  why_strong: string     // 1-line rationale — what makes this hook work
+}
+
 const MODE_DESCRIPTIONS = {
   ugc: `UGC (User-Generated Content) — Casual, authentic style. Person on camera talking about the product. Like a real customer testimonial. Selfie-style or set up tripod. Natural lighting. Genuine reactions.`,
   pov_hand: `POV Hand Review — First-person perspective. Camera shows hands holding/using the product. No face. Close-up product interaction. Hands of various skin tones natural. Common for unboxing, demo, and ASMR-style content.`,
@@ -680,6 +686,94 @@ CRITICAL RULES:
 - For UGC: include voiceover suggestions in script (italicized in narrative)
 - For POV Hand: focus on hand actions, never show face
 - For Mirror Check: incorporate mirror reflection prominently`
+}
+
+/* ===========================================================
+   HOOK VARIANTS — generate 3 alternative scene-1 openers
+   =========================================================== */
+
+const HOOK_VARIANTS_SYSTEM = `You are a TikTok creative director who specializes in scroll-stopping FIRST LINES (3 seconds = make or break).
+
+The user has an existing scene 1 dialog but wants 3 FRESH ALTERNATIVE openers to A/B test.
+
+═══ MANDATORY DIVERSITY ═══
+The 3 variants MUST cover different angles. Pick 3 from this menu (no duplicates):
+- Relationship moment ("Pacarku/temenku/bos-ku tiba-tiba [reaksi]...")
+- Storytelling observation ("Kemarin di [tempat spesifik], ada [orang] yang [aksi]...")
+- Specific number/claim ("[N] hari pake [produk], [N] dari [N] orang [reaksi]...")
+- Counter-intuitive observation ("Padahal harganya gak sampe X, tapi...")
+- Fresh-angle question to viewer ("Kalian pernah ngerasa pas [scenario spesifik]...")
+- Mid-action reveal ("Lagi siap-siap pergi nih, tiba-tiba inget satu hal...")
+
+═══ ANTI-CLICHÉ BANS — these openers are OVERUSED, never generate them ═══
+- "Pacarku tadi pagi peluk-peluk seharian" (overused on parfum TikTok 2024-2025)
+- "Kemarin di lift kantor ada cowok yang nyamperin" (overused)
+- "Sebelum kalian keluar pastiin bawa ini" (generic template)
+- Any "Hai guys / Halo / PSA" greeting
+- "Yang lagi viral di TikTok Shop"
+
+═══ QUALITY RULES ═══
+- Each variant ≤20 words (8s clip × 2.5 wps)
+- Each opens MID-MOMENT — like the camera caught you talking
+- Each must be BELIEVABLE — could plausibly have happened
+- Each must FIT THE PRODUCT and CONTENT TYPE
+- Include filler words natural to ID Gen-Z ("eh", "tuh", "sih", "kayanya", "deh")
+
+Output JSON ONLY:
+{
+  "variants": [
+    { "pattern_label": "(short label, e.g. 'Storytelling Moment')", "script": "(dialog ≤20 words)", "why_strong": "(1-sentence rationale)" },
+    { ... },
+    { ... }
+  ]
+}`
+
+export async function generateHookVariants(params: {
+  apiKey: string
+  mode: TiktokMode
+  contentType: ContentType
+  language: 'id' | 'en'
+  productInfo: ProductInfo
+  environment: string
+  currentScript: string
+}): Promise<HookVariant[]> {
+  const { apiKey, mode, contentType, language, productInfo, environment, currentScript } = params
+
+  const client = buildClient(apiKey)
+  const res = await client.messages.create({
+    model: MODEL,
+    max_tokens: 2000,
+    thinking: { type: 'adaptive' },
+    system: [
+      { type: 'text', text: HOOK_VARIANTS_SYSTEM, cache_control: { type: 'ephemeral' } },
+    ],
+    messages: [{
+      role: 'user',
+      content: `Generate 3 alternative scene-1 openers for this campaign.
+
+PRODUCT: ${productInfo.name} (${productInfo.brand}) — ${productInfo.category}
+DESCRIPTION: ${productInfo.description}
+MODE: ${mode}
+CONTENT TYPE: ${contentType}
+ENVIRONMENT: ${environment}
+LANGUAGE: ${language === 'id' ? 'Bahasa Indonesia Gen-Z natural' : 'English casual'}
+
+CURRENT scene 1 dialog (do NOT repeat this style):
+"${currentScript}"
+
+Generate 3 FRESH variants — different angles, different patterns. Avoid the clichés banned above.`,
+    }],
+  })
+
+  const text = res.content.find((b) => b.type === 'text')
+  if (!text || text.type !== 'text') throw new AnthropicError('No text in response')
+
+  try {
+    const parsed = JSON.parse(stripJsonFences(text.text)) as { variants: HookVariant[] }
+    return parsed.variants.slice(0, 3)
+  } catch (err) {
+    throw new AnthropicError(`Failed to parse hook variants: ${err instanceof Error ? err.message : err}`)
+  }
 }
 
 export async function generateSceneScripts(params: {

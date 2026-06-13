@@ -282,6 +282,12 @@ function FrameDraftCard({ frame, onUpdate }: { frame: TiktokFrame; onUpdate: () 
   )
 }
 
+interface HookVariant {
+  pattern_label: string
+  script: string
+  why_strong: string
+}
+
 function SceneDraftCard({ scene, startFrame, endFrame, onUpdate }: {
   scene: TiktokScene
   startFrame?: TiktokFrame
@@ -291,6 +297,7 @@ function SceneDraftCard({ scene, startFrame, endFrame, onUpdate }: {
   const [script, setScript] = useState(scene.script)
   const [veoPrompt, setVeoPrompt] = useState(scene.veoPrompt)
   const [showVeo, setShowVeo] = useState(false)
+  const [variants, setVariants] = useState<HookVariant[] | null>(null)
   useEffect(() => { setScript(scene.script); setVeoPrompt(scene.veoPrompt) }, [scene.id, scene.script, scene.veoPrompt])
 
   const editMutation = useMutation({
@@ -299,7 +306,14 @@ function SceneDraftCard({ scene, startFrame, endFrame, onUpdate }: {
     onError: (e: Error) => toast.error(e.message),
   })
 
+  const variantsMutation = useMutation({
+    mutationFn: () => api.post<{ ok: boolean; variants: HookVariant[] }>(`/api/tiktok/scenes/${scene.id}/hook-variants`, {}),
+    onSuccess: (data) => { setVariants(data.variants); toast.success('3 hook variants siap') },
+    onError: (e: Error) => toast.error(e.message),
+  })
+
   const dirty = script !== scene.script || veoPrompt !== scene.veoPrompt
+  const isScene1 = scene.sceneNumber === 1
 
   return (
     <Card>
@@ -319,6 +333,45 @@ function SceneDraftCard({ scene, startFrame, endFrame, onUpdate }: {
             className="text-xs"
           />
         </div>
+
+        {/* Hook variants — scene 1 only */}
+        {isScene1 && (
+          <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 space-y-2">
+            <div className="flex items-center justify-between gap-2">
+              <div className="text-[10px] uppercase tracking-wide text-amber-300 font-semibold flex items-center gap-1">
+                <Sparkles className="h-3 w-3" />
+                Hook A/B — generate 3 alternative openers
+              </div>
+              <Button
+                size="sm" variant="outline" className="h-7 text-[10px]"
+                disabled={variantsMutation.isPending}
+                onClick={() => variantsMutation.mutate()}
+              >
+                {variantsMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Wand2 className="h-3 w-3" />}
+                {variants ? 'Regenerate 3' : 'Generate Variants'}
+              </Button>
+            </div>
+            {variants && (
+              <div className="space-y-1.5">
+                {variants.map((v, i) => (
+                  <div key={i} className="rounded border bg-background/40 p-2 space-y-1">
+                    <div className="flex items-center gap-2">
+                      <Badge variant="outline" className="text-[9px]">{v.pattern_label}</Badge>
+                      <Button size="sm" variant="ghost" className="h-6 text-[10px] ml-auto"
+                        onClick={() => { setScript(v.script); toast.success('Hook diganti — klik Simpan') }}
+                      >
+                        Pakai ini →
+                      </Button>
+                    </div>
+                    <p className="text-xs leading-snug">{v.script}</p>
+                    <p className="text-[10px] text-muted-foreground italic">💡 {v.why_strong}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
         <button onClick={() => setShowVeo(v => !v)} className="text-[10px] text-muted-foreground hover:text-foreground">
           {showVeo ? '▾ Hide' : '▸ Show'} Veo motion prompt
         </button>
