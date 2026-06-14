@@ -19,7 +19,7 @@ import { notify } from './notifications'
 
 const MAX_CONCURRENT_IMG = 4
 const MAX_CONCURRENT_VID = 5
-const MAX_ATTEMPTS = 8           // image phase still auto-retries (frames are cheap + chained)
+const MAX_ATTEMPTS = 2           // image phase: 1 retry on transient network error, then give up
 const MAX_VIDEO_ATTEMPTS = 1     // video phase: NO auto-retry — user manually retries via UI
 const RETRY_DELAY_MS = 12_000
 const VID_POLL_INTERVAL_MS = 10_000

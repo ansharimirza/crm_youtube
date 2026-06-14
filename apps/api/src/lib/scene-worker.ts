@@ -15,7 +15,7 @@ import {
 import { notify } from './notifications'
 
 const MAX_CONCURRENT = 5
-const MAX_ATTEMPTS = 20            // hard cap supaya tidak runaway
+const MAX_ATTEMPTS = 1             // 1x — video gen MAHAL, user yg decide retry manual
 const POLL_INTERVAL_MS = 10_000    // 10s polling
 const POLL_TIMEOUT_MS = 30 * 60_000 // 30 menit max wait per attempt
 const RETRY_DELAY_MS = 15_000      // 15s sebelum coba lagi setelah fail
