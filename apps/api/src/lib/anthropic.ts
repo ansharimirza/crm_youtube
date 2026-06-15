@@ -14,6 +14,28 @@ function buildClient(apiKey: string): Anthropic {
   return new Anthropic({ apiKey })
 }
 
+// Log token usage per Claude call so we can spot leaks fast
+export function logUsage(label: string, res: Anthropic.Messages.Message) {
+  const u = res.usage
+  if (!u) return
+  console.log(`[anthropic:${label}] in=${u.input_tokens} out=${u.output_tokens} cache_create=${u.cache_creation_input_tokens ?? 0} cache_read=${u.cache_read_input_tokens ?? 0}`)
+}
+
+// Extract the text block from a Claude response. When `thinking` is enabled and
+// the model hits max_tokens mid-thought, the response can contain ONLY a thinking
+// block and no text — surface a clear reason instead of a cryptic "No text".
+function extractText(res: Anthropic.Messages.Message): string {
+  const block = res.content.find((b) => b.type === 'text')
+  if (block && block.type === 'text') return block.text
+  if (res.stop_reason === 'max_tokens') {
+    throw new AnthropicError('Respons Claude terpotong (kena limit max_tokens) sebelum sempat menulis teks. Naikkan max_tokens atau matikan thinking.')
+  }
+  if (res.stop_reason === 'refusal') {
+    throw new AnthropicError('Claude menolak memproses request ini.')
+  }
+  throw new AnthropicError('No text in response')
+}
+
 // Claude sometimes wraps JSON in markdown fences despite "JSON ONLY" instruction
 function stripJsonFences(raw: string): string {
   return raw.trim()
@@ -81,11 +103,10 @@ export async function identifyProductFromImage(
     ],
   })
 
-  const text = res.content.find((b) => b.type === 'text')
-  if (!text || text.type !== 'text') throw new AnthropicError('No text in response')
+  const text = extractText(res)
 
   try {
-    return JSON.parse(stripJsonFences(text.text)) as ProductInfo
+    return JSON.parse(stripJsonFences(text)) as ProductInfo
   } catch (err) {
     throw new AnthropicError(`Failed to parse product JSON: ${err instanceof Error ? err.message : err}`)
   }
@@ -158,11 +179,10 @@ export async function enrichProductFromTitleAndImage(
     messages: [{ role: 'user', content: content as never }],
   })
 
-  const text = res.content.find((b) => b.type === 'text')
-  if (!text || text.type !== 'text') throw new AnthropicError('No text in response')
+  const text = extractText(res)
 
   try {
-    return JSON.parse(stripJsonFences(text.text)) as ProductInfo
+    return JSON.parse(stripJsonFences(text)) as ProductInfo
   } catch (err) {
     throw new AnthropicError(`Failed to parse enrich JSON: ${err instanceof Error ? err.message : err}`)
   }
@@ -195,11 +215,10 @@ export async function extractProductFromHtml(
     ],
   })
 
-  const text = res.content.find((b) => b.type === 'text')
-  if (!text || text.type !== 'text') throw new AnthropicError('No text in response')
+  const text = extractText(res)
 
   try {
-    return JSON.parse(stripJsonFences(text.text)) as ProductInfo
+    return JSON.parse(stripJsonFences(text)) as ProductInfo
   } catch (err) {
     throw new AnthropicError(`Failed to parse extraction JSON: ${err instanceof Error ? err.message : err}`)
   }
@@ -302,11 +321,10 @@ Suggest 5 environments for a TikTok video featuring this product. ${langInstr}`,
     ],
   })
 
-  const text = res.content.find((b) => b.type === 'text')
-  if (!text || text.type !== 'text') throw new AnthropicError('No text in response')
+  const text = extractText(res)
 
   try {
-    const parsed = JSON.parse(stripJsonFences(text.text)) as { environments: string[] }
+    const parsed = JSON.parse(stripJsonFences(text)) as { environments: string[] }
     const cleaned = parsed.environments.map(s => s.trim()).filter(Boolean)
     if (cleaned.length < 10) {
       console.warn(`[suggestEnvironments] Claude only returned ${cleaned.length} — expected 10`)
@@ -779,8 +797,8 @@ export async function generateHookVariants(params: {
   const client = buildClient(apiKey)
   const res = await client.messages.create({
     model: MODEL,
-    max_tokens: 2000,
-    thinking: { type: 'adaptive' },
+    max_tokens: 1500,  // small task — 3 short variants don't need 2K
+    // adaptive thinking removed: overkill for short opener generation
     system: [
       { type: 'text', text: HOOK_VARIANTS_SYSTEM, cache_control: { type: 'ephemeral' } },
     ],
@@ -802,11 +820,10 @@ Generate 3 FRESH variants — different angles, different patterns. Avoid the cl
     }],
   })
 
-  const text = res.content.find((b) => b.type === 'text')
-  if (!text || text.type !== 'text') throw new AnthropicError('No text in response')
+  const text = extractText(res)
 
   try {
-    const parsed = JSON.parse(stripJsonFences(text.text)) as { variants: HookVariant[] }
+    const parsed = JSON.parse(stripJsonFences(text)) as { variants: HookVariant[] }
     return parsed.variants.slice(0, 3)
   } catch (err) {
     throw new AnthropicError(`Failed to parse hook variants: ${err instanceof Error ? err.message : err}`)
@@ -831,8 +848,9 @@ export async function generateSceneScripts(params: {
   const client = buildClient(apiKey)
   const res = await client.messages.create({
     model: MODEL,
-    max_tokens: 16000,
-    thinking: { type: 'adaptive' },
+    max_tokens: 6000,                       // lowered from 16K — output rarely exceeds 4K
+    // adaptive thinking removed: was burning 20-50K thinking tokens per call.
+    // Explicit examples in the system prompt now provide enough scaffolding.
     system: [
       { type: 'text', text: system, cache_control: { type: 'ephemeral' } },
     ],
@@ -879,11 +897,10 @@ Output JSON with both arrays. Schema:
     ],
   })
 
-  const text = res.content.find((b) => b.type === 'text')
-  if (!text || text.type !== 'text') throw new AnthropicError('No text in response')
+  const text = extractText(res)
 
   try {
-    const parsed = JSON.parse(stripJsonFences(text.text)) as ScriptDraft
+    const parsed = JSON.parse(stripJsonFences(text)) as ScriptDraft
     // Clamp arrays + enforce 8s
     const frames = parsed.frames.slice(0, frameCount).map((f, i) => ({ ...f, frame_number: i }))
     const scenes = parsed.scenes.slice(0, sceneCount).map((s, i) => ({
