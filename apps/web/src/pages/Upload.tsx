@@ -16,6 +16,12 @@ import { formatBytes, cn } from '@/lib/utils'
 import { toast } from 'sonner'
 import type { Category, Video, YoutubeAccount } from '@/lib/types'
 
+// Stored UTC ISO -> value a datetime-local input expects (local WIB wall-clock).
+function utcToLocalInput(iso: string): string {
+  const d = new Date(iso)
+  return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16)
+}
+
 const PRIVACY_OPTIONS = [
   { value: 'public',   label: 'Public',   icon: Globe2, desc: 'Semua orang bisa lihat' },
   { value: 'unlisted', label: 'Unlisted', icon: Link2,  desc: 'Hanya yang punya link' },
@@ -112,7 +118,7 @@ export function UploadPage() {
         privacy: video.privacy,
         language: video.language,
         made_for_kids: video.madeForKids,
-        scheduled_at: video.scheduledAt ? video.scheduledAt.slice(0, 16) : '',
+        scheduled_at: video.scheduledAt ? utcToLocalInput(video.scheduledAt) : '',
         youtube_account_id: video.youtubeAccountId ? String(video.youtubeAccountId) : '',
       })
     }).catch(() => toast.error('Gagal memuat video'))
@@ -174,7 +180,13 @@ export function UploadPage() {
         fd.append('video', videoFile)
         if (thumbFile) fd.append('thumbnail', thumbFile)
         Object.entries(form).forEach(([key, value]) => {
-          if (value !== '' && value !== false) {
+          if (value === '' || value === false) return
+          if (key === 'scheduled_at') {
+            // datetime-local is naive local (WIB) time. Convert to a real UTC
+            // instant so the server stores the exact moment picked — otherwise
+            // the UTC server reads "06:00" as 06:00 UTC (= 13:00 WIB).
+            fd.append(key, new Date(value as string).toISOString())
+          } else {
             fd.append(key, String(value))
           }
         })
