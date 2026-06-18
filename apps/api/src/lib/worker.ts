@@ -15,6 +15,7 @@ export interface WorkerUploadParams {
   privacy: 'public' | 'private' | 'unlisted'
   language: string
   madeForKids: boolean
+  publishAt?: string | null   // RFC3339 — schedule auto-publish on YouTube
   accessToken: string
   refreshToken: string | null
 }
@@ -41,6 +42,7 @@ export async function uploadViaWorker(
   form.append('privacy', params.privacy)
   form.append('language', params.language)
   form.append('made_for_kids', String(params.madeForKids))
+  if (params.publishAt) form.append('publish_at', params.publishAt)
   form.append('access_token', params.accessToken)
   if (params.refreshToken) form.append('refresh_token', params.refreshToken)
 

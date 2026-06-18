@@ -75,8 +75,13 @@ const app = new Elysia()
               defaultAudioLanguage: body.language,
             },
             status: {
-              privacyStatus: body.privacy as 'public' | 'private' | 'unlisted',
+              // Scheduled publish requires the video to start private; YouTube
+              // flips it to public automatically at publishAt.
+              privacyStatus: body.publish_at
+                ? 'private'
+                : (body.privacy as 'public' | 'private' | 'unlisted'),
               selfDeclaredMadeForKids: body.made_for_kids === 'true',
+              ...(body.publish_at ? { publishAt: body.publish_at } : {}),
             },
           },
           media: { body: createReadStream(videoPath) },
@@ -124,6 +129,7 @@ const app = new Elysia()
         privacy: t.String(),
         language: t.String(),
         made_for_kids: t.String(),
+        publish_at: t.Optional(t.String()),  // RFC3339 — schedule auto-publish on YouTube
         access_token: t.String(),
         refresh_token: t.Optional(t.String()),
       }),

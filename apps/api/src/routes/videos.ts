@@ -58,6 +58,9 @@ async function runUpload(videoId: number, isRetry = false) {
     const attemptNum = (video.attempts ?? 0) + 1
     await log(videoId, `Upload ${isRetry ? 'retry' : 'dimulai'} (attempt ${attemptNum}) ke channel: ${video.youtubeAccount.channelTitle ?? video.youtubeAccount.email}`)
 
+    // Future scheduledAt -> upload now as private + publishAt; YouTube auto-publishes.
+    const scheduledFuture = video.scheduledAt != null && new Date(video.scheduledAt).getTime() > Date.now()
+
     const result = await uploadViaWorker({
       videoPath: video.videoPath,
       thumbnailPath: video.thumbnailPath,
@@ -68,6 +71,7 @@ async function runUpload(videoId: number, isRetry = false) {
       privacy: video.privacy as 'public' | 'private' | 'unlisted',
       language: video.language,
       madeForKids: video.madeForKids,
+      publishAt: scheduledFuture ? new Date(video.scheduledAt!).toISOString() : null,
       accessToken: video.youtubeAccount.accessToken,
       refreshToken: video.youtubeAccount.refreshToken,
     })
@@ -75,7 +79,8 @@ async function runUpload(videoId: number, isRetry = false) {
     if (result.ok) {
       await db.update(videos)
         .set({
-          status: 'done',
+          // Keep 'scheduled' badge while it waits on YouTube; otherwise it's live.
+          status: scheduledFuture ? 'scheduled' : 'done',
           progress: 100,
           youtubeId: result.videoId,
           youtubeUrl: result.url,
@@ -83,15 +88,19 @@ async function runUpload(videoId: number, isRetry = false) {
           updatedAt: new Date(),
         })
         .where(eq(videos.id, videoId))
-      await log(videoId, `Upload selesai: ${result.url}`)
+      await log(videoId, scheduledFuture
+        ? `Upload selesai, dijadwalkan publish ${new Date(video.scheduledAt!).toLocaleString('id-ID')}: ${result.url}`
+        : `Upload selesai: ${result.url}`)
 
       // Notifikasi sukses
       await notify({
         userId: video.userId,
         videoId: video.id,
         type: 'upload_done',
-        title: 'Upload selesai',
-        message: `"${video.title}" berhasil diupload ke YouTube`,
+        title: scheduledFuture ? 'Video terjadwal di YouTube' : 'Upload selesai',
+        message: scheduledFuture
+          ? `"${video.title}" sudah di YouTube (private) & akan publish otomatis sesuai jadwal`
+          : `"${video.title}" berhasil diupload ke YouTube`,
       })
     } else {
       throw new Error(result.error)
@@ -226,9 +235,9 @@ export const videoRoutes = new Elysia({ prefix: '/api/videos' })
         scheduledAt,
       }).returning()
 
-      if (!scheduledAt) {
-        queueMicrotask(() => runUpload(video.id))
-      }
+      // Always upload now. If scheduled in the future, runUpload sends it to
+      // YouTube as private with publishAt so YouTube auto-publishes on time.
+      queueMicrotask(() => runUpload(video.id))
 
       return { ok: true, video }
     },
