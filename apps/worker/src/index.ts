@@ -27,7 +27,14 @@ function buildYouTube(accessToken: string, refreshToken?: string) {
     process.env.GOOGLE_CLIENT_ID,
     process.env.GOOGLE_CLIENT_SECRET
   )
-  oauth.setCredentials({ access_token: accessToken, refresh_token: refreshToken })
+  // The stored access_token is often already expired. With a refresh_token,
+  // set expiry_date in the past so google-auth refreshes it before the call —
+  // otherwise YouTube rejects the stale token with "Invalid Credentials".
+  oauth.setCredentials({
+    access_token: accessToken,
+    refresh_token: refreshToken,
+    ...(refreshToken ? { expiry_date: 1 } : {}),
+  })
   return google.youtube({ version: 'v3', auth: oauth })
 }
 
