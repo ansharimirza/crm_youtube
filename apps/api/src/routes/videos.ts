@@ -30,7 +30,7 @@ async function log(videoId: number, message: string, level: 'info' | 'warn' | 'e
   await db.insert(uploadLogs).values({ videoId, message, level })
 }
 
-async function runUpload(videoId: number, isRetry = false) {
+export async function runUpload(videoId: number, isRetry = false) {
   const video = await db.query.videos.findFirst({
     where: eq(videos.id, videoId),
     with: { youtubeAccount: true },

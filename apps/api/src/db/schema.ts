@@ -12,6 +12,7 @@ export const users = pgTable('users', {
   geminigenApiKey: text('geminigen_api_key'),
   geminiApiKey: text('gemini_api_key'),
   anthropicApiKey: text('anthropic_api_key'),
+  mcpApiKey: text('mcp_api_key'), // token for the MCP connector (Claude Desktop)
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
 })

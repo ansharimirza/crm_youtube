@@ -8,4 +8,6 @@ ALTER TABLE "veo_projects" ADD COLUMN IF NOT EXISTS "music_path" text;--> statem
 ALTER TABLE "veo_projects" ADD COLUMN IF NOT EXISTS "final_video_path" text;--> statement-breakpoint
 ALTER TABLE "veo_projects" ADD COLUMN IF NOT EXISTS "final_video_url" text;--> statement-breakpoint
 ALTER TABLE "veo_projects" ADD COLUMN IF NOT EXISTS "assemble_status" varchar(16) DEFAULT 'idle' NOT NULL;--> statement-breakpoint
-ALTER TABLE "veo_projects" ADD COLUMN IF NOT EXISTS "assemble_error" text;
+ALTER TABLE "veo_projects" ADD COLUMN IF NOT EXISTS "assemble_error" text;--> statement-breakpoint
+
+ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "mcp_api_key" text;
