@@ -160,6 +160,23 @@ async function refreshStatsForVideo(videoId: number) {
   }).where(eq(videos.id, videoId))
 }
 
+// On API restart, any video left 'uploading' was interrupted — the in-flight
+// upload died with the old process and there's nothing to resume it. Mark it
+// 'error' so the user can retry, instead of leaving it frozen forever.
+export async function recoverStuckUploads() {
+  const stuck = await db.query.videos.findMany({ where: eq(videos.status, 'uploading') })
+  for (const v of stuck) {
+    await db.update(videos).set({
+      status: 'error',
+      errorMsg: 'Upload terputus saat server restart — klik Retry untuk ulang.',
+      progress: 0,
+      updatedAt: new Date(),
+    }).where(eq(videos.id, v.id))
+    await log(v.id, 'Upload terputus saat restart, di-set error', 'warn')
+  }
+  if (stuck.length) console.log(`[recover] ${stuck.length} video 'uploading' nyangkut → di-set error`)
+}
+
 export const videoRoutes = new Elysia({ prefix: '/api/videos' })
   .use(authMiddleware)
   .get('/', async ({ user }) => {

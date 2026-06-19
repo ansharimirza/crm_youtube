@@ -3,7 +3,7 @@ import { cors } from '@elysiajs/cors'
 import { appendFile, mkdir } from 'node:fs/promises'
 import { join } from 'node:path'
 import { authRoutes } from './routes/auth'
-import { videoRoutes, systemRoutes } from './routes/videos'
+import { videoRoutes, systemRoutes, recoverStuckUploads } from './routes/videos'
 import { metaRoutes } from './routes/meta'
 import { youtubeAccountRoutes } from './routes/youtube-accounts'
 import { notificationRoutes } from './routes/notifications'
@@ -77,6 +77,7 @@ const app = new Elysia()
 console.log(`🚀 API listening on http://0.0.0.0:${PORT}`)
 
 // Recover scenes yang pending kalau API restart
+recoverStuckUploads().catch(err => console.error('[recover-uploads]', err))
 recoverPendingScenes().catch(err => console.error('[recover]', err))
 recoverPendingTiktokScenes().catch(err => console.error('[tiktok-recover]', err))
 recoverPendingInfluencers().catch(err => console.error('[influencer-recover]', err))

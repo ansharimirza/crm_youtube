@@ -3,6 +3,10 @@
 const WORKER_URL = process.env.WORKER_URL || 'http://worker:3001'
 const WORKER_API_KEY = process.env.WORKER_API_KEY || ''
 
+// Hard cap on the upload round-trip. Without this the fetch can hang forever if
+// the Indo->US connection dies mid-transfer, freezing the video at 'uploading'.
+const UPLOAD_TIMEOUT_MS = 60 * 60 * 1000 // 60 min — generous for big files, but not infinite
+
 const headers = () => ({ 'x-api-key': WORKER_API_KEY })
 
 export interface WorkerUploadParams {
@@ -46,11 +50,23 @@ export async function uploadViaWorker(
   form.append('access_token', params.accessToken)
   if (params.refreshToken) form.append('refresh_token', params.refreshToken)
 
-  const res = await fetch(`${WORKER_URL}/upload`, {
-    method: 'POST',
-    headers: headers(),
-    body: form,
-  })
+  let res: Response
+  try {
+    res = await fetch(`${WORKER_URL}/upload`, {
+      method: 'POST',
+      headers: headers(),
+      body: form,
+      signal: AbortSignal.timeout(UPLOAD_TIMEOUT_MS),
+    })
+  } catch (err) {
+    const timedOut = err instanceof Error && err.name === 'TimeoutError'
+    return {
+      ok: false,
+      error: timedOut
+        ? `Upload ke worker timeout (${UPLOAD_TIMEOUT_MS / 60000} menit) — transfer kemungkinan terputus`
+        : `Gagal konek ke worker: ${err instanceof Error ? err.message : String(err)}`,
+    }
+  }
 
   return await res.json() as WorkerResult<{ videoId: string; url: string }>
 }
