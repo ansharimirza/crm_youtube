@@ -29,7 +29,7 @@ const LANGUAGES = [
   { value: 'fr', label: 'French' },
 ]
 
-export function BulkUploadPage() {
+export function BulkUploadPage({ embedded = false }: { embedded?: boolean } = {}) {
   const navigate = useNavigate()
   const [files, setFiles] = useState<File[]>([])
   const [submitting, setSubmitting] = useState(false)
@@ -117,13 +117,15 @@ export function BulkUploadPage() {
 
   return (
     <div className="max-w-3xl mx-auto space-y-6 pb-20 md:pb-6">
-      <div>
-        <h1 className="text-2xl md:text-3xl font-bold tracking-tight flex items-center gap-2">
-          <Layers className="h-6 w-6 text-primary" />
-          Bulk Upload
-        </h1>
-        <p className="text-sm text-muted-foreground mt-1">Upload banyak video sekaligus dengan metadata sama</p>
-      </div>
+      {!embedded && (
+        <div>
+          <h1 className="text-2xl md:text-3xl font-bold tracking-tight flex items-center gap-2">
+            <Layers className="h-6 w-6 text-primary" />
+            Bulk Upload
+          </h1>
+          <p className="text-sm text-muted-foreground mt-1">Upload banyak video sekaligus dengan metadata sama</p>
+        </div>
+      )}
 
       <form onSubmit={handleSubmit} className="space-y-6">
         {/* Channel selector */}

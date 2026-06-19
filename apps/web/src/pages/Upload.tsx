@@ -51,7 +51,7 @@ interface FormData {
   youtube_account_id: string
 }
 
-export function UploadPage() {
+export function UploadPage({ embedded = false }: { embedded?: boolean } = {}) {
   const navigate = useNavigate()
   const [params] = useSearchParams()
   const editId = params.get('edit')
@@ -205,14 +205,16 @@ export function UploadPage() {
 
   return (
     <div className="max-w-3xl mx-auto space-y-6 pb-20 md:pb-6">
-      <div>
-        <h1 className="text-2xl md:text-3xl font-bold tracking-tight">
-          {isEdit ? 'Edit Metadata' : 'Upload Video Baru'}
-        </h1>
-        <p className="text-sm text-muted-foreground mt-1">
-          {isEdit ? 'Ubah informasi video' : 'Upload ke YouTube via VPS US untuk audiens Amerika'}
-        </p>
-      </div>
+      {!embedded && (
+        <div>
+          <h1 className="text-2xl md:text-3xl font-bold tracking-tight">
+            {isEdit ? 'Edit Metadata' : 'Upload Video Baru'}
+          </h1>
+          <p className="text-sm text-muted-foreground mt-1">
+            {isEdit ? 'Ubah informasi video' : 'Upload ke YouTube via VPS US untuk audiens Amerika'}
+          </p>
+        </div>
+      )}
 
       {isEdit && editVideo?.youtubeUrl && (
         <Card className="border-emerald-500/30 bg-emerald-500/5">

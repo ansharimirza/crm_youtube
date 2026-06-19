@@ -1,6 +1,6 @@
 import { NavLink } from 'react-router-dom'
 import {
-  LayoutDashboard, Upload, Settings, Youtube, Layers, Users, Film, Wand2, Flame,
+  LayoutDashboard, Upload, Settings, Youtube, Users, Film, Wand2, Flame,
   Menu, LogOut, FileText, Video, Sparkles, PersonStanding,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -22,7 +22,6 @@ interface NavItem {
 const navItems: NavItem[] = [
   { to: '/', icon: LayoutDashboard, label: 'Dashboard' },
   { to: '/upload', icon: Upload, label: 'Upload Video' },
-  { to: '/bulk-upload', icon: Layers, label: 'Bulk Upload' },
   { to: '/veo', icon: Film, label: 'Veo Studio' },
   { to: '/tiktok', icon: Video, label: 'TikTok Studio' },
   { to: '/influencer', icon: Sparkles, label: 'AI Influencer' },

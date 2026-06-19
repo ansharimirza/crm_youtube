@@ -7,8 +7,7 @@ import { MobileTopbar } from '@/components/MobileTopbar'
 import { LoginPage } from '@/pages/Login'
 import { RegisterPage } from '@/pages/Register'
 import { DashboardPage } from '@/pages/Dashboard'
-import { UploadPage } from '@/pages/Upload'
-import { BulkUploadPage } from '@/pages/BulkUpload'
+import { UploadHubPage } from '@/pages/UploadHub'
 import { SettingsPage } from '@/pages/Settings'
 import { AdminPage } from '@/pages/Admin'
 import { YoutubeCallbackPage } from '@/pages/YoutubeCallback'
@@ -78,8 +77,8 @@ export default function App() {
             <Route path="/youtube-callback" element={<YoutubeCallbackPage />} />
             <Route element={<ProtectedLayout />}>
               <Route path="/" element={<DashboardPage />} />
-              <Route path="/upload" element={<UploadPage />} />
-              <Route path="/bulk-upload" element={<BulkUploadPage />} />
+              <Route path="/upload" element={<UploadHubPage />} />
+              <Route path="/bulk-upload" element={<UploadHubPage defaultTab="bulk" />} />
               <Route path="/veo" element={<VeoStudioPage />} />
               <Route path="/veo/:id" element={<VeoProjectPage />} />
               <Route path="/analyzer" element={<AnalyzerPage />} />
