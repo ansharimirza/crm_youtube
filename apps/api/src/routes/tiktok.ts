@@ -153,7 +153,11 @@ export const tiktokRoutes = new Elysia({ prefix: '/api/tiktok' })
     }
 
     try {
-      const environments = await suggestEnvironments(body.product, body.language, apiKey)
+      const environments = await suggestEnvironments(
+        { ...body.product, detected_text: body.product.detected_text ?? '' },
+        body.language,
+        apiKey,
+      )
       return { ok: true, environments }
     } catch (err) {
       const msg = err instanceof AnthropicError ? err.message

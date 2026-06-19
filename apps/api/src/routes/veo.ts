@@ -14,6 +14,7 @@ import {
   type ImageResolution,
 } from '../lib/geminigen'
 import { generateCaption, GeminiError, type Platform } from '../lib/gemini'
+import { assembleProject, generateNarration } from '../lib/veo-assemble-worker'
 
 const UPLOAD_DIR = process.env.UPLOAD_DIR || join(process.cwd(), 'uploads')
 const VEO_DIR = join(UPLOAD_DIR, 'veo')
@@ -301,6 +302,7 @@ export const veoRoutes = new Elysia({ prefix: '/api/veo' })
       firstImagePath,
       lastImagePath,
       referenceVideoPath,
+      narrationText: body.narration_text ?? '',
       status: 'queued',
     }).returning()
 
@@ -323,6 +325,7 @@ export const veoRoutes = new Elysia({ prefix: '/api/veo' })
       duration: t.String(),
       aspect_ratio: t.Union([t.Literal('16:9'), t.Literal('9:16')]),
       mode_image: t.Optional(t.Union([t.Literal('frame'), t.Literal('ingredient')])),
+      narration_text: t.Optional(t.String({ maxLength: 5000 })),
     }),
   })
   .post('/scenes/:id/retry', async ({ params, user, set }) => {
@@ -351,7 +354,6 @@ export const veoRoutes = new Elysia({ prefix: '/api/veo' })
       videoUrl: null,
       thumbnailUrl: null,
       hasWatermark: 0,
-      uploadedAt: null,
       updatedAt: new Date(),
     }).where(eq(veoScenes.id, id))
 
@@ -405,7 +407,6 @@ export const veoRoutes = new Elysia({ prefix: '/api/veo' })
         videoUrl: null,
         thumbnailUrl: null,
         hasWatermark: 0,
-        uploadedAt: null,
         updatedAt: new Date(),
       }).where(eq(veoScenes.id, id))
       enqueueScene(id)
@@ -533,6 +534,60 @@ export const veoRoutes = new Elysia({ prefix: '/api/veo' })
       return { error: 'Image not set' }
     }
     return Bun.file(path)
+  })
+  // === FACELESS: set narration text + generate TTS for a scene ===
+  .post('/scenes/:id/narration', async ({ params, body, user, set }) => {
+    const id = Number(params.id)
+    const scene = await db.query.veoScenes.findFirst({ where: eq(veoScenes.id, id), with: { project: true } })
+    if (!scene || scene.project.userId !== user.id) {
+      set.status = 404
+      return { error: 'Not found' }
+    }
+    await db.update(veoScenes).set({ narrationText: body.narration_text, updatedAt: new Date() }).where(eq(veoScenes.id, id))
+    try {
+      const duration = await generateNarration(id, body.voice)
+      return { ok: true, duration }
+    } catch (err) {
+      set.status = 500
+      return { ok: false, error: err instanceof Error ? err.message : String(err) }
+    }
+  }, {
+    body: t.Object({
+      narration_text: t.String({ minLength: 1, maxLength: 5000 }),
+      voice: t.Optional(t.String()),
+    }),
+  })
+  // === FACELESS: assemble whole project into 1 final video ===
+  .post('/projects/:id/assemble', async ({ params, user, set }) => {
+    const id = Number(params.id)
+    const project = await db.query.veoProjects.findFirst({
+      where: and(eq(veoProjects.id, id), eq(veoProjects.userId, user.id)),
+    })
+    if (!project) {
+      set.status = 404
+      return { error: 'Not found' }
+    }
+    if (project.assembleStatus === 'rendering') {
+      set.status = 400
+      return { error: 'Sedang dirakit, tunggu selesai' }
+    }
+    await db.update(veoProjects)
+      .set({ assembleStatus: 'queued', assembleError: null, updatedAt: new Date() })
+      .where(eq(veoProjects.id, id))
+    queueMicrotask(() => assembleProject(id))
+    return { ok: true }
+  })
+  // === FACELESS: serve the assembled final video ===
+  .get('/projects/:id/final-video', async ({ params, user, set }) => {
+    const id = Number(params.id)
+    const project = await db.query.veoProjects.findFirst({
+      where: and(eq(veoProjects.id, id), eq(veoProjects.userId, user.id)),
+    })
+    if (!project || !project.finalVideoPath) {
+      set.status = 404
+      return { error: 'Belum ada video final' }
+    }
+    return Bun.file(project.finalVideoPath)
   })
   .delete('/scenes/:id', async ({ params, user, set }) => {
     const id = Number(params.id)

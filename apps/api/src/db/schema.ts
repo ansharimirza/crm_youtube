@@ -1,4 +1,4 @@
-import { pgTable, serial, text, timestamp, integer, boolean, varchar } from 'drizzle-orm/pg-core'
+import { pgTable, serial, text, timestamp, integer, boolean, varchar, real } from 'drizzle-orm/pg-core'
 import { relations } from 'drizzle-orm'
 
 // Akun aplikasi (login email/password)
@@ -22,6 +22,12 @@ export const veoProjects = pgTable('veo_projects', {
   userId: integer('user_id').references(() => users.id, { onDelete: 'cascade' }).notNull(),
   title: varchar('title', { length: 200 }).notNull(),
   description: text('description').default('').notNull(),
+  // Faceless-video auto-edit (assemble scene clips + narration -> final MP4)
+  musicPath: text('music_path'),
+  finalVideoPath: text('final_video_path'),
+  finalVideoUrl: text('final_video_url'),
+  assembleStatus: varchar('assemble_status', { length: 16, enum: ['idle', 'queued', 'rendering', 'done', 'error'] }).default('idle').notNull(),
+  assembleError: text('assemble_error'),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
 })
@@ -33,7 +39,8 @@ export const veoScenes = pgTable('veo_scenes', {
   // Input
   prompt: text('prompt').notNull(),
   imagePrompt: text('image_prompt'),
-  model: varchar('model', { length: 32, enum: ['veo-3.1', 'veo-3.1-fast', 'veo-3.1-lite', 'veo-2'] }).default('veo-2').notNull(),
+  // plain varchar — also stores grok-3 / kling-* (see scene-worker)
+  model: varchar('model', { length: 32 }).default('veo-2').notNull(),
   aspectRatio: varchar('aspect_ratio', { length: 8, enum: ['16:9', '9:16'] }).default('16:9').notNull(),
   resolution: varchar('resolution', { length: 8, enum: ['720p', '1080p'] }).default('720p').notNull(),
   duration: integer('duration').default(4).notNull(),
@@ -52,6 +59,10 @@ export const veoScenes = pgTable('veo_scenes', {
   thumbnailUrl: text('thumbnail_url'),
   hasWatermark: integer('has_watermark').default(0).notNull(),
   errorMsg: text('error_msg'),
+  // Faceless narration (voiceover spoken during this scene)
+  narrationText: text('narration_text').default('').notNull(),
+  narrationAudioPath: text('narration_audio_path'),
+  narrationDuration: real('narration_duration'), // exact seconds from TTS
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
 })

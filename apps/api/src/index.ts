@@ -17,6 +17,7 @@ import { aiInfluencerRoutes, recoverPendingInfluencers } from './routes/ai-influ
 import { motionRoutes, recoverPendingMotion } from './routes/motion'
 import { recoverPendingTiktokScenes } from './lib/tiktok-worker'
 import { recoverPendingScenes } from './lib/scene-worker'
+import { recoverStuckAssemblies } from './lib/veo-assemble-worker'
 
 const PORT = Number(process.env.API_PORT ?? 3000)
 
@@ -78,6 +79,7 @@ console.log(`🚀 API listening on http://0.0.0.0:${PORT}`)
 
 // Recover scenes yang pending kalau API restart
 recoverStuckUploads().catch(err => console.error('[recover-uploads]', err))
+recoverStuckAssemblies().catch(err => console.error('[recover-assemble]', err))
 recoverPendingScenes().catch(err => console.error('[recover]', err))
 recoverPendingTiktokScenes().catch(err => console.error('[tiktok-recover]', err))
 recoverPendingInfluencers().catch(err => console.error('[influencer-recover]', err))
