@@ -15,7 +15,7 @@ import { notify } from '../lib/notifications'
 const UPLOAD_DIR = process.env.UPLOAD_DIR || join(process.cwd(), 'uploads')
 await mkdir(UPLOAD_DIR, { recursive: true })
 
-const MAX_RETRIES = 3
+const MAX_RETRIES = 5            // auto-retry sampai 5x sebelum nyerah (upload YouTube tidak makan kredit AI)
 const RETRY_DELAY_MS = 30_000 // 30 detik
 
 async function saveFile(file: File, prefix: string): Promise<string> {
