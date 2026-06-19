@@ -44,6 +44,9 @@ const app = new Elysia()
   .use(cors({ origin: true, credentials: true }))
   .get('/', () => ({ name: 'ytcrm-api', status: 'ok' }))
   .get('/health', () => ({ ok: true, ts: Date.now() }))
+  // MCP JSON-RPC: registered before the global JWT auth derive so it isn't gated
+  // by it — auth is handled inside via the per-user MCP key.
+  .use(mcpRoutes)
   .use(authRoutes)
   .use(videoRoutes)
   .use(systemRoutes)
@@ -59,7 +62,6 @@ const app = new Elysia()
   .use(aiInfluencerRoutes)
   .use(motionRoutes)
   .use(mcpKeyRoutes)
-  .use(mcpRoutes)
   .onError(({ code, error, set, path, request }) => {
     if (code === 'VALIDATION') {
       set.status = 400
