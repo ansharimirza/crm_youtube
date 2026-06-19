@@ -25,6 +25,7 @@ export const veoProjects = pgTable('veo_projects', {
   description: text('description').default('').notNull(),
   // Faceless-video auto-edit (assemble scene clips + narration -> final MP4)
   musicPath: text('music_path'),
+  thumbnailPath: text('thumbnail_path'),
   finalVideoPath: text('final_video_path'),
   finalVideoUrl: text('final_video_url'),
   assembleStatus: varchar('assemble_status', { length: 16, enum: ['idle', 'queued', 'rendering', 'done', 'error'] }).default('idle').notNull(),

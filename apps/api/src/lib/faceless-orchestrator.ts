@@ -23,6 +23,7 @@ async function geminigenKey(userId: number): Promise<string | null> {
 export interface FacelessScene {
   image_prompt: string
   narration_text: string
+  video_prompt?: string // optional Veo motion prompt; defaults to image_prompt
 }
 
 export async function createFacelessProject(
@@ -39,7 +40,7 @@ export async function createFacelessProject(
     const [scene] = await db.insert(veoScenes).values({
       projectId: project.id,
       sceneNumber: i + 1,
-      prompt: s.image_prompt, // Veo motion prompt — animate this scene
+      prompt: s.video_prompt || s.image_prompt, // Veo motion prompt
       model: p.model ?? 'veo-3.1-fast',
       resolution: '720p',
       duration: 8,
@@ -87,6 +88,26 @@ async function generateSceneVisual(userId: number, sceneId: number, imagePrompt:
   enqueueScene(sceneId) // Veo animates the image
 }
 
+// Generate a thumbnail (Nano Banana) for the project; stored + attached on upload.
+export async function generateThumbnail(userId: number, projectId: number, imagePrompt: string): Promise<{ path: string }> {
+  const project = await db.query.veoProjects.findFirst({
+    where: and(eq(veoProjects.id, projectId), eq(veoProjects.userId, userId)),
+  })
+  if (!project) throw new Error('Project tidak ditemukan')
+  const apiKey = await geminigenKey(userId)
+  if (!apiKey) throw new Error('GeminiGen API key belum diatur (Settings)')
+
+  const { imageUrl } = await generateImageAndWait({ apiKey, prompt: imagePrompt, model: 'nano-banana-pro', aspectRatio: '16:9' })
+  const THUMB_DIR = join(UPLOAD_DIR, 'veo', 'thumbnails')
+  await mkdir(THUMB_DIR, { recursive: true })
+  const res = await fetch(imageUrl)
+  if (!res.ok) throw new Error(`Thumbnail download failed: HTTP ${res.status}`)
+  const path = join(THUMB_DIR, `project${projectId}_${Date.now()}.jpg`)
+  await writeFile(path, Buffer.from(await res.arrayBuffer()))
+  await db.update(veoProjects).set({ thumbnailPath: path, updatedAt: new Date() }).where(eq(veoProjects.id, projectId))
+  return { path }
+}
+
 export async function uploadProjectFinal(
   userId: number,
   p: {
@@ -120,6 +141,7 @@ export async function uploadProjectFinal(
     language: 'en',
     madeForKids: false,
     videoPath: project.finalVideoPath,
+    thumbnailPath: project.thumbnailPath,
     fileName: `project_${p.projectId}.mp4`,
     status: scheduledAt ? 'scheduled' : 'queued',
     scheduledAt,

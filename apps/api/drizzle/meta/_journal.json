@@ -92,6 +92,13 @@
       "when": 1781585000000,
       "tag": "0012_faceless_narration",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1781586000000,
+      "tag": "0013_veo_thumbnail",
+      "breakpoints": true
     }
   ]
 }

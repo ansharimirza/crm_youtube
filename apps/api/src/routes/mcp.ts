@@ -10,7 +10,7 @@ import { and, eq } from 'drizzle-orm'
 import { db, users, veoProjects, youtubeAccounts, type User } from '../db'
 import { authMiddleware } from '../middleware/auth'
 import { assembleProject } from '../lib/veo-assemble-worker'
-import { createFacelessProject, uploadProjectFinal } from '../lib/faceless-orchestrator'
+import { createFacelessProject, uploadProjectFinal, generateThumbnail } from '../lib/faceless-orchestrator'
 
 // ===== Key management (uses normal JWT auth) =====
 export const mcpKeyRoutes = new Elysia({ prefix: '/api/mcp' })
@@ -44,6 +44,7 @@ const TOOLS = [
             properties: {
               image_prompt: { type: 'string', description: 'Visual for this scene (any style)' },
               narration_text: { type: 'string', description: 'Voiceover line for this scene' },
+              video_prompt: { type: 'string', description: 'Optional Veo motion prompt; defaults to image_prompt' },
             },
             required: ['image_prompt', 'narration_text'],
           },
@@ -89,6 +90,15 @@ const TOOLS = [
       required: ['project_id', 'youtube_account_id', 'title'],
     },
   },
+  {
+    name: 'generate_thumbnail',
+    description: 'Generate a 16:9 thumbnail (Nano Banana) for the project from an image prompt. It is attached automatically on upload_to_youtube.',
+    inputSchema: {
+      type: 'object',
+      properties: { project_id: { type: 'number' }, image_prompt: { type: 'string' } },
+      required: ['project_id', 'image_prompt'],
+    },
+  },
 ] as const
 
 async function runTool(user: User, name: string, args: Record<string, unknown>): Promise<unknown> {
@@ -100,7 +110,7 @@ async function runTool(user: User, name: string, args: Record<string, unknown>):
     case 'create_project': {
       const { projectId, sceneIds } = await createFacelessProject(user.id, {
         title: String(args.title),
-        scenes: (args.scenes as { image_prompt: string; narration_text: string }[]) ?? [],
+        scenes: (args.scenes as { image_prompt: string; narration_text: string; video_prompt?: string }[]) ?? [],
         aspectRatio: args.aspect_ratio as '16:9' | '9:16' | undefined,
         model: args.model as string | undefined,
       })
@@ -148,6 +158,10 @@ async function runTool(user: User, name: string, args: Record<string, unknown>):
         scheduledAt: (args.scheduled_at as string | undefined) ?? null,
       })
       return { ok: true, video_id: videoId }
+    }
+    case 'generate_thumbnail': {
+      const { path } = await generateThumbnail(user.id, Number(args.project_id), String(args.image_prompt))
+      return { ok: true, thumbnail_path: path }
     }
     default:
       throw new Error(`Unknown tool: ${name}`)
