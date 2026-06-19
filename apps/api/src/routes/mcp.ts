@@ -168,9 +168,12 @@ async function runTool(user: User, name: string, args: Record<string, unknown>):
   }
 }
 
-async function resolveMcpUser(authHeader?: string): Promise<User | null> {
-  if (!authHeader?.startsWith('Bearer ')) return null
-  const key = authHeader.slice(7).trim()
+async function resolveMcpUser(authHeader?: string, queryKey?: string): Promise<User | null> {
+  // Header (Claude Desktop via mcp-remote) or ?key= in the URL (claude.ai browser,
+  // which can't send custom headers and would otherwise need OAuth).
+  let key: string | undefined
+  if (authHeader?.startsWith('Bearer ')) key = authHeader.slice(7).trim()
+  if (!key && queryKey) key = queryKey.trim()
   if (!key) return null
   const user = await db.query.users.findFirst({ where: eq(users.mcpApiKey, key) })
   return (user as User) ?? null
@@ -180,7 +183,7 @@ async function resolveMcpUser(authHeader?: string): Promise<User | null> {
 // Path lives under /api so the existing nginx (proxies ^/(api|auth)) reaches it.
 // MCP server URL for Claude = https://<domain>/api/mcp-rpc
 export const mcpRoutes = new Elysia({ prefix: '/api/mcp-rpc' })
-  .post('/', async ({ body, headers, set }) => {
+  .post('/', async ({ body, headers, query, set }) => {
     const req = body as { jsonrpc?: string; id?: number | string | null; method?: string; params?: any }
     const id = req?.id ?? null
     const method = req?.method ?? ''
@@ -191,7 +194,7 @@ export const mcpRoutes = new Elysia({ prefix: '/api/mcp-rpc' })
       return ''
     }
 
-    const user = await resolveMcpUser(headers.authorization)
+    const user = await resolveMcpUser(headers.authorization, (query as Record<string, string>)?.key)
     if (!user) {
       set.status = 401
       return { jsonrpc: '2.0', id, error: { code: -32001, message: 'Unauthorized: invalid MCP key' } }
