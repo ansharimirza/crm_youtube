@@ -163,7 +163,9 @@ async function resolveMcpUser(authHeader?: string): Promise<User | null> {
 }
 
 // ===== JSON-RPC endpoint (no JWT middleware; auth via MCP key) =====
-export const mcpRoutes = new Elysia({ prefix: '/mcp' })
+// Path lives under /api so the existing nginx (proxies ^/(api|auth)) reaches it.
+// MCP server URL for Claude = https://<domain>/api/mcp-rpc
+export const mcpRoutes = new Elysia({ prefix: '/api/mcp-rpc' })
   .post('/', async ({ body, headers, set }) => {
     const req = body as { jsonrpc?: string; id?: number | string | null; method?: string; params?: any }
     const id = req?.id ?? null
