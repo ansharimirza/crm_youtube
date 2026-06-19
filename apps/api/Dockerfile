@@ -1,5 +1,8 @@
 FROM oven/bun:1.3-slim AS base
 WORKDIR /app
+# ffmpeg: needed by the auto-edit pipeline (video-assembler.ts)
+RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg \
+  && rm -rf /var/lib/apt/lists/*
 
 FROM base AS deps
 COPY package.json ./
