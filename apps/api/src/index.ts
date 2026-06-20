@@ -15,7 +15,7 @@ import { resumeRoutes } from './routes/resume'
 import { tiktokRoutes } from './routes/tiktok'
 import { aiInfluencerRoutes, recoverPendingInfluencers } from './routes/ai-influencer'
 import { motionRoutes, recoverPendingMotion } from './routes/motion'
-import { mcpRoutes, mcpKeyRoutes } from './routes/mcp'
+import { mcpRoutes, mcpKeyRoutes, veoServeRoutes } from './routes/mcp'
 import { recoverPendingTiktokScenes } from './lib/tiktok-worker'
 import { recoverPendingScenes } from './lib/scene-worker'
 import { recoverStuckAssemblies } from './lib/veo-assemble-worker'
@@ -44,9 +44,10 @@ const app = new Elysia()
   .use(cors({ origin: true, credentials: true }))
   .get('/', () => ({ name: 'ytcrm-api', status: 'ok' }))
   .get('/health', () => ({ ok: true, ts: Date.now() }))
-  // MCP JSON-RPC: registered before the global JWT auth derive so it isn't gated
-  // by it — auth is handled inside via the per-user MCP key.
+  // MCP JSON-RPC + public final-video serve: registered before the global JWT
+  // auth derive so they aren't gated by it — auth is via the per-user MCP key.
   .use(mcpRoutes)
+  .use(veoServeRoutes)
   .use(authRoutes)
   .use(videoRoutes)
   .use(systemRoutes)

@@ -234,3 +234,23 @@ export const mcpRoutes = new Elysia({ prefix: '/api/mcp-rpc' })
   }, {
     body: t.Any(),
   })
+
+// ===== Public serve for the assembled final video (token in URL, no JWT) =====
+// So the link returned to Claude/the user actually opens in a browser.
+// Registered before the global JWT derive (see index.ts).
+export const veoServeRoutes = new Elysia({ prefix: '/api/veo-pub' })
+  .get('/final/:projectId', async ({ params, query, set }) => {
+    const user = await resolveMcpUser(undefined, (query as Record<string, string>)?.key)
+    if (!user) {
+      set.status = 401
+      return { error: 'invalid or missing key' }
+    }
+    const project = await db.query.veoProjects.findFirst({
+      where: and(eq(veoProjects.id, Number(params.projectId)), eq(veoProjects.userId, user.id)),
+    })
+    if (!project?.finalVideoPath) {
+      set.status = 404
+      return { error: 'Belum ada video final' }
+    }
+    return Bun.file(project.finalVideoPath)
+  })

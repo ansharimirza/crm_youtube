@@ -112,10 +112,17 @@ export async function assembleProject(projectId: number): Promise<void> {
     const outPath = join(FINAL_DIR, `project_${projectId}_${Date.now()}.mp4`)
     await assembleVideo(assembleScenes, outPath, { musicPath: project.musicPath ?? undefined })
 
+    // Build a browser-openable link (token in URL — the JWT-gated route won't open in a browser).
+    const owner = await db.query.users.findFirst({ where: eq(users.id, project.userId) })
+    const base = process.env.PUBLIC_BASE_URL || 'https://crm.lovebell.app'
+    const finalUrl = owner?.mcpApiKey
+      ? `${base}/api/veo-pub/final/${projectId}?key=${owner.mcpApiKey}`
+      : `/api/veo/projects/${projectId}/final-video`
+
     await db.update(veoProjects)
       .set({
         finalVideoPath: outPath,
-        finalVideoUrl: `/api/veo/projects/${projectId}/final-video`,
+        finalVideoUrl: finalUrl,
         assembleStatus: 'done',
         assembleError: null,
         updatedAt: new Date(),
