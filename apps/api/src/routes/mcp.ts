@@ -66,10 +66,13 @@ const TOOLS = [
   },
   {
     name: 'assemble_project',
-    description: 'Assemble all done scenes (clip + narration + captions + music) into one final MP4. Run after scenes are done. Poll get_status for assemble_status.',
+    description: 'Assemble all done scenes (clip + narration [+ optional captions/music]) into one final MP4. Run after scenes are done. captions defaults to false (no burned subtitles). Poll get_status for assemble_status.',
     inputSchema: {
       type: 'object',
-      properties: { project_id: { type: 'number' } },
+      properties: {
+        project_id: { type: 'number' },
+        captions: { type: 'boolean', description: 'Burn narration as subtitles (default false)' },
+      },
       required: ['project_id'],
     },
   },
@@ -144,7 +147,7 @@ async function runTool(user: User, name: string, args: Record<string, unknown>):
       })
       if (!project) throw new Error('Project tidak ditemukan')
       await db.update(veoProjects).set({ assembleStatus: 'queued', assembleError: null, updatedAt: new Date() }).where(eq(veoProjects.id, project.id))
-      queueMicrotask(() => assembleProject(project.id))
+      queueMicrotask(() => assembleProject(project.id, { captions: !!args.captions }))
       return { ok: true, note: 'Assembling. Poll get_status for assemble_status=done + final_video_url.' }
     }
     case 'upload_to_youtube': {

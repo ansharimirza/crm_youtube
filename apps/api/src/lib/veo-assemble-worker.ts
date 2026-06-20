@@ -64,7 +64,8 @@ export async function generateNarration(sceneId: number, voice?: string): Promis
 let assembling = new Set<number>()
 
 // Assemble a whole project into one final video. Async — call & poll project.assembleStatus.
-export async function assembleProject(projectId: number): Promise<void> {
+// opts.captions: burn the narration as subtitles (default OFF).
+export async function assembleProject(projectId: number, opts: { captions?: boolean } = {}): Promise<void> {
   if (assembling.has(projectId)) return
   assembling.add(projectId)
 
@@ -104,7 +105,7 @@ export async function assembleProject(projectId: number): Promise<void> {
         videoPath,
         narrationPath: audioPath,
         narrationDur: dur,
-        caption: s.narrationText,
+        caption: opts.captions ? s.narrationText : undefined,
       })
     }
 
