@@ -28,7 +28,7 @@ export interface FacelessScene {
 
 export async function createFacelessProject(
   userId: number,
-  p: { title: string; scenes: FacelessScene[]; aspectRatio?: '16:9' | '9:16'; model?: string; resolution?: '720p' | '1080p' },
+  p: { title: string; scenes: FacelessScene[]; aspectRatio?: '16:9' | '9:16'; model?: string },
 ): Promise<{ projectId: number; sceneIds: number[] }> {
   if (!p.scenes?.length) throw new Error('Minimal 1 scene')
 
@@ -42,7 +42,7 @@ export async function createFacelessProject(
       sceneNumber: i + 1,
       prompt: s.video_prompt || s.image_prompt, // Veo motion prompt
       model: p.model ?? 'veo-3.1-fast',
-      resolution: p.resolution ?? '1080p',
+      resolution: '1080p', // always 1080p (720p not allowed)
       duration: 8,
       aspectRatio: p.aspectRatio ?? '16:9',
       modeImage: 'frame',
