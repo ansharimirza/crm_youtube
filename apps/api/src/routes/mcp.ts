@@ -50,6 +50,7 @@ const TOOLS = [
           },
         },
         aspect_ratio: { type: 'string', enum: ['16:9', '9:16'] },
+        resolution: { type: 'string', enum: ['720p', '1080p'], description: 'default 1080p' },
         model: { type: 'string', description: 'Veo model, default veo-3.1-fast' },
       },
       required: ['title', 'scenes'],
@@ -115,6 +116,7 @@ async function runTool(user: User, name: string, args: Record<string, unknown>):
         title: String(args.title),
         scenes: (args.scenes as { image_prompt: string; narration_text: string; video_prompt?: string }[]) ?? [],
         aspectRatio: args.aspect_ratio as '16:9' | '9:16' | undefined,
+        resolution: args.resolution as '720p' | '1080p' | undefined,
         model: args.model as string | undefined,
       })
       return { project_id: projectId, scene_count: sceneIds.length, note: 'Generating images+video+narration. Poll get_status.' }
