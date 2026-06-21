@@ -45,6 +45,7 @@ export async function createFacelessProject(
   const [project] = await db.insert(veoProjects).values({ userId, title: p.title }).returning()
   const sceneIds: number[] = []
 
+  const pending: { sceneId: number; imagePrompt: string }[] = []
   for (let i = 0; i < p.scenes.length; i++) {
     const s = p.scenes[i]
     const [scene] = await db.insert(veoScenes).values({
@@ -60,12 +61,32 @@ export async function createFacelessProject(
       status: 'queued',
     }).returning()
     sceneIds.push(scene.id)
-
-    void generateSceneVisual(userId, scene.id, s.image_prompt, mode).catch((e) => console.error('[faceless-visual]', e))
-    void generateNarration(scene.id, p.voice).catch((e) => console.error('[faceless-narr]', e))
+    pending.push({ sceneId: scene.id, imagePrompt: s.image_prompt })
   }
 
+  // Throttled background generation — never fire all image+TTS at once (a 126-scene
+  // project would otherwise slam GeminiGen/Gemini with 250+ concurrent calls).
+  void runScenePool(userId, pending, mode, p.voice)
+
   return { projectId: project.id, sceneIds }
+}
+
+const SCENE_GEN_CONCURRENCY = 4
+async function runScenePool(
+  userId: number,
+  pending: { sceneId: number; imagePrompt: string }[],
+  mode: FacelessMode,
+  voice?: string,
+): Promise<void> {
+  let idx = 0
+  const worker = async () => {
+    while (idx < pending.length) {
+      const { sceneId, imagePrompt } = pending[idx++]
+      await generateSceneVisual(userId, sceneId, imagePrompt, mode).catch((e) => console.error('[faceless-visual]', e))
+      await generateNarration(sceneId, voice).catch((e) => console.error('[faceless-narr]', e))
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(SCENE_GEN_CONCURRENCY, pending.length) }, worker))
 }
 
 // Nano Banana image -> firstImagePath. veo mode: enqueue Veo (image->video).
