@@ -1,15 +1,12 @@
-// Auto-edit: assemble per-scene Veo clips + TTS narration into one MP4, with
-// optional burned captions (scene-level) and background music.
+// Auto-edit: assemble per-scene visuals + TTS narration into one MP4, with
+// optional burned captions and background music.
 //
-// BATCH MODE (for long videos on small RAM): render each scene to a small
-// self-contained segment (one ffmpeg, 2 inputs), then stitch all segments with
-// the concat *demuxer* (streams from disk — constant memory regardless of count),
-// applying captions + music in a single final pass. This keeps memory flat even
-// for 100+ scenes / 8-minute videos on a 2-core/4GB box.
+// Each scene's visual is either a Veo CLIP (videoPath) or a STILL IMAGE animated
+// with a Ken Burns pan/zoom (imagePath). Both are forced to exactly the scene's
+// narration duration, so the stitched video and narration line up by construction.
 //
-// Sync: each scene's visual is forced to exactly its narration duration (tpad
-// freezes the last frame if the clip is shorter; trim cuts it if longer), so the
-// stitched video and narration line up by construction.
+// BATCH MODE (for long videos / small RAM): render each scene to a segment, then
+// stitch via the concat *demuxer* (constant memory regardless of scene count).
 
 import { mkdir, writeFile, rm } from 'node:fs/promises'
 import { join, dirname } from 'node:path'
@@ -24,15 +21,21 @@ export class AssembleError extends Error {
 }
 
 export interface AssembleScene {
-  videoPath: string // Veo clip (≈8s; its own audio is dropped)
+  videoPath?: string // Veo clip (its own audio is dropped)
+  imagePath?: string // still image → Ken Burns (used when no videoPath)
   narrationPath: string // TTS audio (wav)
   narrationDur: number // exact seconds — drives the cut
-  caption?: string // text shown during this scene (optional)
+  caption?: string // optional burned subtitle text
 }
 
 export interface AssembleOptions {
   musicPath?: string // background music (looped + ducked under narration)
+  width?: number // output size for Ken Burns scenes (default 1920)
+  height?: number // default 1080
 }
+
+const NARR_FILTER = (d: string) =>
+  `aresample=48000,aformat=sample_fmts=fltp:channel_layouts=stereo,atrim=duration=${d},asetpts=PTS-STARTPTS`
 
 async function runFfmpeg(args: string[]): Promise<void> {
   const proc = Bun.spawn(['ffmpeg', ...args], { stdout: 'ignore', stderr: 'pipe' })
@@ -41,23 +44,41 @@ async function runFfmpeg(args: string[]): Promise<void> {
   if (code !== 0) throw new AssembleError(`ffmpeg exited ${code}: ${stderr.slice(-1000)}`)
 }
 
-// One scene -> a uniform segment file (video fitted to narration + that narration
+// One scene -> a uniform segment file (visual fitted to narration + that narration
 // as audio). Uniform codec params so the concat demuxer can stitch them.
-async function renderSegment(scene: AssembleScene, segPath: string): Promise<void> {
+async function renderSegment(scene: AssembleScene, segPath: string, w: number, h: number): Promise<void> {
   const d = Math.max(0.1, scene.narrationDur).toFixed(3)
-  const filter =
-    `[0:v]tpad=stop_mode=clone:stop_duration=${d},trim=duration=${d},setpts=PTS-STARTPTS,fps=${FPS},format=yuv420p[v];` +
-    `[1:a]aresample=48000,aformat=sample_fmts=fltp:channel_layouts=stereo,atrim=duration=${d},asetpts=PTS-STARTPTS[a]`
-  await runFfmpeg([
-    '-y',
-    '-i', scene.videoPath,
-    '-i', scene.narrationPath,
-    '-filter_complex', filter,
+  const commonOut = [
     '-map', '[v]', '-map', '[a]',
+    '-t', d,
     '-c:v', 'libx264', '-preset', 'veryfast', '-pix_fmt', 'yuv420p',
     '-c:a', 'aac', '-b:a', '192k',
     '-video_track_timescale', '30000',
     segPath,
+  ]
+
+  if (scene.imagePath && !scene.videoPath) {
+    // Ken Burns: scale to fill 2x target, slow center zoom-in over the duration.
+    const df = Math.max(1, Math.round(Math.max(0.1, scene.narrationDur) * FPS))
+    const vf =
+      `[0:v]scale=${w * 2}:${h * 2}:force_original_aspect_ratio=increase,crop=${w * 2}:${h * 2},` +
+      `zoompan=z='min(zoom+0.0007,1.18)':d=${df}:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s=${w}x${h}:fps=${FPS},` +
+      `trim=duration=${d},setpts=PTS-STARTPTS,format=yuv420p[v]`
+    await runFfmpeg([
+      '-y', '-loop', '1', '-i', scene.imagePath, '-i', scene.narrationPath,
+      '-filter_complex', `${vf};[1:a]${NARR_FILTER(d)}[a]`,
+      ...commonOut,
+    ])
+    return
+  }
+
+  // Veo clip: freeze last frame if shorter than narration, trim if longer.
+  const vf =
+    `[0:v]tpad=stop_mode=clone:stop_duration=${d},trim=duration=${d},setpts=PTS-STARTPTS,fps=${FPS},format=yuv420p[v]`
+  await runFfmpeg([
+    '-y', '-i', scene.videoPath!, '-i', scene.narrationPath,
+    '-filter_complex', `${vf};[1:a]${NARR_FILTER(d)}[a]`,
+    ...commonOut,
   ])
 }
 
@@ -86,6 +107,8 @@ export async function assembleVideo(
   opts: AssembleOptions = {},
 ): Promise<{ path: string }> {
   if (scenes.length === 0) throw new AssembleError('No scenes to assemble')
+  const w = opts.width ?? 1920
+  const h = opts.height ?? 1080
 
   const workDir = join(dirname(outPath), `assemble_${Date.now()}`)
   await mkdir(workDir, { recursive: true })
@@ -95,15 +118,13 @@ export async function assembleVideo(
     const segPaths: string[] = []
     for (let i = 0; i < scenes.length; i++) {
       const segPath = join(workDir, `seg_${String(i).padStart(4, '0')}.mp4`)
-      await renderSegment(scenes[i], segPath)
+      await renderSegment(scenes[i], segPath, w, h)
       segPaths.push(segPath)
     }
 
-    // concat list (demuxer streams these from disk)
     const listPath = join(workDir, 'segments.txt')
     await writeFile(listPath, segPaths.map((p) => `file '${p}'`).join('\n'))
 
-    // captions over the full timeline
     const srt = buildSrt(scenes)
     let srtPath: string | undefined
     if (srt.trim()) {
@@ -113,14 +134,12 @@ export async function assembleVideo(
 
     // Phase B — single final pass: concat + optional captions + optional music
     if (!srtPath && !opts.musicPath) {
-      // nothing to overlay → fast stream copy
       await runFfmpeg(['-y', '-f', 'concat', '-safe', '0', '-i', listPath, '-c', 'copy', '-movflags', '+faststart', outPath])
     } else {
       const inputs = ['-f', 'concat', '-safe', '0', '-i', listPath]
       if (opts.musicPath) inputs.push('-stream_loop', '-1', '-i', opts.musicPath)
 
       const fparts: string[] = []
-      // video: burn captions (re-encode) or copy
       let vmap = '0:v'
       let vcodec = ['-c:v', 'copy']
       if (srtPath) {
@@ -128,7 +147,6 @@ export async function assembleVideo(
         vmap = '[vout]'
         vcodec = ['-c:v', 'libx264', '-preset', 'veryfast', '-pix_fmt', 'yuv420p']
       }
-      // audio: mix music (re-encode) or copy narration
       let amap = '0:a'
       let acodec = ['-c:a', 'copy']
       if (opts.musicPath) {

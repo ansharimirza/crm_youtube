@@ -81,9 +81,12 @@ export async function assembleProject(projectId: number, opts: { captions?: bool
     if (!project) throw new Error('Project tidak ditemukan')
 
     // Eligible = video done + has narration text. Generate any missing TTS first.
-    const eligible = project.scenes.filter((s) => s.status === 'done' && s.videoUrl && s.narrationText.trim())
+    // Veo scenes need videoUrl; Ken Burns scenes need firstImagePath.
+    const eligible = project.scenes.filter(
+      (s) => s.status === 'done' && (s.videoUrl || s.firstImagePath) && s.narrationText.trim(),
+    )
     if (eligible.length === 0) {
-      throw new Error('Tidak ada scene siap (butuh video done + teks narasi)')
+      throw new Error('Tidak ada scene siap (butuh visual done + teks narasi)')
     }
 
     const assembleScenes: AssembleScene[] = []
@@ -98,20 +101,26 @@ export async function assembleProject(projectId: number, opts: { captions?: bool
       }
       if (!audioPath || dur == null) throw new Error(`Scene ${s.sceneNumber}: narasi gagal`)
 
-      // Download the Veo clip locally for ffmpeg
-      const videoPath = await downloadToLocal(s.videoUrl!, CLIPS_DIR, `scene${s.id}`)
-
-      assembleScenes.push({
-        videoPath,
-        narrationPath: audioPath,
-        narrationDur: dur,
-        caption: opts.captions ? s.narrationText : undefined,
-      })
+      // Visual: Veo clip (download) or still image (Ken Burns mode)
+      const caption = opts.captions ? s.narrationText : undefined
+      if (s.videoUrl) {
+        const videoPath = await downloadToLocal(s.videoUrl, CLIPS_DIR, `scene${s.id}`)
+        assembleScenes.push({ videoPath, narrationPath: audioPath, narrationDur: dur, caption })
+      } else if (s.firstImagePath) {
+        assembleScenes.push({ imagePath: s.firstImagePath, narrationPath: audioPath, narrationDur: dur, caption })
+      } else {
+        throw new Error(`Scene ${s.sceneNumber}: tidak ada visual (klip/gambar)`)
+      }
     }
 
     await mkdir(FINAL_DIR, { recursive: true })
     const outPath = join(FINAL_DIR, `project_${projectId}_${Date.now()}.mp4`)
-    await assembleVideo(assembleScenes, outPath, { musicPath: project.musicPath ?? undefined })
+    const portrait = (project.scenes[0]?.aspectRatio ?? '16:9') === '9:16'
+    await assembleVideo(assembleScenes, outPath, {
+      musicPath: project.musicPath ?? undefined,
+      width: portrait ? 1080 : 1920,
+      height: portrait ? 1920 : 1080,
+    })
 
     // Build a browser-openable link (token in URL — the JWT-gated route won't open in a browser).
     const owner = await db.query.users.findFirst({ where: eq(users.id, project.userId) })

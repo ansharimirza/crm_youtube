@@ -26,11 +26,21 @@ export interface FacelessScene {
   video_prompt?: string // optional Veo motion prompt; defaults to image_prompt
 }
 
+export type FacelessMode = 'veo' | 'kenburns'
+
 export async function createFacelessProject(
   userId: number,
-  p: { title: string; scenes: FacelessScene[]; aspectRatio?: '16:9' | '9:16'; model?: string },
+  p: {
+    title: string
+    scenes: FacelessScene[]
+    aspectRatio?: '16:9' | '9:16'
+    model?: string
+    mode?: FacelessMode // 'veo' (image->Veo clip) or 'kenburns' (still image + pan/zoom)
+    voice?: string // Gemini TTS voice (e.g. Kore, Puck, Charon)
+  },
 ): Promise<{ projectId: number; sceneIds: number[] }> {
   if (!p.scenes?.length) throw new Error('Minimal 1 scene')
+  const mode: FacelessMode = p.mode ?? 'veo'
 
   const [project] = await db.insert(veoProjects).values({ userId, title: p.title }).returning()
   const sceneIds: number[] = []
@@ -40,9 +50,9 @@ export async function createFacelessProject(
     const [scene] = await db.insert(veoScenes).values({
       projectId: project.id,
       sceneNumber: i + 1,
-      prompt: s.video_prompt || s.image_prompt, // Veo motion prompt
+      prompt: s.video_prompt || s.image_prompt, // Veo motion prompt (unused in kenburns)
       model: p.model ?? 'veo-3.1-fast',
-      resolution: '1080p', // always 1080p (720p not allowed)
+      resolution: '1080p',
       duration: 8,
       aspectRatio: p.aspectRatio ?? '16:9',
       modeImage: 'frame',
@@ -51,16 +61,16 @@ export async function createFacelessProject(
     }).returning()
     sceneIds.push(scene.id)
 
-    // Background: image -> firstImage -> Veo ; and TTS narration.
-    void generateSceneVisual(userId, scene.id, s.image_prompt).catch((e) => console.error('[faceless-visual]', e))
-    void generateNarration(scene.id).catch((e) => console.error('[faceless-narr]', e))
+    void generateSceneVisual(userId, scene.id, s.image_prompt, mode).catch((e) => console.error('[faceless-visual]', e))
+    void generateNarration(scene.id, p.voice).catch((e) => console.error('[faceless-narr]', e))
   }
 
   return { projectId: project.id, sceneIds }
 }
 
-// Nano Banana image -> save as firstImagePath -> enqueue Veo (image->video).
-async function generateSceneVisual(userId: number, sceneId: number, imagePrompt: string): Promise<void> {
+// Nano Banana image -> firstImagePath. veo mode: enqueue Veo (image->video).
+// kenburns mode: the image IS the visual (assembler pans/zooms it) -> mark done.
+async function generateSceneVisual(userId: number, sceneId: number, imagePrompt: string, mode: FacelessMode): Promise<void> {
   const apiKey = await geminigenKey(userId)
   if (!apiKey) {
     await db.update(veoScenes)
@@ -76,6 +86,7 @@ async function generateSceneVisual(userId: number, sceneId: number, imagePrompt:
     prompt: imagePrompt,
     model: 'nano-banana-pro',
     aspectRatio: scene.aspectRatio as '16:9' | '9:16',
+    resolution: mode === 'kenburns' ? '2K' : undefined, // higher-res image for Ken Burns zoom
   })
 
   await mkdir(IMG_DIR, { recursive: true })
@@ -85,7 +96,12 @@ async function generateSceneVisual(userId: number, sceneId: number, imagePrompt:
   await writeFile(imgPath, Buffer.from(await res.arrayBuffer()))
 
   await db.update(veoScenes).set({ firstImagePath: imgPath, updatedAt: new Date() }).where(eq(veoScenes.id, sceneId))
-  enqueueScene(sceneId) // Veo animates the image
+
+  if (mode === 'kenburns') {
+    await db.update(veoScenes).set({ status: 'done', progress: 100, updatedAt: new Date() }).where(eq(veoScenes.id, sceneId))
+  } else {
+    enqueueScene(sceneId) // Veo animates the image
+  }
 }
 
 // Generate a thumbnail (Nano Banana) for the project; stored + attached on upload.

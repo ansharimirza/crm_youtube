@@ -50,7 +50,9 @@ const TOOLS = [
           },
         },
         aspect_ratio: { type: 'string', enum: ['16:9', '9:16'] },
-        model: { type: 'string', description: 'Veo model, default veo-3.1-fast' },
+        mode: { type: 'string', enum: ['veo', 'kenburns'], description: "default 'veo' (image animated by Veo, cinematic, costs Veo credits). 'kenburns' = still image + slow pan/zoom, no Veo (much cheaper & faster)." },
+        voice: { type: 'string', description: 'Gemini TTS voice. e.g. Kore (neutral/firm), Puck (upbeat), Charon (deep/informative), Aoede (breezy), Leda (youthful), Fenrir (excitable). Default Kore.' },
+        model: { type: 'string', description: 'Veo model, default veo-3.1-fast (only used in veo mode)' },
       },
       required: ['title', 'scenes'],
     },
@@ -115,6 +117,8 @@ async function runTool(user: User, name: string, args: Record<string, unknown>):
         title: String(args.title),
         scenes: (args.scenes as { image_prompt: string; narration_text: string; video_prompt?: string }[]) ?? [],
         aspectRatio: args.aspect_ratio as '16:9' | '9:16' | undefined,
+        mode: args.mode as 'veo' | 'kenburns' | undefined,
+        voice: args.voice as string | undefined,
         model: args.model as string | undefined,
       })
       return { project_id: projectId, scene_count: sceneIds.length, note: 'Generating images+video+narration. Poll get_status.' }
