@@ -13,6 +13,8 @@ import { AdminPage } from '@/pages/Admin'
 import { YoutubeCallbackPage } from '@/pages/YoutubeCallback'
 import { VeoStudioPage } from '@/pages/VeoStudio'
 import { VeoProjectPage } from '@/pages/VeoProject'
+import { FacelessStudioPage } from '@/pages/FacelessStudio'
+import { FacelessProjectPage } from '@/pages/FacelessProject'
 import { AnalyzerPage } from '@/pages/Analyzer'
 import { ViralityPage } from '@/pages/Virality'
 import { ResumePage } from '@/pages/Resume'
@@ -81,6 +83,8 @@ export default function App() {
               <Route path="/bulk-upload" element={<UploadHubPage defaultTab="bulk" />} />
               <Route path="/veo" element={<VeoStudioPage />} />
               <Route path="/veo/:id" element={<VeoProjectPage />} />
+              <Route path="/faceless" element={<FacelessStudioPage />} />
+              <Route path="/faceless/:id" element={<FacelessProjectPage />} />
               <Route path="/analyzer" element={<AnalyzerPage />} />
               <Route path="/virality" element={<ViralityPage />} />
               <Route path="/resume" element={<ResumePage />} />

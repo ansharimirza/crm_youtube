@@ -15,6 +15,7 @@ import {
 } from '../lib/geminigen'
 import { generateCaption, GeminiError, type Platform } from '../lib/gemini'
 import { assembleProject, generateNarration } from '../lib/veo-assemble-worker'
+import { createFacelessProject, uploadProjectFinal, type FacelessScene } from '../lib/faceless-orchestrator'
 
 const UPLOAD_DIR = process.env.UPLOAD_DIR || join(process.cwd(), 'uploads')
 const VEO_DIR = join(UPLOAD_DIR, 'veo')
@@ -72,6 +73,70 @@ export const veoRoutes = new Elysia({ prefix: '/api/veo' })
       description: t.Optional(t.String({ maxLength: 1000 })),
     }),
   })
+
+  // === FACELESS: one-call create (image + video/Ken Burns + TTS) from the web tab ===
+  // Same engine the MCP create_project tool drives, but JWT-authed for the web app.
+  .post('/faceless', async ({ body, user, set }) => {
+    try {
+      const { projectId, sceneIds } = await createFacelessProject(user.id, {
+        title: body.title.trim(),
+        scenes: body.scenes as FacelessScene[],
+        aspectRatio: body.aspectRatio,
+        mode: body.mode,
+        voice: body.voice,
+        model: body.model,
+      })
+      return { projectId, sceneCount: sceneIds.length }
+    } catch (e) {
+      set.status = 400
+      return { error: e instanceof Error ? e.message : 'Gagal membuat project' }
+    }
+  }, {
+    body: t.Object({
+      title: t.String({ minLength: 1, maxLength: 200 }),
+      scenes: t.Array(
+        t.Object({
+          image_prompt: t.String({ minLength: 1 }),
+          narration_text: t.String({ minLength: 1 }),
+          video_prompt: t.Optional(t.String()),
+        }),
+        { minItems: 1 },
+      ),
+      aspectRatio: t.Optional(t.Union([t.Literal('16:9'), t.Literal('9:16')])),
+      mode: t.Optional(t.Union([t.Literal('veo'), t.Literal('kenburns')])),
+      voice: t.Optional(t.String()),
+      model: t.Optional(t.String()),
+    }),
+  })
+
+  // === FACELESS: upload the assembled final video to YouTube ===
+  .post('/faceless/:id/upload', async ({ params, body, user, set }) => {
+    try {
+      const { videoId } = await uploadProjectFinal(user.id, {
+        projectId: Number(params.id),
+        youtubeAccountId: body.youtubeAccountId,
+        title: body.title.trim(),
+        description: body.description,
+        tags: body.tags,
+        privacy: body.privacy,
+        scheduledAt: body.scheduledAt ?? null,
+      })
+      return { ok: true, videoId }
+    } catch (e) {
+      set.status = 400
+      return { error: e instanceof Error ? e.message : 'Gagal upload' }
+    }
+  }, {
+    body: t.Object({
+      youtubeAccountId: t.Number(),
+      title: t.String({ minLength: 1, maxLength: 200 }),
+      description: t.Optional(t.String()),
+      tags: t.Optional(t.String()),
+      privacy: t.Optional(t.Union([t.Literal('public'), t.Literal('private'), t.Literal('unlisted')])),
+      scheduledAt: t.Optional(t.String()),
+    }),
+  })
+
   .get('/projects/:id', async ({ params, user, set }) => {
     const id = Number(params.id)
     const project = await db.query.veoProjects.findFirst({
@@ -558,7 +623,7 @@ export const veoRoutes = new Elysia({ prefix: '/api/veo' })
     }),
   })
   // === FACELESS: assemble whole project into 1 final video ===
-  .post('/projects/:id/assemble', async ({ params, user, set }) => {
+  .post('/projects/:id/assemble', async ({ params, body, user, set }) => {
     const id = Number(params.id)
     const project = await db.query.veoProjects.findFirst({
       where: and(eq(veoProjects.id, id), eq(veoProjects.userId, user.id)),
@@ -574,8 +639,11 @@ export const veoRoutes = new Elysia({ prefix: '/api/veo' })
     await db.update(veoProjects)
       .set({ assembleStatus: 'queued', assembleError: null, updatedAt: new Date() })
       .where(eq(veoProjects.id, id))
-    queueMicrotask(() => assembleProject(id))
+    const captions = !!(body as { captions?: boolean } | undefined)?.captions
+    queueMicrotask(() => assembleProject(id, { captions }))
     return { ok: true }
+  }, {
+    body: t.Optional(t.Object({ captions: t.Optional(t.Boolean()) })),
   })
   // === FACELESS: serve the assembled final video ===
   .get('/projects/:id/final-video', async ({ params, user, set }) => {

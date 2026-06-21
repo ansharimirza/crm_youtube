@@ -33,6 +33,12 @@ export interface VeoProject {
   createdAt: string
   updatedAt: string
   scenes: VeoScene[]
+  // faceless assembly fields
+  assembleStatus?: 'idle' | 'queued' | 'rendering' | 'done' | 'error' | null
+  assembleError?: string | null
+  finalVideoPath?: string | null
+  finalVideoUrl?: string | null
+  thumbnailPath?: string | null
 }
 
 export type VeoModel =
@@ -67,6 +73,10 @@ export interface VeoScene {
   errorMsg: string | null
   createdAt: string
   updatedAt: string
+  // faceless narration fields
+  narrationText?: string | null
+  narrationAudioPath?: string | null
+  narrationDuration?: number | null
 }
 
 export interface YoutubeAccount {
