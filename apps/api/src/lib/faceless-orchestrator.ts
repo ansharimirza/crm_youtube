@@ -49,7 +49,9 @@ export async function createFacelessProject(
   const mode: FacelessMode = p.mode ?? 'veo'
   const voiceMode: VoiceMode = p.voiceMode ?? 'tts'
 
-  const [project] = await db.insert(veoProjects).values({ userId, title: p.title }).returning()
+  const [project] = await db.insert(veoProjects)
+    .values({ userId, title: p.title, facelessMode: mode, facelessVoiceMode: voiceMode })
+    .returning()
   const sceneIds: number[] = []
 
   const pending: { sceneId: number; imagePrompt: string }[] = []
@@ -112,8 +114,32 @@ async function runScenePool(
   await Promise.all(Array.from({ length: Math.min(SCENE_GEN_CONCURRENCY, pending.length) }, worker))
 }
 
-// Re-generate scenes that failed/stuck (transient GeminiGen errors during a big batch).
-// Infers mode from a completed scene; uses the stored image prompt.
+// Resolve a project's faceless mode/voiceMode (stored on the row; fall back to
+// inference for projects created before those columns existed).
+function resolveFacelessMode(project: {
+  facelessMode: string | null
+  narrationFullPath: string | null
+  scenes: { status: string; videoUrl: string | null; noZoom: boolean }[]
+}): { mode: FacelessMode; voiceMode: VoiceMode } {
+  let mode = project.facelessMode as FacelessMode | null
+  if (!mode) {
+    const done = project.scenes.find((s) => s.status === 'done')
+    mode = done?.videoUrl ? 'veo' : done?.noZoom ? 'static' : 'kenburns'
+  }
+  const voiceMode: VoiceMode = project.narrationFullPath ? 'single' : 'tts'
+  return { mode, voiceMode }
+}
+
+// A scene still needs (re)generation. Veo: missing a clip. Image modes: missing an
+// image — this also catches scenes wrongly run through Veo (clip but no image).
+function needsRegen(mode: FacelessMode, s: { status: string; videoUrl: string | null; firstImagePath: string | null }): boolean {
+  if (s.status === 'error') return true
+  if (mode === 'veo') return !s.videoUrl
+  return !s.firstImagePath // static / kenburns
+}
+
+// Re-generate scenes that failed/stuck (transient GeminiGen errors during a big batch,
+// or scenes accidentally sent through the wrong pipeline). Uses the stored mode.
 export async function retryFailedScenes(userId: number, projectId: number): Promise<{ retried: number }> {
   const project = await db.query.veoProjects.findFirst({
     where: and(eq(veoProjects.id, projectId), eq(veoProjects.userId, userId)),
@@ -121,28 +147,44 @@ export async function retryFailedScenes(userId: number, projectId: number): Prom
   })
   if (!project) throw new Error('Project tidak ditemukan')
 
-  // Failed/incomplete = error, or queued without a visual yet.
-  const failed = project.scenes.filter(
-    (s) => s.status === 'error' || (s.status === 'queued' && !s.videoUrl && !s.firstImagePath),
-  )
+  const { mode, voiceMode } = resolveFacelessMode(project)
+  const failed = project.scenes.filter((s) => needsRegen(mode, s))
   if (failed.length === 0) return { retried: 0 }
 
-  // Infer project mode from a finished scene (veo clip vs still image vs static).
-  const doneScene = project.scenes.find((s) => s.status === 'done')
-  const mode: FacelessMode = doneScene?.videoUrl ? 'veo' : doneScene?.noZoom ? 'static' : 'kenburns'
-  // single full-narration project → no per-scene TTS; otherwise regenerate TTS too.
-  const voiceMode: VoiceMode = project.narrationFullPath ? 'single' : 'tts'
-
-  // Reset to queued, then run the throttled pool again over just these scenes.
+  // Reset to a clean queued state (drop any bogus clip), then re-run the pool.
   for (const s of failed) {
     await db.update(veoScenes)
-      .set({ status: 'queued', errorMsg: null, progress: 0, updatedAt: new Date() })
+      .set({ status: 'queued', errorMsg: null, progress: 0, videoUrl: null, geminigenUuid: null, updatedAt: new Date() })
       .where(eq(veoScenes.id, s.id))
   }
   const pending = failed.map((s) => ({ sceneId: s.id, imagePrompt: s.imagePrompt || s.prompt }))
   void runScenePool(userId, pending, mode, voiceMode)
 
   return { retried: failed.length }
+}
+
+// On startup: auto-heal faceless image-mode projects whose scenes are incomplete
+// (e.g. a restart interrupted the gen pool). Re-runs image generation for them.
+export async function recoverFacelessScenes(): Promise<void> {
+  const projects = await db.query.veoProjects.findMany({
+    where: (p, { inArray }) => inArray(p.facelessMode, ['static', 'kenburns']),
+    with: { scenes: true },
+  })
+  let total = 0
+  for (const project of projects) {
+    const { mode, voiceMode } = resolveFacelessMode(project)
+    const failed = project.scenes.filter((s) => needsRegen(mode, s))
+    if (failed.length === 0) continue
+    for (const s of failed) {
+      await db.update(veoScenes)
+        .set({ status: 'queued', errorMsg: null, progress: 0, videoUrl: null, geminigenUuid: null, updatedAt: new Date() })
+        .where(eq(veoScenes.id, s.id))
+    }
+    const pending = failed.map((s) => ({ sceneId: s.id, imagePrompt: s.imagePrompt || s.prompt }))
+    void runScenePool(project.userId, pending, mode, voiceMode)
+    total += failed.length
+  }
+  if (total) console.log(`[faceless-recover] re-generating ${total} incomplete image scene(s)`)
 }
 
 // Nano Banana image -> firstImagePath. veo mode: enqueue Veo (image->video).

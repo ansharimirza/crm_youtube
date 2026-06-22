@@ -245,12 +245,18 @@ async function runScene(sceneId: number) {
   })
 }
 
-// On startup: requeue scene yang masih queued/processing (recovery dari crash)
+// On startup: requeue scenes still queued/processing (crash recovery) — but ONLY
+// real Veo scenes. Faceless image-mode projects (static/kenburns) must NOT be sent
+// through the Veo pipeline (that would text-to-video them with no first frame);
+// those are recovered separately by recoverFacelessScenes().
 export async function recoverPendingScenes() {
   const pending = await db.query.veoScenes.findMany({
     where: (s, { or, eq }) => or(eq(s.status, 'queued'), eq(s.status, 'processing')),
+    with: { project: true },
   })
   for (const s of pending) {
+    const fm = s.project.facelessMode
+    if (fm === 'static' || fm === 'kenburns') continue // image-only → not Veo
     console.log(`[scene-worker] Recovering scene ${s.id} (status: ${s.status})`)
     enqueueScene(s.id)
   }

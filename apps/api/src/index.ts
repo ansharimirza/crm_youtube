@@ -19,6 +19,7 @@ import { mcpRoutes, mcpKeyRoutes, veoServeRoutes } from './routes/mcp'
 import { recoverPendingTiktokScenes } from './lib/tiktok-worker'
 import { recoverPendingScenes } from './lib/scene-worker'
 import { recoverStuckAssemblies } from './lib/veo-assemble-worker'
+import { recoverFacelessScenes } from './lib/faceless-orchestrator'
 
 const PORT = Number(process.env.API_PORT ?? 3000)
 
@@ -87,6 +88,7 @@ console.log(`🚀 API listening on http://0.0.0.0:${PORT}`)
 recoverStuckUploads().catch(err => console.error('[recover-uploads]', err))
 recoverStuckAssemblies().catch(err => console.error('[recover-assemble]', err))
 recoverPendingScenes().catch(err => console.error('[recover]', err))
+recoverFacelessScenes().catch(err => console.error('[faceless-recover]', err))
 recoverPendingTiktokScenes().catch(err => console.error('[tiktok-recover]', err))
 recoverPendingInfluencers().catch(err => console.error('[influencer-recover]', err))
 recoverPendingMotion().catch(err => console.error('[motion-recover]', err))

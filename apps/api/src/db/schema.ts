@@ -24,6 +24,9 @@ export const veoProjects = pgTable('veo_projects', {
   title: varchar('title', { length: 200 }).notNull(),
   description: text('description').default('').notNull(),
   // Faceless-video auto-edit (assemble scene clips + narration -> final MP4)
+  // mode/voiceMode stored so recovery + retry use the right pipeline (not inference).
+  facelessMode: varchar('faceless_mode', { length: 16 }), // 'veo' | 'kenburns' | 'static'
+  facelessVoiceMode: varchar('faceless_voice_mode', { length: 16 }), // 'tts' | 'upload' | 'single'
   musicPath: text('music_path'),
   // Full-narration mode: one uploaded voiceover for the whole video (scenes spread across it)
   narrationFullPath: text('narration_full_path'),
