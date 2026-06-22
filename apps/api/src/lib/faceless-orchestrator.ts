@@ -254,6 +254,10 @@ export async function uploadProjectFinal(
     tags?: string
     privacy?: 'public' | 'private' | 'unlisted'
     scheduledAt?: string | null
+    categoryId?: string
+    language?: string
+    madeForKids?: boolean
+    thumbnailPath?: string | null // uploaded thumbnail overrides the project's generated one
   },
 ): Promise<{ videoId: number }> {
   const project = await db.query.veoProjects.findFirst({
@@ -274,10 +278,11 @@ export async function uploadProjectFinal(
     description: p.description ?? '',
     tags: p.tags ?? '',
     privacy: p.privacy ?? 'public',
-    language: 'en',
-    madeForKids: false,
+    categoryId: p.categoryId ?? '22',
+    language: p.language ?? 'en',
+    madeForKids: p.madeForKids ?? false,
     videoPath: project.finalVideoPath,
-    thumbnailPath: project.thumbnailPath,
+    thumbnailPath: p.thumbnailPath ?? project.thumbnailPath,
     fileName: `project_${p.projectId}.mp4`,
     status: scheduledAt ? 'scheduled' : 'queued',
     scheduledAt,

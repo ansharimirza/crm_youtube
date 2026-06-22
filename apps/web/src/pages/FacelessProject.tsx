@@ -223,12 +223,24 @@ function FinalVideo({ projectId }: { projectId: number }) {
   )
 }
 
+const LANGUAGES = [
+  { value: 'en', label: 'English' }, { value: 'id', label: 'Indonesian' },
+  { value: 'es', label: 'Spanish' }, { value: 'pt', label: 'Portuguese' },
+  { value: 'fr', label: 'French' }, { value: 'de', label: 'German' },
+  { value: 'ja', label: 'Japanese' }, { value: 'ko', label: 'Korean' },
+]
+
 function UploadCard({ projectId, defaultTitle }: { projectId: number; defaultTitle: string }) {
   const [accountId, setAccountId] = useState<string>('')
   const [title, setTitle] = useState(defaultTitle)
   const [description, setDescription] = useState('')
   const [tags, setTags] = useState('')
   const [privacy, setPrivacy] = useState<'public' | 'private' | 'unlisted'>('private')
+  const [categoryId, setCategoryId] = useState('22')
+  const [language, setLanguage] = useState('en')
+  const [madeForKids, setMadeForKids] = useState(false)
+  const [scheduledAt, setScheduledAt] = useState('')
+  const [thumbFile, setThumbFile] = useState<File | null>(null)
 
   const { data } = useQuery({
     queryKey: ['youtube-accounts'],
@@ -236,15 +248,28 @@ function UploadCard({ projectId, defaultTitle }: { projectId: number; defaultTit
   })
   const accounts = data?.accounts ?? []
 
+  const { data: catData } = useQuery({
+    queryKey: ['categories'],
+    queryFn: () => api.get<{ categories: { id: string; label: string }[] }>('/api/meta/categories'),
+  })
+  const categories = catData?.categories ?? []
+
   const uploadMutation = useMutation({
-    mutationFn: () => api.post(`/api/veo/faceless/${projectId}/upload`, {
-      youtubeAccountId: Number(accountId),
-      title: title.trim(),
-      description,
-      tags,
-      privacy,
-    }),
-    onSuccess: () => toast.success('Masuk antrian upload YouTube — pantau di menu Upload'),
+    mutationFn: () => {
+      const fd = new FormData()
+      fd.append('youtubeAccountId', accountId)
+      fd.append('title', title.trim())
+      fd.append('description', description)
+      fd.append('tags', tags)
+      fd.append('privacy', privacy)
+      fd.append('category_id', categoryId)
+      fd.append('language', language)
+      fd.append('made_for_kids', String(madeForKids))
+      if (scheduledAt) fd.append('scheduled_at', new Date(scheduledAt).toISOString())
+      if (thumbFile) fd.append('thumbnail', thumbFile)
+      return api.post(`/api/veo/faceless/${projectId}/upload`, fd)
+    },
+    onSuccess: () => toast.success(scheduledAt ? 'Terjadwal — lihat di menu Upload' : 'Masuk antrian upload YouTube — pantau di menu Upload'),
     onError: (e: Error) => toast.error(e.message),
   })
 
@@ -291,9 +316,53 @@ function UploadCard({ projectId, defaultTitle }: { projectId: number; defaultTit
             <div className="space-y-1.5">
               <Label>Tags (pisah koma)</Label>
               <Input value={tags} onChange={(e) => setTags(e.target.value)} placeholder="fakta, luar angkasa" />
+              <p className="text-xs text-muted-foreground">Tags bahasa Inggris buat targeting US.</p>
             </div>
+            <div className="grid sm:grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label>Kategori</Label>
+                <Select value={categoryId} onValueChange={setCategoryId}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {categories.length === 0
+                      ? <SelectItem value="22">People & Blogs</SelectItem>
+                      : categories.map((c) => <SelectItem key={c.id} value={c.id}>{c.label}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label>Bahasa Video</Label>
+                <Select value={language} onValueChange={setLanguage}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {LANGUAGES.map((l) => <SelectItem key={l.value} value={l.value}>{l.label}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Thumbnail (opsional)</Label>
+              <div className="flex items-center gap-2">
+                <input type="file" accept="image/*" onChange={(e) => setThumbFile(e.target.files?.[0] ?? null)}
+                  className="text-xs file:mr-2 file:rounded file:border-0 file:bg-primary/10 file:px-3 file:py-1.5 file:text-primary" />
+                {thumbFile && <span className="text-[11px] text-emerald-400 truncate">🖼 {thumbFile.name}</span>}
+              </div>
+              <p className="text-xs text-muted-foreground">Generate sendiri, upload di sini. Kalau kosong pakai thumbnail default YouTube.</p>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Jadwal Publish (opsional)</Label>
+              <Input type="datetime-local" value={scheduledAt} onChange={(e) => setScheduledAt(e.target.value)} />
+              <p className="text-xs text-muted-foreground">Kosongkan untuk upload langsung.</p>
+            </div>
+            <label className="flex items-center justify-between rounded-lg border p-3">
+              <div>
+                <span className="text-sm">Made for Kids</span>
+                <p className="text-xs text-muted-foreground">Konten ditujukan untuk anak-anak</p>
+              </div>
+              <Switch checked={madeForKids} onCheckedChange={setMadeForKids} />
+            </label>
             <Button onClick={() => uploadMutation.mutate()} disabled={!accountId || !title.trim() || uploadMutation.isPending}>
-              {uploadMutation.isPending ? <><Loader2 className="h-4 w-4 animate-spin" /> Mengirim...</> : <><Youtube className="h-4 w-4" /> Upload</>}
+              {uploadMutation.isPending ? <><Loader2 className="h-4 w-4 animate-spin" /> Mengirim...</> : <><Youtube className="h-4 w-4" /> {scheduledAt ? 'Jadwalkan' : 'Upload'}</>}
             </Button>
           </>
         )}

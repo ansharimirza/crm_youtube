@@ -124,17 +124,22 @@ export const veoRoutes = new Elysia({ prefix: '/api/veo' })
     }),
   })
 
-  // === FACELESS: upload the assembled final video to YouTube ===
+  // === FACELESS: upload the assembled final video to YouTube (multipart: optional thumbnail) ===
   .post('/faceless/:id/upload', async ({ params, body, user, set }) => {
     try {
+      const thumbPath = body.thumbnail ? await saveFile(body.thumbnail, 'veo_thumb') : undefined
       const { videoId } = await uploadProjectFinal(user.id, {
         projectId: Number(params.id),
-        youtubeAccountId: body.youtubeAccountId,
+        youtubeAccountId: Number(body.youtubeAccountId),
         title: body.title.trim(),
         description: body.description,
         tags: body.tags,
-        privacy: body.privacy,
-        scheduledAt: body.scheduledAt ?? null,
+        privacy: body.privacy as 'public' | 'private' | 'unlisted' | undefined,
+        categoryId: body.category_id,
+        language: body.language,
+        madeForKids: body.made_for_kids === 'true',
+        scheduledAt: body.scheduled_at || null,
+        thumbnailPath: thumbPath,
       })
       return { ok: true, videoId }
     } catch (e) {
@@ -143,12 +148,16 @@ export const veoRoutes = new Elysia({ prefix: '/api/veo' })
     }
   }, {
     body: t.Object({
-      youtubeAccountId: t.Number(),
+      youtubeAccountId: t.String(),
       title: t.String({ minLength: 1, maxLength: 200 }),
       description: t.Optional(t.String()),
       tags: t.Optional(t.String()),
-      privacy: t.Optional(t.Union([t.Literal('public'), t.Literal('private'), t.Literal('unlisted')])),
-      scheduledAt: t.Optional(t.String()),
+      privacy: t.Optional(t.String()),
+      category_id: t.Optional(t.String()),
+      language: t.Optional(t.String()),
+      made_for_kids: t.Optional(t.String()),
+      scheduled_at: t.Optional(t.String()),
+      thumbnail: t.Optional(t.File()),
     }),
   })
 
