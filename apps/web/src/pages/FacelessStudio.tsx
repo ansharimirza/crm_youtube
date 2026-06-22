@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, type ChangeEvent } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
@@ -159,6 +159,16 @@ export function FacelessStudioPage() {
   }
   function removeScene(i: number) {
     setScenes((prev) => prev.filter((_, idx) => idx !== i))
+  }
+
+  // Load a downloaded .md/.txt straight into a STATE box (no copy-paste needed).
+  async function loadFile(e: ChangeEvent<HTMLInputElement>, setter: (v: string) => void) {
+    const f = e.target.files?.[0]
+    e.target.value = '' // allow re-picking same file
+    if (!f) return
+    const text = await f.text()
+    setter(text)
+    toast.success(`${f.name} dimuat`)
   }
 
   async function submit() {
@@ -332,20 +342,35 @@ export function FacelessStudioPage() {
             {showBulk && (
               <div className="px-4 pb-4 space-y-3">
                 <p className="text-xs text-muted-foreground">
-                  Tempel list bernomor dari tiap state. Scene dicocokkan urut nomor (image #1 ↔ narasi #1 ↔ video #1).
+                  Tempel, atau <b>upload file .md/.txt</b> hasil unduhan dari claude.ai. Scene dicocokkan urut nomor (image #1 ↔ narasi #1 ↔ video #1).
                 </p>
                 <div className="grid lg:grid-cols-3 gap-3">
                   <div className="space-y-1.5">
-                    <Label className="text-xs">STATE 8 — Image Prompt</Label>
-                    <Textarea value={bulkImg} onChange={(e) => setBulkImg(e.target.value)} rows={8} placeholder={'1. a wide shot of...\n2. close up of...'} className="font-mono text-xs" />
+                    <div className="flex items-center justify-between gap-2">
+                      <Label className="text-xs">STATE 8 — Image Prompt</Label>
+                      <label className="text-[11px] text-primary cursor-pointer hover:underline shrink-0">
+                        ⬆ file<input type="file" accept=".md,.txt,text/*" className="hidden" onChange={(e) => loadFile(e, setBulkImg)} />
+                      </label>
+                    </div>
+                    <Textarea value={bulkImg} onChange={(e) => setBulkImg(e.target.value)} rows={8} placeholder={'Tempel STATE 8, atau ⬆ file.\nB1 — "..." Prompt: a wide shot of...'} className="font-mono text-xs" />
                   </div>
                   <div className="space-y-1.5">
-                    <Label className="text-xs">STATE 6 — Narasi / Voice</Label>
-                    <Textarea value={bulkNarr} onChange={(e) => setBulkNarr(e.target.value)} rows={8} placeholder={'1. Tahukah kamu...\n2. Ternyata...'} className="font-mono text-xs" />
+                    <div className="flex items-center justify-between gap-2">
+                      <Label className="text-xs">STATE 6 — Narasi / Voice</Label>
+                      <label className="text-[11px] text-primary cursor-pointer hover:underline shrink-0">
+                        ⬆ file<input type="file" accept=".md,.txt,text/*" className="hidden" onChange={(e) => loadFile(e, setBulkNarr)} />
+                      </label>
+                    </div>
+                    <Textarea value={bulkNarr} onChange={(e) => setBulkNarr(e.target.value)} rows={8} placeholder={'Opsional. Tempel STATE 6, atau ⬆ file.'} className="font-mono text-xs" />
                   </div>
                   <div className="space-y-1.5">
-                    <Label className="text-xs">STATE 9 — Video Prompt <span className="text-muted-foreground">(opsional)</span></Label>
-                    <Textarea value={bulkVid} onChange={(e) => setBulkVid(e.target.value)} rows={8} placeholder={'1. slow pan left...\n2. zoom in...'} className="font-mono text-xs" />
+                    <div className="flex items-center justify-between gap-2">
+                      <Label className="text-xs">STATE 9 — Video Prompt <span className="text-muted-foreground">(opsional)</span></Label>
+                      <label className="text-[11px] text-primary cursor-pointer hover:underline shrink-0">
+                        ⬆ file<input type="file" accept=".md,.txt,text/*" className="hidden" onChange={(e) => loadFile(e, setBulkVid)} />
+                      </label>
+                    </div>
+                    <Textarea value={bulkVid} onChange={(e) => setBulkVid(e.target.value)} rows={8} placeholder={'Cuma untuk mode Veo. Tempel STATE 9, atau ⬆ file.'} className="font-mono text-xs" />
                   </div>
                 </div>
                 <Button type="button" size="sm" onClick={applyBulk}>
