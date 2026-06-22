@@ -187,6 +187,16 @@ export async function recoverFacelessScenes(): Promise<void> {
   if (total) console.log(`[faceless-recover] re-generating ${total} incomplete image scene(s)`)
 }
 
+// Keep the doodle STYLE but stop the model from drawing a literal whiteboard object
+// (frame, easel, wall) or any leftover caption/header text — the art should fill the frame.
+function styleFixImagePrompt(p: string): string {
+  let s = p
+    .replace(/whiteboard[-\s]?doodle/gi, 'hand-drawn marker doodle')
+    .replace(/\bon a whiteboard\b/gi, 'on a flat white background')
+    .replace(/\bwhiteboard\b/gi, 'flat white background')
+  return `${s} The artwork must completely fill the frame edge to edge as a flat 2D illustration on a plain solid background — do NOT depict a whiteboard, easel, wall, picture frame, photo border, or any caption/title/header text.`
+}
+
 // Nano Banana image -> firstImagePath. veo mode: enqueue Veo (image->video).
 // kenburns/static mode: the image IS the visual (assembler handles motion) -> mark done.
 async function generateSceneVisual(userId: number, sceneId: number, imagePrompt: string, mode: FacelessMode): Promise<void> {
@@ -203,7 +213,7 @@ async function generateSceneVisual(userId: number, sceneId: number, imagePrompt:
   const imageOnly = mode === 'kenburns' || mode === 'static'
   const { imageUrl } = await generateImageAndWait({
     apiKey,
-    prompt: imagePrompt,
+    prompt: styleFixImagePrompt(imagePrompt),
     model: 'nano-banana-pro',
     aspectRatio: scene.aspectRatio as '16:9' | '9:16',
     resolution: imageOnly ? '2K' : undefined, // higher-res still for image-only modes

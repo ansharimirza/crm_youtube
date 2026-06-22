@@ -58,6 +58,16 @@ function cleanPrompt(s: string): string {
 // (**B1**) is stripped beforehand. A separator is required, so "10 people..." won't match.
 const BEAT_MARKER = /^\s*(?:scene|beat|b)?\s*#?\s*\d+\s*[^\w\s]{1,3}\s*/i
 
+// Section/structure lines that must NOT leak into a beat's prompt (else they get
+// drawn into the image, e.g. "ACT 3 — IT'S AN INSTINCT" rendered as caption text).
+function isNoiseLine(l: string): boolean {
+  return /^\s*#{1,6}\s/.test(l)         // markdown headers: ## ACT 3 ...
+    || /^\s*[-=*_]{3,}\s*$/.test(l)     // --- *** ___ separators
+    || /^\s*>/.test(l)                  // blockquotes
+    || /^\s*act\s+\d+\b/i.test(l)       // "ACT 3 — ..." headers (no #)
+    || /^\s*\*?\s*end of\b/i.test(l)    // "*End of STATE 8 ...*"
+}
+
 // Split STATE 8 into per-beat { image, narration }. Each beat looks like:
 //   B1 — "spoken hook quote"   Prompt: <visual>   Camera: ... Lighting: ...
 // narration = the hook quote (used for subtitle + duration weighting), image = the Prompt: part.
@@ -74,7 +84,7 @@ function parseState8(text: string): { image: string; narration: string }[] {
       if (started) blocks.push(cur.join('\n'))
       cur = [line.replace(BEAT_MARKER, '')]
       started = true
-    } else if (started) cur.push(line)
+    } else if (started && !isNoiseLine(line)) cur.push(line)
   }
   if (started) blocks.push(cur.join('\n'))
   return blocks
