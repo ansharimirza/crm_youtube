@@ -39,12 +39,27 @@ const VOICES = [
   { v: 'Zephyr', d: 'Cerah' },
 ]
 
-// Split a STATE list into items. Primary: numbered list ("1." "2)" "Scene 3:" "#4").
-// Fallbacks: blank-line-separated paragraphs, then one-per-line.
-function parseList(text: string): string[] {
+// STATE-8/9 beats embed a spoken hook before the visual:
+//   B1 — "hook quote"  Prompt: <visual>  Camera: ...        (STATE 8)
+//   B1 — "hook quote" → <motion> ~4s                         (STATE 9)
+// Keep only the description: drop the hook, strip the "Prompt:" label / "→",
+// drop markdown bold, collapse to one line. Safe no-op if neither marker present.
+function cleanPrompt(s: string): string {
+  let t = s.replace(/\*\*/g, '')
+  const m = t.match(/\bPrompt\s*:\s*/i)
+  if (m && m.index !== undefined) t = t.slice(m.index + m[0].length)
+  else if (t.includes('→')) t = t.slice(t.indexOf('→') + 1)
+  return t.replace(/\s+/g, ' ').trim()
+}
+
+// Split a STATE list into items. Primary: a numbered/beat marker at line start
+// ("1." "2)" "Scene 3:" "#4" "B1 —" "Beat 5:"). Fallbacks: blank-line paragraphs, then per-line.
+// clean=true extracts the "Prompt:" portion of each item (for STATE-8 image prompts).
+function parseList(text: string, clean = false): string[] {
   const raw = text.replace(/\r\n/g, '\n')
   if (!raw.trim()) return []
-  const marker = /^\s*(?:scene\s*)?#?\s*\d+\s*[.):\-—]\s?/i
+  const marker = /^\s*(?:scene|beat|b)?\s*#?\s*\d+\s*[.):\-–—]\s?/i
+  const out = (items: string[]) => items.map((x) => (clean ? cleanPrompt(x) : x.trim())).filter(Boolean)
   const lines = raw.split('\n')
   const hasMarkers = lines.some((l) => marker.test(l))
   if (hasMarkers) {
@@ -61,13 +76,13 @@ function parseList(text: string): string[] {
       }
     }
     if (started) items.push(cur.join('\n').trim())
-    return items.filter(Boolean)
+    return out(items.filter(Boolean))
   }
-  // No numbers → blank-line paragraphs
+  // No markers → blank-line paragraphs
   const paras = raw.split(/\n\s*\n/).map((p) => p.trim()).filter(Boolean)
-  if (paras.length > 1) return paras
+  if (paras.length > 1) return out(paras)
   // Single block → one per non-empty line
-  return raw.split('\n').map((l) => l.trim()).filter(Boolean)
+  return out(raw.split('\n').map((l) => l.trim()).filter(Boolean))
 }
 
 export function FacelessStudioPage() {
@@ -111,9 +126,9 @@ export function FacelessStudioPage() {
   )
 
   function applyBulk() {
-    const imgs = parseList(bulkImg)
+    const imgs = parseList(bulkImg, true) // extract the "Prompt:" portion of STATE-8 beats
     const narrs = parseList(bulkNarr)
-    const vids = parseList(bulkVid)
+    const vids = parseList(bulkVid, true)
     const n = Math.max(imgs.length, narrs.length)
     if (n === 0) {
       toast.error('Tempel minimal Image Prompt (STATE 8) dan Narasi (STATE 6)')
