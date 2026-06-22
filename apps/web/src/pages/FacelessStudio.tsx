@@ -52,13 +52,54 @@ function cleanPrompt(s: string): string {
   return t.replace(/\s+/g, ' ').trim()
 }
 
-// Split a STATE list into items. Primary: a numbered/beat marker at line start
-// ("1." "2)" "Scene 3:" "#4" "B1 —" "Beat 5:"). Fallbacks: blank-line paragraphs, then per-line.
-// clean=true extracts the "Prompt:" portion of each item (for STATE-8 image prompts).
-function parseList(text: string, clean = false): string[] {
-  const raw = text.replace(/\r\n/g, '\n')
+// Beat marker at line start: "1." "2)" "Scene 3:" "B1 —" "Beat 5:". The separator
+// after the number is "any 1–3 punctuation/symbol chars" so it tolerates em/en dashes
+// AND mojibake dashes (e.g. "â€"" from a mis-encoded .md). Leading markdown bold
+// (**B1**) is stripped beforehand. A separator is required, so "10 people..." won't match.
+const BEAT_MARKER = /^\s*(?:scene|beat|b)?\s*#?\s*\d+\s*[^\w\s]{1,3}\s*/i
+
+// Split STATE 8 into per-beat { image, narration }. Each beat looks like:
+//   B1 — "spoken hook quote"   Prompt: <visual>   Camera: ... Lighting: ...
+// narration = the hook quote (used for subtitle + duration weighting), image = the Prompt: part.
+function parseState8(text: string): { image: string; narration: string }[] {
+  const raw = text.replace(/\r\n/g, '\n').replace(/\*\*/g, '') // drop markdown bold
   if (!raw.trim()) return []
-  const marker = /^\s*(?:scene|beat|b)?\s*#?\s*\d+\s*[.):\-–—]\s?/i
+  const lines = raw.split('\n')
+  if (!lines.some((l) => BEAT_MARKER.test(l))) return []
+  const blocks: string[] = []
+  let cur: string[] = []
+  let started = false
+  for (const line of lines) {
+    if (BEAT_MARKER.test(line)) {
+      if (started) blocks.push(cur.join('\n'))
+      cur = [line.replace(BEAT_MARKER, '')]
+      started = true
+    } else if (started) cur.push(line)
+  }
+  if (started) blocks.push(cur.join('\n'))
+  return blocks
+    .map((b) => {
+      const m = b.match(/\bPrompt\s*:\s*/i)
+      let narration = ''
+      let image = b
+      if (m && m.index !== undefined) {
+        narration = b.slice(0, m.index)
+        image = b.slice(m.index + m[0].length)
+      }
+      image = image.replace(/\s+/g, ' ').trim()
+      narration = narration.replace(/[""„"]/g, '').replace(/\s+/g, ' ').trim()
+      return { image, narration }
+    })
+    .filter((x) => x.image)
+}
+
+// Split a STATE list into items. Primary: a beat marker at line start.
+// Fallbacks: blank-line paragraphs, then per-line.
+// clean=true extracts the "Prompt:" / "→" portion of each item.
+function parseList(text: string, clean = false): string[] {
+  const raw = text.replace(/\r\n/g, '\n').replace(/\*\*/g, '')
+  if (!raw.trim()) return []
+  const marker = BEAT_MARKER
   const out = (items: string[]) => items.map((x) => (clean ? cleanPrompt(x) : x.trim())).filter(Boolean)
   const lines = raw.split('\n')
   const hasMarkers = lines.some((l) => marker.test(l))
@@ -99,9 +140,8 @@ export function FacelessStudioPage() {
   const [submitting, setSubmitting] = useState(false)
   const [scenes, setScenes] = useState<SceneRow[]>([{ image_prompt: '', narration_text: '', video_prompt: '', audioFile: null }])
 
-  // bulk paste buffers
+  // bulk paste buffers (narration is auto-derived from STATE 8 hook quotes)
   const [bulkImg, setBulkImg] = useState('')
-  const [bulkNarr, setBulkNarr] = useState('')
   const [bulkVid, setBulkVid] = useState('')
   const [showBulk, setShowBulk] = useState(true)
 
@@ -126,16 +166,15 @@ export function FacelessStudioPage() {
   )
 
   function applyBulk() {
-    const imgs = parseList(bulkImg, true) // extract the "Prompt:" portion of STATE-8 beats
-    const narrs = parseList(bulkNarr)
+    // STATE 8 yields image + (auto) narration per beat. Fall back to a plain list if no beats.
+    const beats = parseState8(bulkImg)
+    const imgs = beats.length ? beats.map((b) => b.image) : parseList(bulkImg, true)
+    const narrs = beats.length ? beats.map((b) => b.narration) : []
     const vids = parseList(bulkVid, true)
-    const n = Math.max(imgs.length, narrs.length)
+    const n = imgs.length
     if (n === 0) {
-      toast.error('Tempel minimal Image Prompt (STATE 8) dan Narasi (STATE 6)')
+      toast.error('Tempel/upload STATE 8 (Image Prompt) dulu')
       return
-    }
-    if (imgs.length !== narrs.length) {
-      toast.warning(`Jumlah beda: ${imgs.length} image vs ${narrs.length} narasi. Cek penomoran tiap baris.`)
     }
     const rows: SceneRow[] = []
     for (let i = 0; i < n; i++) {
@@ -148,7 +187,8 @@ export function FacelessStudioPage() {
     }
     setScenes(rows)
     setShowBulk(false)
-    toast.success(`${n} scene di-parse. Cek lalu Generate.`)
+    const withNarr = narrs.filter(Boolean).length
+    toast.success(`${n} scene di-parse${withNarr ? ` (${withNarr} ada narasi)` : ''}. Cek lalu Generate.`)
   }
 
   function updateScene(i: number, patch: Partial<SceneRow>) {
@@ -336,18 +376,18 @@ export function FacelessStudioPage() {
               className="w-full flex items-center gap-2 px-4 py-2.5 text-sm font-medium"
             >
               <ClipboardPaste className="h-4 w-4 text-primary" />
-              Tempel Massal (dari STATE 8 / 6 / 9)
+              Tempel Massal (STATE 8 + STATE 9)
               <ChevronRight className={cn('h-4 w-4 ml-auto transition-transform', showBulk && 'rotate-90')} />
             </button>
             {showBulk && (
               <div className="px-4 pb-4 space-y-3">
                 <p className="text-xs text-muted-foreground">
-                  Tempel, atau <b>upload file .md/.txt</b> hasil unduhan dari claude.ai. Scene dicocokkan urut nomor (image #1 ↔ narasi #1 ↔ video #1).
+                  Tempel, atau <b>upload file .md/.txt</b> hasil unduhan dari claude.ai. Narasi per-scene <b>otomatis diambil dari kutipan di STATE 8</b> (tiap <code>B1 — "..."</code>) — jadi STATE 6 nggak perlu.
                 </p>
-                <div className="grid lg:grid-cols-3 gap-3">
+                <div className="grid lg:grid-cols-2 gap-3">
                   <div className="space-y-1.5">
                     <div className="flex items-center justify-between gap-2">
-                      <Label className="text-xs">STATE 8 — Image Prompt</Label>
+                      <Label className="text-xs">STATE 8 — Image Prompt <span className="text-muted-foreground">(+ narasi otomatis)</span></Label>
                       <label className="text-[11px] text-primary cursor-pointer hover:underline shrink-0">
                         ⬆ file<input type="file" accept=".md,.txt,text/*" className="hidden" onChange={(e) => loadFile(e, setBulkImg)} />
                       </label>
@@ -356,16 +396,7 @@ export function FacelessStudioPage() {
                   </div>
                   <div className="space-y-1.5">
                     <div className="flex items-center justify-between gap-2">
-                      <Label className="text-xs">STATE 6 — Narasi / Voice</Label>
-                      <label className="text-[11px] text-primary cursor-pointer hover:underline shrink-0">
-                        ⬆ file<input type="file" accept=".md,.txt,text/*" className="hidden" onChange={(e) => loadFile(e, setBulkNarr)} />
-                      </label>
-                    </div>
-                    <Textarea value={bulkNarr} onChange={(e) => setBulkNarr(e.target.value)} rows={8} placeholder={'Opsional. Tempel STATE 6, atau ⬆ file.'} className="font-mono text-xs" />
-                  </div>
-                  <div className="space-y-1.5">
-                    <div className="flex items-center justify-between gap-2">
-                      <Label className="text-xs">STATE 9 — Video Prompt <span className="text-muted-foreground">(opsional)</span></Label>
+                      <Label className="text-xs">STATE 9 — Video Prompt <span className="text-muted-foreground">(opsional, cuma mode Veo)</span></Label>
                       <label className="text-[11px] text-primary cursor-pointer hover:underline shrink-0">
                         ⬆ file<input type="file" accept=".md,.txt,text/*" className="hidden" onChange={(e) => loadFile(e, setBulkVid)} />
                       </label>
