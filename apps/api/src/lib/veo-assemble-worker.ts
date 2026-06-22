@@ -80,36 +80,61 @@ export async function assembleProject(projectId: number, opts: { captions?: bool
     })
     if (!project) throw new Error('Project tidak ditemukan')
 
-    // Eligible = visual done + has narration (text for TTS, OR an uploaded audio file).
-    // Veo scenes need videoUrl; image scenes (Ken Burns/static) need firstImagePath.
-    const eligible = project.scenes.filter(
-      (s) => s.status === 'done' && (s.videoUrl || s.firstImagePath) && (s.narrationText.trim() || s.narrationAudioPath),
-    )
-    if (eligible.length === 0) {
-      throw new Error('Tidak ada scene siap (butuh visual done + narasi/suara)')
-    }
+    const fullNarration = project.narrationFullPath && project.narrationFullDuration
+      ? { path: project.narrationFullPath, dur: project.narrationFullDuration }
+      : null
 
     const assembleScenes: AssembleScene[] = []
-    for (const s of eligible) {
-      // Narration audio (generate if missing)
-      let audioPath = s.narrationAudioPath
-      let dur = s.narrationDuration
-      if (!audioPath || dur == null) {
-        dur = await generateNarration(s.id)
-        const fresh = await db.query.veoScenes.findFirst({ where: eq(veoScenes.id, s.id) })
-        audioPath = fresh?.narrationAudioPath ?? null
-      }
-      if (!audioPath || dur == null) throw new Error(`Scene ${s.sceneNumber}: narasi gagal`)
 
-      // Visual: Veo clip (download) or still image (Ken Burns mode)
-      const caption = opts.captions ? s.narrationText : undefined
-      if (s.videoUrl) {
-        const videoPath = await downloadToLocal(s.videoUrl, CLIPS_DIR, `scene${s.id}`)
-        assembleScenes.push({ videoPath, narrationPath: audioPath, narrationDur: dur, caption })
-      } else if (s.firstImagePath) {
-        assembleScenes.push({ imagePath: s.firstImagePath, noZoom: s.noZoom, narrationPath: audioPath, narrationDur: dur, caption })
-      } else {
-        throw new Error(`Scene ${s.sceneNumber}: tidak ada visual (klip/gambar)`)
+    if (fullNarration) {
+      // ONE voiceover for the whole video. Spread scenes across it: weight each
+      // scene's screen time by its narration text length (≈ speech time); equal if no text.
+      const eligible = project.scenes.filter((s) => s.status === 'done' && (s.videoUrl || s.firstImagePath))
+      if (eligible.length === 0) throw new Error('Tidak ada scene siap (butuh visual done)')
+
+      const weights = eligible.map((s) => Math.max(1, s.narrationText.trim().length))
+      const totalW = weights.reduce((a, b) => a + b, 0)
+      for (let i = 0; i < eligible.length; i++) {
+        const s = eligible[i]
+        const dur = Math.max(0.5, (fullNarration.dur * weights[i]) / totalW)
+        const caption = opts.captions ? s.narrationText : undefined
+        if (s.videoUrl) {
+          const videoPath = await downloadToLocal(s.videoUrl, CLIPS_DIR, `scene${s.id}`)
+          assembleScenes.push({ videoPath, narrationDur: dur, caption }) // silent segment
+        } else if (s.firstImagePath) {
+          assembleScenes.push({ imagePath: s.firstImagePath, noZoom: s.noZoom, narrationDur: dur, caption })
+        }
+      }
+    } else {
+      // Per-scene narration (TTS or per-scene uploaded audio).
+      // Eligible = visual done + has narration (text for TTS, OR an uploaded audio file).
+      const eligible = project.scenes.filter(
+        (s) => s.status === 'done' && (s.videoUrl || s.firstImagePath) && (s.narrationText.trim() || s.narrationAudioPath),
+      )
+      if (eligible.length === 0) {
+        throw new Error('Tidak ada scene siap (butuh visual done + narasi/suara)')
+      }
+
+      for (const s of eligible) {
+        // Narration audio (generate via TTS if missing)
+        let audioPath = s.narrationAudioPath
+        let dur = s.narrationDuration
+        if (!audioPath || dur == null) {
+          dur = await generateNarration(s.id)
+          const fresh = await db.query.veoScenes.findFirst({ where: eq(veoScenes.id, s.id) })
+          audioPath = fresh?.narrationAudioPath ?? null
+        }
+        if (!audioPath || dur == null) throw new Error(`Scene ${s.sceneNumber}: narasi gagal`)
+
+        const caption = opts.captions ? s.narrationText : undefined
+        if (s.videoUrl) {
+          const videoPath = await downloadToLocal(s.videoUrl, CLIPS_DIR, `scene${s.id}`)
+          assembleScenes.push({ videoPath, narrationPath: audioPath, narrationDur: dur, caption })
+        } else if (s.firstImagePath) {
+          assembleScenes.push({ imagePath: s.firstImagePath, noZoom: s.noZoom, narrationPath: audioPath, narrationDur: dur, caption })
+        } else {
+          throw new Error(`Scene ${s.sceneNumber}: tidak ada visual (klip/gambar)`)
+        }
       }
     }
 
@@ -118,6 +143,7 @@ export async function assembleProject(projectId: number, opts: { captions?: bool
     const portrait = (project.scenes[0]?.aspectRatio ?? '16:9') === '9:16'
     await assembleVideo(assembleScenes, outPath, {
       musicPath: project.musicPath ?? undefined,
+      fullNarrationPath: fullNarration?.path ?? undefined,
       width: portrait ? 1080 : 1920,
       height: portrait ? 1920 : 1080,
     })

@@ -25,6 +25,9 @@ export const veoProjects = pgTable('veo_projects', {
   description: text('description').default('').notNull(),
   // Faceless-video auto-edit (assemble scene clips + narration -> final MP4)
   musicPath: text('music_path'),
+  // Full-narration mode: one uploaded voiceover for the whole video (scenes spread across it)
+  narrationFullPath: text('narration_full_path'),
+  narrationFullDuration: real('narration_full_duration'),
   thumbnailPath: text('thumbnail_path'),
   finalVideoPath: text('final_video_path'),
   finalVideoUrl: text('final_video_url'),

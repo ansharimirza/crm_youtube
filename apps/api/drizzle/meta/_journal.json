@@ -106,6 +106,13 @@
       "when": 1781587000000,
       "tag": "0014_faceless_static_voice",
       "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1781588000000,
+      "tag": "0015_faceless_full_narration",
+      "breakpoints": true
     }
   ]
 }

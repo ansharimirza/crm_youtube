@@ -24,13 +24,16 @@ export interface AssembleScene {
   videoPath?: string // Veo clip (its own audio is dropped)
   imagePath?: string // still image → Ken Burns or static (used when no videoPath)
   noZoom?: boolean // still image held with NO motion (static mode)
-  narrationPath: string // narration audio (TTS wav or user-uploaded)
+  narrationPath?: string // per-scene narration audio (omitted in full-narration mode)
   narrationDur: number // exact seconds — drives the cut
   caption?: string // optional burned subtitle text
 }
 
 export interface AssembleOptions {
   musicPath?: string // background music (looped + ducked under narration)
+  // Full-narration mode: one voiceover for the whole video. Scenes are rendered
+  // silent (each held for its computed narrationDur) and this audio is laid over the top.
+  fullNarrationPath?: string
   width?: number // output size for Ken Burns scenes (default 1920)
   height?: number // default 1080
 }
@@ -45,15 +48,18 @@ async function runFfmpeg(args: string[]): Promise<void> {
   if (code !== 0) throw new AssembleError(`ffmpeg exited ${code}: ${stderr.slice(-1000)}`)
 }
 
-// One scene -> a uniform segment file (visual fitted to narration + that narration
-// as audio). Uniform codec params so the concat demuxer can stitch them.
+// One scene -> a uniform segment file (visual fitted to its duration). With a
+// per-scene narrationPath that narration is the segment audio; without one the
+// segment is silent (full-narration mode lays a single track over everything).
+// Uniform codec params so the concat demuxer can stitch them.
 async function renderSegment(scene: AssembleScene, segPath: string, w: number, h: number): Promise<void> {
   const d = Math.max(0.1, scene.narrationDur).toFixed(3)
+  const silent = !scene.narrationPath
   const commonOut = [
-    '-map', '[v]', '-map', '[a]',
+    '-map', '[v]', ...(silent ? ['-an'] : ['-map', '[a]']),
     '-t', d,
     '-c:v', 'libx264', '-preset', 'veryfast', '-pix_fmt', 'yuv420p',
-    '-c:a', 'aac', '-b:a', '192k',
+    ...(silent ? [] : ['-c:a', 'aac', '-b:a', '192k']),
     '-video_track_timescale', '30000',
     segPath,
   ]
@@ -73,9 +79,10 @@ async function renderSegment(scene: AssembleScene, segPath: string, w: number, h
         `zoompan=z='min(zoom+0.0007,1.18)':d=${df}:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s=${w}x${h}:fps=${FPS},` +
         `trim=duration=${d},setpts=PTS-STARTPTS,format=yuv420p[v]`
     }
+    const fc = silent ? vf : `${vf};[1:a]${NARR_FILTER(d)}[a]`
     await runFfmpeg([
-      '-y', '-loop', '1', '-i', scene.imagePath, '-i', scene.narrationPath,
-      '-filter_complex', `${vf};[1:a]${NARR_FILTER(d)}[a]`,
+      '-y', '-loop', '1', '-i', scene.imagePath, ...(silent ? [] : ['-i', scene.narrationPath!]),
+      '-filter_complex', fc,
       ...commonOut,
     ])
     return
@@ -84,9 +91,10 @@ async function renderSegment(scene: AssembleScene, segPath: string, w: number, h
   // Veo clip: freeze last frame if shorter than narration, trim if longer.
   const vf =
     `[0:v]tpad=stop_mode=clone:stop_duration=${d},trim=duration=${d},setpts=PTS-STARTPTS,fps=${FPS},format=yuv420p[v]`
+  const fc = silent ? vf : `${vf};[1:a]${NARR_FILTER(d)}[a]`
   await runFfmpeg([
-    '-y', '-i', scene.videoPath!, '-i', scene.narrationPath,
-    '-filter_complex', `${vf};[1:a]${NARR_FILTER(d)}[a]`,
+    '-y', '-i', scene.videoPath!, ...(silent ? [] : ['-i', scene.narrationPath!]),
+    '-filter_complex', fc,
     ...commonOut,
   ])
 }
@@ -142,11 +150,18 @@ export async function assembleVideo(
     }
 
     // Phase B — single final pass: concat + optional captions + optional music
-    if (!srtPath && !opts.musicPath) {
+    //   + optional full narration (one voiceover laid over the silent segments).
+    const hasFull = !!opts.fullNarrationPath
+    if (!srtPath && !opts.musicPath && !hasFull) {
+      // per-scene audio already baked into the segments → straight concat
       await runFfmpeg(['-y', '-f', 'concat', '-safe', '0', '-i', listPath, '-c', 'copy', '-movflags', '+faststart', outPath])
     } else {
       const inputs = ['-f', 'concat', '-safe', '0', '-i', listPath]
-      if (opts.musicPath) inputs.push('-stream_loop', '-1', '-i', opts.musicPath)
+      let idx = 1
+      let narrIdx = -1
+      let musIdx = -1
+      if (hasFull) { inputs.push('-i', opts.fullNarrationPath!); narrIdx = idx++ }
+      if (opts.musicPath) { inputs.push('-stream_loop', '-1', '-i', opts.musicPath); musIdx = idx++ }
 
       const fparts: string[] = []
       let vmap = '0:v'
@@ -156,10 +171,23 @@ export async function assembleVideo(
         vmap = '[vout]'
         vcodec = ['-c:v', 'libx264', '-preset', 'veryfast', '-pix_fmt', 'yuv420p']
       }
+
+      // Base narration: either the single full track, or the per-scene audio from concat (0:a)
       let amap = '0:a'
       let acodec = ['-c:a', 'copy']
-      if (opts.musicPath) {
-        fparts.push(`[1:a]aresample=48000,aformat=sample_fmts=fltp:channel_layouts=stereo,volume=0.12[mus]`)
+      const stereo = 'aresample=48000,aformat=sample_fmts=fltp:channel_layouts=stereo'
+      if (hasFull) {
+        fparts.push(`[${narrIdx}:a]${stereo}[narr]`)
+        if (musIdx >= 0) {
+          fparts.push(`[${musIdx}:a]${stereo},volume=0.12[mus]`)
+          fparts.push(`[narr][mus]amix=inputs=2:duration=first:dropout_transition=0,dynaudnorm[aout]`)
+          amap = '[aout]'
+        } else {
+          amap = '[narr]'
+        }
+        acodec = ['-c:a', 'aac', '-b:a', '192k']
+      } else if (musIdx >= 0) {
+        fparts.push(`[${musIdx}:a]${stereo},volume=0.12[mus]`)
         fparts.push(`[0:a][mus]amix=inputs=2:duration=first:dropout_transition=0,dynaudnorm[aout]`)
         amap = '[aout]'
         acodec = ['-c:a', 'aac', '-b:a', '192k']
@@ -167,7 +195,9 @@ export async function assembleVideo(
 
       const args = ['-y', ...inputs]
       if (fparts.length) args.push('-filter_complex', fparts.join(';'))
-      args.push('-map', vmap, '-map', amap, ...vcodec, ...acodec, '-movflags', '+faststart', outPath)
+      args.push('-map', vmap, '-map', amap, ...vcodec, ...acodec)
+      if (hasFull) args.push('-shortest') // keep video/audio ending together
+      args.push('-movflags', '+faststart', outPath)
       await runFfmpeg(args)
     }
 

@@ -18,7 +18,7 @@ import { useAuth } from '@/contexts/auth'
 import type { VeoProjectSummary } from '@/lib/types'
 
 type Mode = 'veo' | 'kenburns' | 'static'
-type VoiceMode = 'tts' | 'upload'
+type VoiceMode = 'tts' | 'single' | 'upload'
 type Aspect = '16:9' | '9:16'
 
 interface SceneRow {
@@ -80,6 +80,7 @@ export function FacelessStudioPage() {
   const [voiceMode, setVoiceMode] = useState<VoiceMode>('tts')
   const [aspect, setAspect] = useState<Aspect>('16:9')
   const [voice, setVoice] = useState('Charon')
+  const [fullAudio, setFullAudio] = useState<File | null>(null) // voiceMode='single'
   const [submitting, setSubmitting] = useState(false)
   const [scenes, setScenes] = useState<SceneRow[]>([{ image_prompt: '', narration_text: '', video_prompt: '', audioFile: null }])
 
@@ -96,13 +97,16 @@ export function FacelessStudioPage() {
   })
   const projects = data?.projects ?? []
 
-  // A scene is "ready" when it has an image prompt + a voice source:
-  //  - tts: narration text   - upload: an audio file
+  // A scene is "ready" when it has an image prompt + its voice source:
+  //  tts: narration text · upload: per-scene audio file · single: image only (audio is project-level)
   const validScenes = useMemo(
     () =>
-      scenes.filter(
-        (s) => s.image_prompt.trim() && (voiceMode === 'tts' ? s.narration_text.trim() : !!s.audioFile),
-      ),
+      scenes.filter((s) => {
+        if (!s.image_prompt.trim()) return false
+        if (voiceMode === 'tts') return !!s.narration_text.trim()
+        if (voiceMode === 'upload') return !!s.audioFile
+        return true // single
+      }),
     [scenes, voiceMode],
   )
 
@@ -145,8 +149,10 @@ export function FacelessStudioPage() {
   async function submit() {
     if (!title.trim()) return toast.error('Isi judul project')
     if (validScenes.length === 0) {
-      return toast.error(voiceMode === 'tts' ? 'Minimal 1 scene dengan image prompt + narasi' : 'Minimal 1 scene dengan image prompt + file audio')
+      const why = voiceMode === 'tts' ? 'image prompt + narasi' : voiceMode === 'upload' ? 'image prompt + file audio' : 'image prompt'
+      return toast.error(`Minimal 1 scene dengan ${why}`)
     }
+    if (voiceMode === 'single' && !fullAudio) return toast.error('Upload 1 file narasi penuh dulu')
     setSubmitting(true)
     try {
       const res = await api.post<{ projectId: number; sceneIds: number[]; sceneCount: number }>('/api/veo/faceless', {
@@ -162,7 +168,7 @@ export function FacelessStudioPage() {
         })),
       })
 
-      // Upload-voice: push each scene's audio to its new scene id (same order as sent).
+      // Upload-voice (per scene): push each scene's audio to its new scene id (same order).
       if (voiceMode === 'upload') {
         for (let i = 0; i < validScenes.length; i++) {
           const file = validScenes[i].audioFile
@@ -172,6 +178,13 @@ export function FacelessStudioPage() {
           fd.append('audio', file)
           await api.post(`/api/veo/scenes/${sceneId}/narration-audio`, fd)
         }
+      }
+
+      // Single full narration: one file for the whole project.
+      if (voiceMode === 'single' && fullAudio) {
+        const fd = new FormData()
+        fd.append('audio', fullAudio)
+        await api.post(`/api/veo/projects/${res.projectId}/narration-full`, fd)
       }
 
       toast.success(`Project dibuat — ${res.sceneCount} scene mulai digenerate`)
@@ -248,7 +261,8 @@ export function FacelessStudioPage() {
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="tts">Gemini TTS (otomatis)</SelectItem>
-                  <SelectItem value="upload">Upload audio sendiri</SelectItem>
+                  <SelectItem value="single">Upload 1 narasi penuh</SelectItem>
+                  <SelectItem value="upload">Upload audio per scene</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -265,9 +279,26 @@ export function FacelessStudioPage() {
                 </Select>
               </div>
             )}
+            {voiceMode === 'single' && (
+              <div className="space-y-1.5 lg:col-span-4">
+                <Label>File narasi penuh (1 audio untuk seluruh video)</Label>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="file"
+                    accept="audio/*"
+                    onChange={(e) => setFullAudio(e.target.files?.[0] ?? null)}
+                    className="text-xs file:mr-2 file:rounded file:border-0 file:bg-primary/10 file:px-3 file:py-1.5 file:text-primary"
+                  />
+                  {fullAudio && <span className="text-[11px] text-emerald-400 truncate">🔊 {fullAudio.name}</span>}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Durasi tiap gambar dibagi otomatis mengikuti panjang audio — ditimbang dari panjang teks narasi per-scene (kalau diisi), atau dibagi rata. Teks narasi opsional (buat subtitle).
+                </p>
+              </div>
+            )}
             {voiceMode === 'upload' && (
               <p className="text-xs text-muted-foreground lg:col-span-4">
-                Mode upload: tiap scene unggah file audio (.mp3/.wav/.m4a) sendiri. Durasi tiap klip otomatis disesuaikan panjang audionya. Narasi teks jadi opsional (cuma buat subtitle).
+                Mode per-scene: tiap scene unggah file audio (.mp3/.wav/.m4a) sendiri. Durasi tiap klip otomatis menyesuaikan panjang audionya. Teks narasi opsional (buat subtitle).
               </p>
             )}
           </div>
@@ -351,7 +382,7 @@ export function FacelessStudioPage() {
 
           <div className="flex items-center gap-2 pt-1">
             <Button onClick={submit} disabled={submitting || validScenes.length === 0}>
-              {submitting ? <><Loader2 className="h-4 w-4 animate-spin" /> {voiceMode === 'upload' ? 'Upload audio...' : 'Membuat...'}</> : <><Wand2 className="h-4 w-4" /> Generate {validScenes.length} Scene</>}
+              {submitting ? <><Loader2 className="h-4 w-4 animate-spin" /> {voiceMode === 'tts' ? 'Membuat...' : 'Upload audio...'}</> : <><Wand2 className="h-4 w-4" /> Generate {validScenes.length} Scene</>}
             </Button>
             {mode === 'veo' && validScenes.length > 0 && (
               <span className="text-xs text-muted-foreground">≈ {validScenes.length * 3} kredit Veo</span>

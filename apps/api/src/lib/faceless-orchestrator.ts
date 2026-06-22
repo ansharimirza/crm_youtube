@@ -30,7 +30,8 @@ export interface FacelessScene {
 // kenburns = still image + slow pan/zoom (no Veo)
 // static  = still image, NO motion at all (held on screen for the narration)
 export type FacelessMode = 'veo' | 'kenburns' | 'static'
-export type VoiceMode = 'tts' | 'upload' // generate via Gemini TTS, or user uploads audio per scene
+// tts = Gemini TTS per scene; upload = user audio per scene; single = one full voiceover for the whole video
+export type VoiceMode = 'tts' | 'upload' | 'single'
 
 export async function createFacelessProject(
   userId: number,

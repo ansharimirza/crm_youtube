@@ -119,7 +119,7 @@ export const veoRoutes = new Elysia({ prefix: '/api/veo' })
       aspectRatio: t.Optional(t.Union([t.Literal('16:9'), t.Literal('9:16')])),
       mode: t.Optional(t.Union([t.Literal('veo'), t.Literal('kenburns'), t.Literal('static')])),
       voice: t.Optional(t.String()),
-      voiceMode: t.Optional(t.Union([t.Literal('tts'), t.Literal('upload')])),
+      voiceMode: t.Optional(t.Union([t.Literal('tts'), t.Literal('upload'), t.Literal('single')])),
       model: t.Optional(t.String()),
     }),
   })
@@ -661,6 +661,36 @@ export const veoRoutes = new Elysia({ prefix: '/api/veo' })
     await db.update(veoScenes)
       .set({ narrationAudioPath: path, narrationDuration: duration, updatedAt: new Date() })
       .where(eq(veoScenes.id, id))
+    return { ok: true, duration }
+  }, {
+    body: t.Object({ audio: t.File() }),
+  })
+  // === FACELESS: upload ONE full narration for the whole project (voiceMode='single') ===
+  .post('/projects/:id/narration-full', async ({ params, body, user, set }) => {
+    const id = Number(params.id)
+    const project = await db.query.veoProjects.findFirst({
+      where: and(eq(veoProjects.id, id), eq(veoProjects.userId, user.id)),
+    })
+    if (!project) {
+      set.status = 404
+      return { error: 'Not found' }
+    }
+    const file = body.audio
+    const dir = join(VEO_DIR, 'narration')
+    await mkdir(dir, { recursive: true })
+    const ext = (file.name.split('.').pop() || 'mp3').toLowerCase()
+    const path = join(dir, `project_${id}_full_${Date.now()}.${ext}`)
+    await Bun.write(path, file)
+    let duration: number
+    try {
+      duration = await audioDurationSec(path)
+    } catch (e) {
+      set.status = 400
+      return { error: e instanceof Error ? e.message : 'Durasi audio gagal dibaca' }
+    }
+    await db.update(veoProjects)
+      .set({ narrationFullPath: path, narrationFullDuration: duration, updatedAt: new Date() })
+      .where(eq(veoProjects.id, id))
     return { ok: true, duration }
   }, {
     body: t.Object({ audio: t.File() }),
