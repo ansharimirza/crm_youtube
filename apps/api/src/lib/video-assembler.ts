@@ -164,18 +164,31 @@ export async function assembleVideo(
       if (opts.musicPath) { inputs.push('-stream_loop', '-1', '-i', opts.musicPath); musIdx = idx++ }
 
       const fparts: string[] = []
+      const stereo = 'aresample=48000,aformat=sample_fmts=fltp:channel_layouts=stereo'
+
+      // ---- video chain (vIn = bracketed input for the next filter; vmap = -map token) ----
+      let vIn = '[0:v]'
       let vmap = '0:v'
       let vcodec = ['-c:v', 'copy']
+      const reencodeV = () => { vcodec = ['-c:v', 'libx264', '-preset', 'veryfast', '-pix_fmt', 'yuv420p'] }
       if (srtPath) {
-        fparts.push(`[0:v]subtitles='${srtPath}'[vout]`)
-        vmap = '[vout]'
-        vcodec = ['-c:v', 'libx264', '-preset', 'veryfast', '-pix_fmt', 'yuv420p']
+        fparts.push(`${vIn}subtitles='${srtPath}'[vsub]`)
+        vIn = '[vsub]'; vmap = '[vsub]'
+        reencodeV()
       }
+      if (hasFull) {
+        // Full narration must play to the very end. Frame-rounding makes the stitched
+        // video a few seconds shorter than the audio, so hold the last frame (tpad) to
+        // cover the gap; -shortest then trims the held tail to the exact audio length.
+        fparts.push(`${vIn}tpad=stop_mode=clone:stop_duration=30[vpad]`)
+        vIn = '[vpad]'; vmap = '[vpad]'
+        reencodeV()
+      }
+      void vIn
 
-      // Base narration: either the single full track, or the per-scene audio from concat (0:a)
+      // ---- audio chain: single full track, or per-scene audio from concat (0:a) ----
       let amap = '0:a'
       let acodec = ['-c:a', 'copy']
-      const stereo = 'aresample=48000,aformat=sample_fmts=fltp:channel_layouts=stereo'
       if (hasFull) {
         fparts.push(`[${narrIdx}:a]${stereo}[narr]`)
         if (musIdx >= 0) {
@@ -196,7 +209,7 @@ export async function assembleVideo(
       const args = ['-y', ...inputs]
       if (fparts.length) args.push('-filter_complex', fparts.join(';'))
       args.push('-map', vmap, '-map', amap, ...vcodec, ...acodec)
-      if (hasFull) args.push('-shortest') // keep video/audio ending together
+      if (hasFull) args.push('-shortest') // trim the held last frame to the audio length
       args.push('-movflags', '+faststart', outPath)
       await runFfmpeg(args)
     }
