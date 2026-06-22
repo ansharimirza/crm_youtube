@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Wand2, Plus, Trash2, Loader2, KeyRound, ClipboardPaste, Film,
   CheckCircle2, AlertCircle, ChevronRight,
@@ -17,13 +17,15 @@ import { toast } from 'sonner'
 import { useAuth } from '@/contexts/auth'
 import type { VeoProjectSummary } from '@/lib/types'
 
-type Mode = 'veo' | 'kenburns'
+type Mode = 'veo' | 'kenburns' | 'static'
+type VoiceMode = 'tts' | 'upload'
 type Aspect = '16:9' | '9:16'
 
 interface SceneRow {
   image_prompt: string   // STATE 8
   narration_text: string // STATE 6 (voice script)
   video_prompt: string   // STATE 9 (optional)
+  audioFile: File | null  // own-voice upload (voiceMode='upload')
 }
 
 const VOICES = [
@@ -75,9 +77,11 @@ export function FacelessStudioPage() {
 
   const [title, setTitle] = useState('')
   const [mode, setMode] = useState<Mode>('veo')
+  const [voiceMode, setVoiceMode] = useState<VoiceMode>('tts')
   const [aspect, setAspect] = useState<Aspect>('16:9')
   const [voice, setVoice] = useState('Charon')
-  const [scenes, setScenes] = useState<SceneRow[]>([{ image_prompt: '', narration_text: '', video_prompt: '' }])
+  const [submitting, setSubmitting] = useState(false)
+  const [scenes, setScenes] = useState<SceneRow[]>([{ image_prompt: '', narration_text: '', video_prompt: '', audioFile: null }])
 
   // bulk paste buffers
   const [bulkImg, setBulkImg] = useState('')
@@ -92,20 +96,15 @@ export function FacelessStudioPage() {
   })
   const projects = data?.projects ?? []
 
+  // A scene is "ready" when it has an image prompt + a voice source:
+  //  - tts: narration text   - upload: an audio file
   const validScenes = useMemo(
-    () => scenes.filter((s) => s.image_prompt.trim() && s.narration_text.trim()),
-    [scenes],
+    () =>
+      scenes.filter(
+        (s) => s.image_prompt.trim() && (voiceMode === 'tts' ? s.narration_text.trim() : !!s.audioFile),
+      ),
+    [scenes, voiceMode],
   )
-
-  const createMutation = useMutation({
-    mutationFn: (payload: unknown) => api.post<{ projectId: number; sceneCount: number }>('/api/veo/faceless', payload),
-    onSuccess: (res) => {
-      toast.success(`Project dibuat — ${res.sceneCount} scene mulai digenerate`)
-      qc.invalidateQueries({ queryKey: ['veo-projects'] })
-      navigate(`/faceless/${res.projectId}`)
-    },
-    onError: (e: Error) => toast.error(e.message),
-  })
 
   function applyBulk() {
     const imgs = parseList(bulkImg)
@@ -125,6 +124,7 @@ export function FacelessStudioPage() {
         image_prompt: imgs[i] ?? '',
         narration_text: narrs[i] ?? '',
         video_prompt: vids[i] ?? '',
+        audioFile: null,
       })
     }
     setScenes(rows)
@@ -136,26 +136,52 @@ export function FacelessStudioPage() {
     setScenes((prev) => prev.map((s, idx) => (idx === i ? { ...s, ...patch } : s)))
   }
   function addScene() {
-    setScenes((prev) => [...prev, { image_prompt: '', narration_text: '', video_prompt: '' }])
+    setScenes((prev) => [...prev, { image_prompt: '', narration_text: '', video_prompt: '', audioFile: null }])
   }
   function removeScene(i: number) {
     setScenes((prev) => prev.filter((_, idx) => idx !== i))
   }
 
-  function submit() {
+  async function submit() {
     if (!title.trim()) return toast.error('Isi judul project')
-    if (validScenes.length === 0) return toast.error('Minimal 1 scene dengan image prompt + narasi')
-    createMutation.mutate({
-      title: title.trim(),
-      mode,
-      aspectRatio: aspect,
-      voice,
-      scenes: validScenes.map((s) => ({
-        image_prompt: s.image_prompt.trim(),
-        narration_text: s.narration_text.trim(),
-        ...(s.video_prompt.trim() ? { video_prompt: s.video_prompt.trim() } : {}),
-      })),
-    })
+    if (validScenes.length === 0) {
+      return toast.error(voiceMode === 'tts' ? 'Minimal 1 scene dengan image prompt + narasi' : 'Minimal 1 scene dengan image prompt + file audio')
+    }
+    setSubmitting(true)
+    try {
+      const res = await api.post<{ projectId: number; sceneIds: number[]; sceneCount: number }>('/api/veo/faceless', {
+        title: title.trim(),
+        mode,
+        aspectRatio: aspect,
+        voiceMode,
+        ...(voiceMode === 'tts' ? { voice } : {}),
+        scenes: validScenes.map((s) => ({
+          image_prompt: s.image_prompt.trim(),
+          ...(s.narration_text.trim() ? { narration_text: s.narration_text.trim() } : {}),
+          ...(s.video_prompt.trim() ? { video_prompt: s.video_prompt.trim() } : {}),
+        })),
+      })
+
+      // Upload-voice: push each scene's audio to its new scene id (same order as sent).
+      if (voiceMode === 'upload') {
+        for (let i = 0; i < validScenes.length; i++) {
+          const file = validScenes[i].audioFile
+          const sceneId = res.sceneIds[i]
+          if (!file || !sceneId) continue
+          const fd = new FormData()
+          fd.append('audio', file)
+          await api.post(`/api/veo/scenes/${sceneId}/narration-audio`, fd)
+        }
+      }
+
+      toast.success(`Project dibuat — ${res.sceneCount} scene mulai digenerate`)
+      qc.invalidateQueries({ queryKey: ['veo-projects'] })
+      navigate(`/faceless/${res.projectId}`)
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Gagal membuat project')
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   return (
@@ -195,13 +221,14 @@ export function FacelessStudioPage() {
               <Label>Judul</Label>
               <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Misal: 10 Fakta Luar Angkasa" maxLength={200} />
             </div>
-            <div className="space-y-1.5">
+            <div className="space-y-1.5 lg:col-span-2">
               <Label>Mode</Label>
               <Select value={mode} onValueChange={(v) => setMode(v as Mode)}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="veo">Veo (sinematik, pakai kredit Veo)</SelectItem>
                   <SelectItem value="kenburns">Ken Burns (gambar + zoom, murah & cepat)</SelectItem>
+                  <SelectItem value="static">Static (gambar diam, tanpa zoom)</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -215,17 +242,34 @@ export function FacelessStudioPage() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-1.5 lg:col-span-2">
-              <Label>Suara (Gemini TTS)</Label>
-              <Select value={voice} onValueChange={setVoice}>
+            <div className="space-y-1.5">
+              <Label>Sumber Suara</Label>
+              <Select value={voiceMode} onValueChange={(v) => setVoiceMode(v as VoiceMode)}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  {VOICES.map((x) => (
-                    <SelectItem key={x.v} value={x.v}>{x.v} — {x.d}</SelectItem>
-                  ))}
+                  <SelectItem value="tts">Gemini TTS (otomatis)</SelectItem>
+                  <SelectItem value="upload">Upload audio sendiri</SelectItem>
                 </SelectContent>
               </Select>
             </div>
+            {voiceMode === 'tts' && (
+              <div className="space-y-1.5 lg:col-span-4">
+                <Label>Suara (Gemini TTS)</Label>
+                <Select value={voice} onValueChange={setVoice}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {VOICES.map((x) => (
+                      <SelectItem key={x.v} value={x.v}>{x.v} — {x.d}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+            {voiceMode === 'upload' && (
+              <p className="text-xs text-muted-foreground lg:col-span-4">
+                Mode upload: tiap scene unggah file audio (.mp3/.wav/.m4a) sendiri. Durasi tiap klip otomatis disesuaikan panjang audionya. Narasi teks jadi opsional (cuma buat subtitle).
+              </p>
+            )}
           </div>
 
           {/* Bulk paste */}
@@ -284,17 +328,30 @@ export function FacelessStudioPage() {
                   </div>
                   <div className="grid lg:grid-cols-3 gap-2">
                     <Textarea value={s.image_prompt} onChange={(e) => updateScene(i, { image_prompt: e.target.value })} rows={2} placeholder="Image prompt (STATE 8)" className="text-xs" />
-                    <Textarea value={s.narration_text} onChange={(e) => updateScene(i, { narration_text: e.target.value })} rows={2} placeholder="Narasi (STATE 6)" className="text-xs" />
-                    <Textarea value={s.video_prompt} onChange={(e) => updateScene(i, { video_prompt: e.target.value })} rows={2} placeholder="Video prompt (STATE 9, opsional)" className="text-xs" />
+                    <Textarea value={s.narration_text} onChange={(e) => updateScene(i, { narration_text: e.target.value })} rows={2} placeholder={voiceMode === 'upload' ? 'Narasi/subtitle (opsional)' : 'Narasi (STATE 6)'} className="text-xs" />
+                    {mode === 'veo' && (
+                      <Textarea value={s.video_prompt} onChange={(e) => updateScene(i, { video_prompt: e.target.value })} rows={2} placeholder="Video prompt (STATE 9, opsional)" className="text-xs" />
+                    )}
                   </div>
+                  {voiceMode === 'upload' && (
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="file"
+                        accept="audio/*"
+                        onChange={(e) => updateScene(i, { audioFile: e.target.files?.[0] ?? null })}
+                        className="text-xs file:mr-2 file:rounded file:border-0 file:bg-primary/10 file:px-2 file:py-1 file:text-primary"
+                      />
+                      {s.audioFile && <span className="text-[11px] text-emerald-400 truncate">🔊 {s.audioFile.name}</span>}
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
           </div>
 
           <div className="flex items-center gap-2 pt-1">
-            <Button onClick={submit} disabled={createMutation.isPending || validScenes.length === 0}>
-              {createMutation.isPending ? <><Loader2 className="h-4 w-4 animate-spin" /> Membuat...</> : <><Wand2 className="h-4 w-4" /> Generate {validScenes.length} Scene</>}
+            <Button onClick={submit} disabled={submitting || validScenes.length === 0}>
+              {submitting ? <><Loader2 className="h-4 w-4 animate-spin" /> {voiceMode === 'upload' ? 'Upload audio...' : 'Membuat...'}</> : <><Wand2 className="h-4 w-4" /> Generate {validScenes.length} Scene</>}
             </Button>
             {mode === 'veo' && validScenes.length > 0 && (
               <span className="text-xs text-muted-foreground">≈ {validScenes.length * 3} kredit Veo</span>

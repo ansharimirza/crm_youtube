@@ -29,6 +29,19 @@ async function saveFile(file: File, prefix: string): Promise<string> {
   return filepath
 }
 
+// Read an audio file's exact duration (seconds) via ffprobe — drives per-scene cut.
+async function audioDurationSec(path: string): Promise<number> {
+  const proc = Bun.spawn(
+    ['ffprobe', '-v', 'error', '-show_entries', 'format=duration', '-of', 'default=noprint_wrappers=1:nokey=1', path],
+    { stdout: 'pipe', stderr: 'pipe' },
+  )
+  const out = await new Response(proc.stdout).text()
+  await proc.exited
+  const d = parseFloat(out.trim())
+  if (!isFinite(d) || d <= 0) throw new Error('Durasi audio tidak terbaca (format tidak didukung?)')
+  return d
+}
+
 export const veoRoutes = new Elysia({ prefix: '/api/veo' })
   .use(authMiddleware)
 
@@ -84,9 +97,10 @@ export const veoRoutes = new Elysia({ prefix: '/api/veo' })
         aspectRatio: body.aspectRatio,
         mode: body.mode,
         voice: body.voice,
+        voiceMode: body.voiceMode,
         model: body.model,
       })
-      return { projectId, sceneCount: sceneIds.length }
+      return { projectId, sceneIds, sceneCount: sceneIds.length }
     } catch (e) {
       set.status = 400
       return { error: e instanceof Error ? e.message : 'Gagal membuat project' }
@@ -97,14 +111,15 @@ export const veoRoutes = new Elysia({ prefix: '/api/veo' })
       scenes: t.Array(
         t.Object({
           image_prompt: t.String({ minLength: 1 }),
-          narration_text: t.String({ minLength: 1 }),
+          narration_text: t.Optional(t.String()), // optional when voiceMode='upload'
           video_prompt: t.Optional(t.String()),
         }),
         { minItems: 1 },
       ),
       aspectRatio: t.Optional(t.Union([t.Literal('16:9'), t.Literal('9:16')])),
-      mode: t.Optional(t.Union([t.Literal('veo'), t.Literal('kenburns')])),
+      mode: t.Optional(t.Union([t.Literal('veo'), t.Literal('kenburns'), t.Literal('static')])),
       voice: t.Optional(t.String()),
+      voiceMode: t.Optional(t.Union([t.Literal('tts'), t.Literal('upload')])),
       model: t.Optional(t.String()),
     }),
   })
@@ -621,6 +636,34 @@ export const veoRoutes = new Elysia({ prefix: '/api/veo' })
       narration_text: t.String({ minLength: 1, maxLength: 5000 }),
       voice: t.Optional(t.String()),
     }),
+  })
+  // === FACELESS: upload your own narration audio for a scene (voiceMode='upload') ===
+  .post('/scenes/:id/narration-audio', async ({ params, body, user, set }) => {
+    const id = Number(params.id)
+    const scene = await db.query.veoScenes.findFirst({ where: eq(veoScenes.id, id), with: { project: true } })
+    if (!scene || scene.project.userId !== user.id) {
+      set.status = 404
+      return { error: 'Not found' }
+    }
+    const file = body.audio
+    const dir = join(VEO_DIR, 'narration')
+    await mkdir(dir, { recursive: true })
+    const ext = (file.name.split('.').pop() || 'mp3').toLowerCase()
+    const path = join(dir, `scene_${id}_${Date.now()}.${ext}`)
+    await Bun.write(path, file)
+    let duration: number
+    try {
+      duration = await audioDurationSec(path)
+    } catch (e) {
+      set.status = 400
+      return { error: e instanceof Error ? e.message : 'Durasi audio gagal dibaca' }
+    }
+    await db.update(veoScenes)
+      .set({ narrationAudioPath: path, narrationDuration: duration, updatedAt: new Date() })
+      .where(eq(veoScenes.id, id))
+    return { ok: true, duration }
+  }, {
+    body: t.Object({ audio: t.File() }),
   })
   // === FACELESS: assemble whole project into 1 final video ===
   .post('/projects/:id/assemble', async ({ params, body, user, set }) => {

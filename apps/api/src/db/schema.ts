@@ -64,7 +64,8 @@ export const veoScenes = pgTable('veo_scenes', {
   // Faceless narration (voiceover spoken during this scene)
   narrationText: text('narration_text').default('').notNull(),
   narrationAudioPath: text('narration_audio_path'),
-  narrationDuration: real('narration_duration'), // exact seconds from TTS
+  narrationDuration: real('narration_duration'), // exact seconds from TTS (or uploaded audio)
+  noZoom: boolean('no_zoom').default(false).notNull(), // static image mode (no Ken Burns pan/zoom)
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
 })

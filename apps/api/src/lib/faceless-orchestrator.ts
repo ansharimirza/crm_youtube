@@ -22,11 +22,15 @@ async function geminigenKey(userId: number): Promise<string | null> {
 
 export interface FacelessScene {
   image_prompt: string
-  narration_text: string
+  narration_text?: string // optional when voiceMode='upload' (audio supplied per scene)
   video_prompt?: string // optional Veo motion prompt; defaults to image_prompt
 }
 
-export type FacelessMode = 'veo' | 'kenburns'
+// veo     = image animated by a Veo clip (cinematic, costs Veo credits)
+// kenburns = still image + slow pan/zoom (no Veo)
+// static  = still image, NO motion at all (held on screen for the narration)
+export type FacelessMode = 'veo' | 'kenburns' | 'static'
+export type VoiceMode = 'tts' | 'upload' // generate via Gemini TTS, or user uploads audio per scene
 
 export async function createFacelessProject(
   userId: number,
@@ -35,12 +39,14 @@ export async function createFacelessProject(
     scenes: FacelessScene[]
     aspectRatio?: '16:9' | '9:16'
     model?: string
-    mode?: FacelessMode // 'veo' (image->Veo clip) or 'kenburns' (still image + pan/zoom)
+    mode?: FacelessMode
     voice?: string // Gemini TTS voice (e.g. Kore, Puck, Charon)
+    voiceMode?: VoiceMode // 'tts' (default) or 'upload' (skip TTS, audio added per scene)
   },
 ): Promise<{ projectId: number; sceneIds: number[] }> {
   if (!p.scenes?.length) throw new Error('Minimal 1 scene')
   const mode: FacelessMode = p.mode ?? 'veo'
+  const voiceMode: VoiceMode = p.voiceMode ?? 'tts'
 
   const [project] = await db.insert(veoProjects).values({ userId, title: p.title }).returning()
   const sceneIds: number[] = []
@@ -51,13 +57,14 @@ export async function createFacelessProject(
     const [scene] = await db.insert(veoScenes).values({
       projectId: project.id,
       sceneNumber: i + 1,
-      prompt: s.video_prompt || s.image_prompt, // Veo motion prompt (unused in kenburns)
+      prompt: s.video_prompt || s.image_prompt, // Veo motion prompt (unused for image modes)
       model: p.model ?? 'veo-3.1-fast',
       resolution: '1080p',
       duration: 8,
       aspectRatio: p.aspectRatio ?? '16:9',
       modeImage: 'frame',
-      narrationText: s.narration_text,
+      narrationText: s.narration_text ?? '',
+      noZoom: mode === 'static',
       status: 'queued',
     }).returning()
     sceneIds.push(scene.id)
@@ -66,7 +73,7 @@ export async function createFacelessProject(
 
   // Throttled background generation — never fire all image+TTS at once (a 126-scene
   // project would otherwise slam GeminiGen/Gemini with 250+ concurrent calls).
-  void runScenePool(userId, pending, mode, p.voice)
+  void runScenePool(userId, pending, mode, voiceMode, p.voice)
 
   return { projectId: project.id, sceneIds }
 }
@@ -76,6 +83,7 @@ async function runScenePool(
   userId: number,
   pending: { sceneId: number; imagePrompt: string }[],
   mode: FacelessMode,
+  voiceMode: VoiceMode,
   voice?: string,
 ): Promise<void> {
   let idx = 0
@@ -83,14 +91,17 @@ async function runScenePool(
     while (idx < pending.length) {
       const { sceneId, imagePrompt } = pending[idx++]
       await generateSceneVisual(userId, sceneId, imagePrompt, mode).catch((e) => console.error('[faceless-visual]', e))
-      await generateNarration(sceneId, voice).catch((e) => console.error('[faceless-narr]', e))
+      // Upload-voice mode: audio is supplied per scene by the user, skip TTS.
+      if (voiceMode === 'tts') {
+        await generateNarration(sceneId, voice).catch((e) => console.error('[faceless-narr]', e))
+      }
     }
   }
   await Promise.all(Array.from({ length: Math.min(SCENE_GEN_CONCURRENCY, pending.length) }, worker))
 }
 
 // Nano Banana image -> firstImagePath. veo mode: enqueue Veo (image->video).
-// kenburns mode: the image IS the visual (assembler pans/zooms it) -> mark done.
+// kenburns/static mode: the image IS the visual (assembler handles motion) -> mark done.
 async function generateSceneVisual(userId: number, sceneId: number, imagePrompt: string, mode: FacelessMode): Promise<void> {
   const apiKey = await geminigenKey(userId)
   if (!apiKey) {
@@ -102,12 +113,13 @@ async function generateSceneVisual(userId: number, sceneId: number, imagePrompt:
   const scene = await db.query.veoScenes.findFirst({ where: eq(veoScenes.id, sceneId) })
   if (!scene) return
 
+  const imageOnly = mode === 'kenburns' || mode === 'static'
   const { imageUrl } = await generateImageAndWait({
     apiKey,
     prompt: imagePrompt,
     model: 'nano-banana-pro',
     aspectRatio: scene.aspectRatio as '16:9' | '9:16',
-    resolution: mode === 'kenburns' ? '2K' : undefined, // higher-res image for Ken Burns zoom
+    resolution: imageOnly ? '2K' : undefined, // higher-res still for image-only modes
   })
 
   await mkdir(IMG_DIR, { recursive: true })
@@ -118,7 +130,7 @@ async function generateSceneVisual(userId: number, sceneId: number, imagePrompt:
 
   await db.update(veoScenes).set({ firstImagePath: imgPath, updatedAt: new Date() }).where(eq(veoScenes.id, sceneId))
 
-  if (mode === 'kenburns') {
+  if (imageOnly) {
     await db.update(veoScenes).set({ status: 'done', progress: 100, updatedAt: new Date() }).where(eq(veoScenes.id, sceneId))
   } else {
     enqueueScene(sceneId) // Veo animates the image

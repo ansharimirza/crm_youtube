@@ -22,8 +22,9 @@ export class AssembleError extends Error {
 
 export interface AssembleScene {
   videoPath?: string // Veo clip (its own audio is dropped)
-  imagePath?: string // still image → Ken Burns (used when no videoPath)
-  narrationPath: string // TTS audio (wav)
+  imagePath?: string // still image → Ken Burns or static (used when no videoPath)
+  noZoom?: boolean // still image held with NO motion (static mode)
+  narrationPath: string // narration audio (TTS wav or user-uploaded)
   narrationDur: number // exact seconds — drives the cut
   caption?: string // optional burned subtitle text
 }
@@ -58,12 +59,20 @@ async function renderSegment(scene: AssembleScene, segPath: string, w: number, h
   ]
 
   if (scene.imagePath && !scene.videoPath) {
-    // Ken Burns: scale to fill 2x target, slow center zoom-in over the duration.
-    const df = Math.max(1, Math.round(Math.max(0.1, scene.narrationDur) * FPS))
-    const vf =
-      `[0:v]scale=${w * 2}:${h * 2}:force_original_aspect_ratio=increase,crop=${w * 2}:${h * 2},` +
-      `zoompan=z='min(zoom+0.0007,1.18)':d=${df}:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s=${w}x${h}:fps=${FPS},` +
-      `trim=duration=${d},setpts=PTS-STARTPTS,format=yuv420p[v]`
+    let vf: string
+    if (scene.noZoom) {
+      // Static: fill the frame (image is already at the right aspect), no motion.
+      vf =
+        `[0:v]scale=${w}:${h}:force_original_aspect_ratio=increase,crop=${w}:${h},setsar=1,` +
+        `fps=${FPS},trim=duration=${d},setpts=PTS-STARTPTS,format=yuv420p[v]`
+    } else {
+      // Ken Burns: scale to fill 2x target, slow center zoom-in over the duration.
+      const df = Math.max(1, Math.round(Math.max(0.1, scene.narrationDur) * FPS))
+      vf =
+        `[0:v]scale=${w * 2}:${h * 2}:force_original_aspect_ratio=increase,crop=${w * 2}:${h * 2},` +
+        `zoompan=z='min(zoom+0.0007,1.18)':d=${df}:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s=${w}x${h}:fps=${FPS},` +
+        `trim=duration=${d},setpts=PTS-STARTPTS,format=yuv420p[v]`
+    }
     await runFfmpeg([
       '-y', '-loop', '1', '-i', scene.imagePath, '-i', scene.narrationPath,
       '-filter_complex', `${vf};[1:a]${NARR_FILTER(d)}[a]`,

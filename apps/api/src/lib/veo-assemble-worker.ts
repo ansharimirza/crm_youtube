@@ -80,13 +80,13 @@ export async function assembleProject(projectId: number, opts: { captions?: bool
     })
     if (!project) throw new Error('Project tidak ditemukan')
 
-    // Eligible = video done + has narration text. Generate any missing TTS first.
-    // Veo scenes need videoUrl; Ken Burns scenes need firstImagePath.
+    // Eligible = visual done + has narration (text for TTS, OR an uploaded audio file).
+    // Veo scenes need videoUrl; image scenes (Ken Burns/static) need firstImagePath.
     const eligible = project.scenes.filter(
-      (s) => s.status === 'done' && (s.videoUrl || s.firstImagePath) && s.narrationText.trim(),
+      (s) => s.status === 'done' && (s.videoUrl || s.firstImagePath) && (s.narrationText.trim() || s.narrationAudioPath),
     )
     if (eligible.length === 0) {
-      throw new Error('Tidak ada scene siap (butuh visual done + teks narasi)')
+      throw new Error('Tidak ada scene siap (butuh visual done + narasi/suara)')
     }
 
     const assembleScenes: AssembleScene[] = []
@@ -107,7 +107,7 @@ export async function assembleProject(projectId: number, opts: { captions?: bool
         const videoPath = await downloadToLocal(s.videoUrl, CLIPS_DIR, `scene${s.id}`)
         assembleScenes.push({ videoPath, narrationPath: audioPath, narrationDur: dur, caption })
       } else if (s.firstImagePath) {
-        assembleScenes.push({ imagePath: s.firstImagePath, narrationPath: audioPath, narrationDur: dur, caption })
+        assembleScenes.push({ imagePath: s.firstImagePath, noZoom: s.noZoom, narrationPath: audioPath, narrationDur: dur, caption })
       } else {
         throw new Error(`Scene ${s.sceneNumber}: tidak ada visual (klip/gambar)`)
       }
