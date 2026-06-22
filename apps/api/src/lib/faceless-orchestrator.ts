@@ -59,6 +59,7 @@ export async function createFacelessProject(
       projectId: project.id,
       sceneNumber: i + 1,
       prompt: s.video_prompt || s.image_prompt, // Veo motion prompt (unused for image modes)
+      imagePrompt: s.image_prompt, // stored so failed scenes can be regenerated
       model: p.model ?? 'veo-3.1-fast',
       resolution: '1080p',
       duration: 8,
@@ -91,7 +92,17 @@ async function runScenePool(
   const worker = async () => {
     while (idx < pending.length) {
       const { sceneId, imagePrompt } = pending[idx++]
-      await generateSceneVisual(userId, sceneId, imagePrompt, mode).catch((e) => console.error('[faceless-visual]', e))
+      try {
+        await generateSceneVisual(userId, sceneId, imagePrompt, mode)
+      } catch (e) {
+        // Mark the scene 'error' (not leave it silently 'queued') so it's visible + retryable.
+        console.error('[faceless-visual]', e)
+        const msg = e instanceof Error ? e.message : String(e)
+        await db.update(veoScenes)
+          .set({ status: 'error', errorMsg: msg.slice(0, 500), updatedAt: new Date() })
+          .where(eq(veoScenes.id, sceneId)).catch(() => {})
+        continue // visual failed → skip narration for this scene
+      }
       // Upload-voice mode: audio is supplied per scene by the user, skip TTS.
       if (voiceMode === 'tts') {
         await generateNarration(sceneId, voice).catch((e) => console.error('[faceless-narr]', e))
@@ -99,6 +110,39 @@ async function runScenePool(
     }
   }
   await Promise.all(Array.from({ length: Math.min(SCENE_GEN_CONCURRENCY, pending.length) }, worker))
+}
+
+// Re-generate scenes that failed/stuck (transient GeminiGen errors during a big batch).
+// Infers mode from a completed scene; uses the stored image prompt.
+export async function retryFailedScenes(userId: number, projectId: number): Promise<{ retried: number }> {
+  const project = await db.query.veoProjects.findFirst({
+    where: and(eq(veoProjects.id, projectId), eq(veoProjects.userId, userId)),
+    with: { scenes: true },
+  })
+  if (!project) throw new Error('Project tidak ditemukan')
+
+  // Failed/incomplete = error, or queued without a visual yet.
+  const failed = project.scenes.filter(
+    (s) => s.status === 'error' || (s.status === 'queued' && !s.videoUrl && !s.firstImagePath),
+  )
+  if (failed.length === 0) return { retried: 0 }
+
+  // Infer project mode from a finished scene (veo clip vs still image vs static).
+  const doneScene = project.scenes.find((s) => s.status === 'done')
+  const mode: FacelessMode = doneScene?.videoUrl ? 'veo' : doneScene?.noZoom ? 'static' : 'kenburns'
+  // single full-narration project → no per-scene TTS; otherwise regenerate TTS too.
+  const voiceMode: VoiceMode = project.narrationFullPath ? 'single' : 'tts'
+
+  // Reset to queued, then run the throttled pool again over just these scenes.
+  for (const s of failed) {
+    await db.update(veoScenes)
+      .set({ status: 'queued', errorMsg: null, progress: 0, updatedAt: new Date() })
+      .where(eq(veoScenes.id, s.id))
+  }
+  const pending = failed.map((s) => ({ sceneId: s.id, imagePrompt: s.imagePrompt || s.prompt }))
+  void runScenePool(userId, pending, mode, voiceMode)
+
+  return { retried: failed.length }
 }
 
 // Nano Banana image -> firstImagePath. veo mode: enqueue Veo (image->video).

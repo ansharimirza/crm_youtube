@@ -3,7 +3,7 @@ import { useParams, Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   ArrowLeft, Loader2, CheckCircle2, AlertCircle, Clock, Image as ImageIcon,
-  Film, Wand2, Package, Youtube, Download,
+  Film, Wand2, Package, Youtube, Download, RotateCw,
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -41,6 +41,11 @@ export function FacelessProjectPage() {
   const errorCount = scenes.filter((s) => s.status === 'error').length
   const narrCount = scenes.filter((s) => (s.narrationDuration ?? 0) > 0).length
   const allDone = scenes.length > 0 && doneCount === scenes.length
+  // Scenes that failed or are stuck without a visual (transient gen errors)
+  const incompleteCount = scenes.filter(
+    (s) => s.status === 'error' || (s.status === 'queued' && !s.firstImagePath && !s.videoUrl),
+  ).length
+  const processing = scenes.some((s) => s.status === 'processing')
   const assembleStatus = project?.assembleStatus ?? 'idle'
   const rendering = assembleStatus === 'queued' || assembleStatus === 'rendering'
 
@@ -50,6 +55,15 @@ export function FacelessProjectPage() {
     mutationFn: () => api.post(`/api/veo/projects/${id}/assemble`, { captions }),
     onSuccess: () => {
       toast.success('Mulai merakit jadi 1 video...')
+      qc.invalidateQueries({ queryKey: ['faceless-project', id] })
+    },
+    onError: (e: Error) => toast.error(e.message),
+  })
+
+  const retryMutation = useMutation({
+    mutationFn: () => api.post<{ retried: number }>(`/api/veo/projects/${id}/retry-failed`, {}),
+    onSuccess: (r) => {
+      toast.success(`Retry ${r.retried} scene yang gagal...`)
       qc.invalidateQueries({ queryKey: ['faceless-project', id] })
     },
     onError: (e: Error) => toast.error(e.message),
@@ -78,6 +92,22 @@ export function FacelessProjectPage() {
           </p>
         </div>
       </div>
+
+      {/* Retry failed/stuck scenes */}
+      {incompleteCount > 0 && !processing && (
+        <Card className="border-amber-500/30 bg-amber-500/5">
+          <CardContent className="p-4 flex items-center gap-3 flex-wrap">
+            <AlertCircle className="h-5 w-5 text-amber-400 shrink-0" />
+            <div className="flex-1 min-w-0 text-sm">
+              <p className="font-medium text-amber-300">{incompleteCount} scene gagal generate gambar</p>
+              <p className="text-xs text-muted-foreground">Biasanya GeminiGen lagi sibuk (transient). Coba retry — scene lain yang sudah selesai tidak diulang.</p>
+            </div>
+            <Button size="sm" onClick={() => retryMutation.mutate()} disabled={retryMutation.isPending}>
+              {retryMutation.isPending ? <><Loader2 className="h-4 w-4 animate-spin" /> Retry...</> : <><RotateCw className="h-4 w-4" /> Retry {incompleteCount} scene</>}
+            </Button>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Assemble / final video */}
       <Card>

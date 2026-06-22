@@ -15,7 +15,7 @@ import {
 } from '../lib/geminigen'
 import { generateCaption, GeminiError, type Platform } from '../lib/gemini'
 import { assembleProject, generateNarration } from '../lib/veo-assemble-worker'
-import { createFacelessProject, uploadProjectFinal, type FacelessScene } from '../lib/faceless-orchestrator'
+import { createFacelessProject, uploadProjectFinal, retryFailedScenes, type FacelessScene } from '../lib/faceless-orchestrator'
 
 const UPLOAD_DIR = process.env.UPLOAD_DIR || join(process.cwd(), 'uploads')
 const VEO_DIR = join(UPLOAD_DIR, 'veo')
@@ -664,6 +664,16 @@ export const veoRoutes = new Elysia({ prefix: '/api/veo' })
     return { ok: true, duration }
   }, {
     body: t.Object({ audio: t.File() }),
+  })
+  // === FACELESS: retry scenes that failed/stuck (transient GeminiGen errors) ===
+  .post('/projects/:id/retry-failed', async ({ params, user, set }) => {
+    try {
+      const { retried } = await retryFailedScenes(user.id, Number(params.id))
+      return { ok: true, retried }
+    } catch (e) {
+      set.status = 400
+      return { error: e instanceof Error ? e.message : 'Gagal retry' }
+    }
   })
   // === FACELESS: upload ONE full narration for the whole project (voiceMode='single') ===
   .post('/projects/:id/narration-full', async ({ params, body, user, set }) => {
