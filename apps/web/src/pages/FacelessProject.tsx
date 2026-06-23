@@ -41,11 +41,18 @@ export function FacelessProjectPage() {
   const errorCount = scenes.filter((s) => s.status === 'error').length
   const narrCount = scenes.filter((s) => (s.narrationDuration ?? 0) > 0).length
   const allDone = scenes.length > 0 && doneCount === scenes.length
-  // Scenes that failed or are stuck without a visual (transient gen errors)
-  const incompleteCount = scenes.filter(
-    (s) => s.status === 'error' || (s.status === 'queued' && !s.firstImagePath && !s.videoUrl),
-  ).length
-  const processing = scenes.some((s) => s.status === 'processing')
+  // Scenes still waiting for a visual. NOTE: image-only modes (Ken Burns/static) go
+  // queued→done directly (never 'processing'), so 'queued' here usually means
+  // "still generating", NOT failed.
+  const pendingCount = scenes.filter((s) => s.status === 'queued' && !s.firstImagePath && !s.videoUrl).length
+  // Treat the project as actively generating unless nothing has updated for a while.
+  const lastUpdateMs = Math.max(0, ...scenes.map((s) => Date.parse(s.updatedAt) || 0))
+  const stale = scenes.length > 0 && Date.now() - lastUpdateMs > 180_000 // 3 min no progress
+  const generating = pendingCount > 0 && !stale
+  // Retry only for genuinely failed scenes, or pending ones that have clearly stalled —
+  // never while a generation pool is actively running (avoids double-generation).
+  const needsRetry = errorCount > 0 || (pendingCount > 0 && stale)
+  const retryCount = scenes.filter((s) => s.status === 'error' || (s.status === 'queued' && !s.firstImagePath && !s.videoUrl)).length
   const assembleStatus = project?.assembleStatus ?? 'idle'
   const rendering = assembleStatus === 'queued' || assembleStatus === 'rendering'
 
@@ -93,17 +100,30 @@ export function FacelessProjectPage() {
         </div>
       </div>
 
-      {/* Retry failed/stuck scenes */}
-      {incompleteCount > 0 && !processing && (
+      {/* Actively generating (image-only modes have no 'processing' status) */}
+      {generating && !needsRetry && (
+        <Card className="border-blue-500/30 bg-blue-500/5">
+          <CardContent className="p-4 flex items-center gap-3">
+            <Loader2 className="h-5 w-5 text-blue-400 shrink-0 animate-spin" />
+            <div className="text-sm">
+              <p className="font-medium text-blue-300">Lagi generate {pendingCount} scene...</p>
+              <p className="text-xs text-muted-foreground">Mode gambar nggak nampilin status "proses" — tunggu aja, angka "selesai" naik terus (di-throttle 4 paralel).</p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Retry genuinely failed / stalled scenes */}
+      {needsRetry && (
         <Card className="border-amber-500/30 bg-amber-500/5">
           <CardContent className="p-4 flex items-center gap-3 flex-wrap">
             <AlertCircle className="h-5 w-5 text-amber-400 shrink-0" />
             <div className="flex-1 min-w-0 text-sm">
-              <p className="font-medium text-amber-300">{incompleteCount} scene gagal generate gambar</p>
-              <p className="text-xs text-muted-foreground">Biasanya GeminiGen lagi sibuk (transient). Coba retry — scene lain yang sudah selesai tidak diulang.</p>
+              <p className="font-medium text-amber-300">{retryCount} scene gagal / nyangkut</p>
+              <p className="text-xs text-muted-foreground">Biasanya GeminiGen lagi sibuk (transient). Coba retry — scene yang sudah selesai tidak diulang.</p>
             </div>
             <Button size="sm" onClick={() => retryMutation.mutate()} disabled={retryMutation.isPending}>
-              {retryMutation.isPending ? <><Loader2 className="h-4 w-4 animate-spin" /> Retry...</> : <><RotateCw className="h-4 w-4" /> Retry {incompleteCount} scene</>}
+              {retryMutation.isPending ? <><Loader2 className="h-4 w-4 animate-spin" /> Retry...</> : <><RotateCw className="h-4 w-4" /> Retry {retryCount} scene</>}
             </Button>
           </CardContent>
         </Card>
