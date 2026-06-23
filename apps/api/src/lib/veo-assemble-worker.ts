@@ -8,8 +8,13 @@ import { mkdir, writeFile } from 'node:fs/promises'
 import { join, extname } from 'node:path'
 import { db, veoProjects, veoScenes, users } from '../db'
 import { generateSpeechToFile, TTSError } from './tts'
+import { generateSpeechEdgeToFile } from './tts-edge'
 import { assembleVideo, type AssembleScene } from './video-assembler'
 import { notify } from './notifications'
+
+// Gemini (Google) TTS voice names — anything else (incl. Edge "xx-XX-…Neural") is free Edge TTS.
+const GEMINI_VOICES = new Set(['Kore', 'Puck', 'Charon', 'Aoede', 'Leda', 'Fenrir', 'Orus', 'Zephyr'])
+const isGeminiVoice = (v?: string | null): boolean => !!v && GEMINI_VOICES.has(v)
 
 const UPLOAD_DIR = process.env.UPLOAD_DIR || join(process.cwd(), 'uploads')
 const VEO_DIR = join(UPLOAD_DIR, 'veo')
@@ -42,17 +47,24 @@ export async function generateNarration(sceneId: number, voice?: string): Promis
   if (!scene) throw new Error('Scene tidak ditemukan')
   if (!scene.narrationText.trim()) throw new Error('Scene belum punya teks narasi')
 
+  await mkdir(NARRATION_DIR, { recursive: true })
+
+  // Default to free Edge TTS (no quota wall). Use Gemini only if a Gemini voice is
+  // explicitly chosen (e.g. "Charon") AND a Gemini key is set.
+  if (!isGeminiVoice(voice)) {
+    const outPath = join(NARRATION_DIR, `scene_${sceneId}_${Date.now()}.mp3`)
+    const { durationSec } = await generateSpeechEdgeToFile({ text: scene.narrationText, outPath, voice: voice ?? undefined })
+    await db.update(veoScenes)
+      .set({ narrationAudioPath: outPath, narrationDuration: durationSec, updatedAt: new Date() })
+      .where(eq(veoScenes.id, sceneId))
+    return durationSec
+  }
+
   const apiKey = await getGeminiKey(scene.project.userId)
   if (!apiKey) throw new TTSError('Gemini API key belum diatur (Settings → Gemini API Key)')
 
-  await mkdir(NARRATION_DIR, { recursive: true })
   const outPath = join(NARRATION_DIR, `scene_${sceneId}_${Date.now()}.wav`)
-  const { durationSec } = await generateSpeechToFile({
-    apiKey,
-    text: scene.narrationText,
-    outPath,
-    voice,
-  })
+  const { durationSec } = await generateSpeechToFile({ apiKey, text: scene.narrationText, outPath, voice })
 
   await db.update(veoScenes)
     .set({ narrationAudioPath: outPath, narrationDuration: durationSec, updatedAt: new Date() })
