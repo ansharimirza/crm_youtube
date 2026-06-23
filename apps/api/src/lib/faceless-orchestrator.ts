@@ -187,14 +187,16 @@ export async function recoverFacelessScenes(): Promise<void> {
   if (total) console.log(`[faceless-recover] re-generating ${total} incomplete image scene(s)`)
 }
 
-// Keep the doodle STYLE but stop the model from drawing a literal whiteboard object
-// (frame, easel, wall) or any leftover caption/header text — the art should fill the frame.
+// Keep the doodle STYLE but stop the model from rendering the art as a photo of a
+// literal whiteboard object (frame, easel, wall). The drawing should fill the frame.
+// (Intentional hand-lettered labels inside the art are fine — leaked section headers
+// are already stripped at parse time, so we don't forbid in-art text here.)
 function styleFixImagePrompt(p: string): string {
-  let s = p
+  const s = p
     .replace(/whiteboard[-\s]?doodle/gi, 'hand-drawn marker doodle')
     .replace(/\bon a whiteboard\b/gi, 'on a flat white background')
     .replace(/\bwhiteboard\b/gi, 'flat white background')
-  return `${s} The artwork must completely fill the frame edge to edge as a flat 2D illustration on a plain solid background — do NOT depict a whiteboard, easel, wall, picture frame, photo border, or any caption/title/header text.`
+  return `${s} The artwork must fill the frame edge to edge as a flat 2D illustration on a plain solid background — do NOT depict a real whiteboard, easel, wall, picture frame, or photo border around the drawing.`
 }
 
 // Nano Banana image -> firstImagePath. veo mode: enqueue Veo (image->video).

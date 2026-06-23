@@ -39,62 +39,72 @@ const VOICES = [
   { v: 'Zephyr', d: 'Cerah' },
 ]
 
-// STATE-8/9 beats embed a spoken hook before the visual:
-//   B1 — "hook quote"  Prompt: <visual>  Camera: ...        (STATE 8)
-//   B1 — "hook quote" → <motion> ~4s                         (STATE 9)
-// Keep only the description: drop the hook, strip the "Prompt:" label / "→",
-// drop markdown bold, collapse to one line. Safe no-op if neither marker present.
+// Pull just the visual description out of one beat's text: drop the
+// "Prompt:" / "Image Prompt:" / "Video Prompt:" label (or text after "→"),
+// drop markdown bold, collapse to one line. No-op if no label found.
 function cleanPrompt(s: string): string {
   let t = s.replace(/\*\*/g, '')
-  const m = t.match(/\bPrompt\s*:\s*/i)
+  const m = t.match(/\b(?:image\s+|video\s+|motion\s+)?prompt\s*:\s*/i)
   if (m && m.index !== undefined) t = t.slice(m.index + m[0].length)
   else if (t.includes('→')) t = t.slice(t.indexOf('→') + 1)
   return t.replace(/\s+/g, ' ').trim()
 }
 
-// Beat marker at line start: "1." "2)" "Scene 3:" "B1 —" "Beat 5:". The separator
-// after the number is "any 1–3 punctuation/symbol chars" so it tolerates em/en dashes
-// AND mojibake dashes (e.g. "â€"" from a mis-encoded .md). Leading markdown bold
-// (**B1**) is stripped beforehand. A separator is required, so "10 people..." won't match.
-const BEAT_MARKER = /^\s*(?:scene|beat|b)?\s*#?\s*\d+\s*[^\w\s]{1,3}\s*/i
+// A line that starts a new beat. Two shapes the workflow produces:
+//  inline:  "B1 —", "1.", "2)", "#4 -"        (number + separator, content follows)
+//  header:  "### BEAT 1", "BEAT 1", "Scene 3"  (heading on its own line)
+const BEAT_INLINE = /^\s*(?:scene|beat|b)?\s*#?\s*\d+\s*[^\w\s]{1,3}/i
+const BEAT_HEADER = /^\s*#{0,6}\s*(?:beat|scene)\s+#?\d+\b/i
+const isBeatHeader = (l: string): boolean => BEAT_HEADER.test(l) || BEAT_INLINE.test(l)
 
 // Section/structure lines that must NOT leak into a beat's prompt (else they get
-// drawn into the image, e.g. "ACT 3 — IT'S AN INSTINCT" rendered as caption text).
+// drawn into the image, e.g. "ACT 3 / CHAPTER ONE" rendered as caption text).
 function isNoiseLine(l: string): boolean {
-  return /^\s*#{1,6}\s/.test(l)         // markdown headers: ## ACT 3 ...
-    || /^\s*[-=*_]{3,}\s*$/.test(l)     // --- *** ___ separators
-    || /^\s*>/.test(l)                  // blockquotes
-    || /^\s*act\s+\d+\b/i.test(l)       // "ACT 3 — ..." headers (no #)
-    || /^\s*\*?\s*end of\b/i.test(l)    // "*End of STATE 8 ...*"
+  return /^\s*#{1,6}\s/.test(l)                  // markdown headers: ## CHAPTER ONE ...
+    || /^\s*[-=*_]{3,}\s*$/.test(l)              // --- *** ___ separators
+    || /^\s*>/.test(l)                           // blockquotes
+    || /^\s*(?:act|chapter|part)\s+\w+/i.test(l) // "ACT 3 — ...", "CHAPTER ONE ..." (no #)
+    || /^\s*\*?\s*end of\b/i.test(l)             // "*End of STATE 8 ...*"
 }
 
-// Split STATE 8 into per-beat { image, narration }. Each beat looks like:
-//   B1 — "spoken hook quote"   Prompt: <visual>   Camera: ... Lighting: ...
-// narration = the hook quote (used for subtitle + duration weighting), image = the Prompt: part.
+// Split STATE 8 into per-beat { image, narration } — tolerant of two channel-clone formats:
+//  A) B1 — "hook"                  Prompt: <visual>
+//  B) ### BEAT 1 / Script: "<narration>" / Image Prompt: <visual>
+// narration drives per-scene subtitle + duration weighting; image is the visual prompt.
 function parseState8(text: string): { image: string; narration: string }[] {
   const raw = text.replace(/\r\n/g, '\n').replace(/\*\*/g, '') // drop markdown bold
   if (!raw.trim()) return []
   const lines = raw.split('\n')
-  if (!lines.some((l) => BEAT_MARKER.test(l))) return []
-  const blocks: string[] = []
-  let cur: string[] = []
-  let started = false
+  if (!lines.some(isBeatHeader)) return []
+
+  const blocks: { inline: string; body: string }[] = []
+  let cur: { inline: string; body: string[] } | null = null
   for (const line of lines) {
-    if (BEAT_MARKER.test(line)) {
-      if (started) blocks.push(cur.join('\n'))
-      cur = [line.replace(BEAT_MARKER, '')]
-      started = true
-    } else if (started && !isNoiseLine(line)) cur.push(line)
+    if (isBeatHeader(line)) {
+      if (cur) blocks.push({ inline: cur.inline, body: cur.body.join('\n') })
+      const inline = line.replace(BEAT_HEADER, '').replace(BEAT_INLINE, '').trim() // Format A: the hook quote
+      cur = { inline, body: [] }
+    } else if (cur && !isNoiseLine(line)) {
+      cur.body.push(line)
+    }
   }
-  if (started) blocks.push(cur.join('\n'))
+  if (cur) blocks.push({ inline: cur.inline, body: cur.body.join('\n') })
+
   return blocks
-    .map((b) => {
-      const m = b.match(/\bPrompt\s*:\s*/i)
+    .map(({ inline, body }) => {
+      // image = text after "Image Prompt:" / "Prompt:"
+      const pm = body.match(/\b(?:image\s+)?prompt\s*:\s*/i)
+      let image = pm && pm.index !== undefined ? body.slice(pm.index + pm[0].length) : body
+      // narration = after "Script:" label, else the inline hook quote, else text before the prompt
       let narration = ''
-      let image = b
-      if (m && m.index !== undefined) {
-        narration = b.slice(0, m.index)
-        image = b.slice(m.index + m[0].length)
+      const sm = body.match(/\bscript\s*:\s*/i)
+      if (sm && sm.index !== undefined) {
+        narration = body.slice(sm.index + sm[0].length)
+          .split(/\n\s*(?:image\s+prompt|prompt|camera|lighting|mood|action)\s*:/i)[0]
+      } else if (inline) {
+        narration = inline
+      } else if (pm && pm.index !== undefined) {
+        narration = body.slice(0, pm.index)
       }
       image = image.replace(/\s+/g, ' ').trim()
       narration = narration.replace(/[""„"]/g, '').replace(/\s+/g, ' ').trim()
@@ -103,26 +113,24 @@ function parseState8(text: string): { image: string; narration: string }[] {
     .filter((x) => x.image)
 }
 
-// Split a STATE list into items. Primary: a beat marker at line start.
-// Fallbacks: blank-line paragraphs, then per-line.
+// Split a STATE list (e.g. STATE 9 video prompts) into items. Primary: a beat marker
+// at line start (both formats). Fallbacks: blank-line paragraphs, then per-line.
 // clean=true extracts the "Prompt:" / "→" portion of each item.
 function parseList(text: string, clean = false): string[] {
   const raw = text.replace(/\r\n/g, '\n').replace(/\*\*/g, '')
   if (!raw.trim()) return []
-  const marker = BEAT_MARKER
   const out = (items: string[]) => items.map((x) => (clean ? cleanPrompt(x) : x.trim())).filter(Boolean)
   const lines = raw.split('\n')
-  const hasMarkers = lines.some((l) => marker.test(l))
-  if (hasMarkers) {
+  if (lines.some(isBeatHeader)) {
     const items: string[] = []
     let cur: string[] = []
     let started = false
     for (const line of lines) {
-      if (marker.test(line)) {
+      if (isBeatHeader(line)) {
         if (started) items.push(cur.join('\n').trim())
-        cur = [line.replace(marker, '')]
+        cur = [line.replace(BEAT_HEADER, '').replace(BEAT_INLINE, '')]
         started = true
-      } else if (started) {
+      } else if (started && !isNoiseLine(line)) {
         cur.push(line)
       }
     }
