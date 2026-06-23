@@ -39,6 +39,8 @@ export interface VeoProject {
   finalVideoPath?: string | null
   finalVideoUrl?: string | null
   thumbnailPath?: string | null
+  narrationFullPath?: string | null
+  narrationFullDuration?: number | null
 }
 
 export type VeoModel =

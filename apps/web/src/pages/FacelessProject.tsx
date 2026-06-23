@@ -76,6 +76,21 @@ export function FacelessProjectPage() {
     onError: (e: Error) => toast.error(e.message),
   })
 
+  const [fullAudio, setFullAudio] = useState<File | null>(null)
+  const narrationMutation = useMutation({
+    mutationFn: () => {
+      const fd = new FormData()
+      fd.append('audio', fullAudio!)
+      return api.post<{ duration: number }>(`/api/veo/projects/${id}/narration-full`, fd)
+    },
+    onSuccess: (r) => {
+      toast.success(`Narasi penuh ke-upload (${Math.round(r.duration)} dtk) — sekarang klik Rakit`)
+      setFullAudio(null)
+      qc.invalidateQueries({ queryKey: ['faceless-project', id] })
+    },
+    onError: (e: Error) => toast.error(e.message),
+  })
+
   if (!project) {
     return (
       <div className="flex items-center justify-center py-20">
@@ -156,6 +171,22 @@ export function FacelessProjectPage() {
               <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" /> {project.assembleError || 'Gagal merakit'}
             </div>
           )}
+
+          {/* Optional: 1 full narration (use when TTS quota is hit, or to use your own voice) */}
+          <div className="rounded-lg border border-dashed p-3 space-y-2">
+            <p className="text-sm font-medium">Narasi penuh (opsional)</p>
+            <p className="text-xs text-muted-foreground">
+              Upload 1 file audio buat seluruh video (mis. ElevenLabs). Berguna kalau Gemini TTS kena limit, atau mau pakai suara sendiri. Gambar nyebar otomatis mengikuti audio. {project.narrationFullPath ? '✅ Sudah ada narasi penuh — klik Rakit.' : ''}
+            </p>
+            <div className="flex items-center gap-2 flex-wrap">
+              <input type="file" accept="audio/*" onChange={(e) => setFullAudio(e.target.files?.[0] ?? null)}
+                className="text-xs file:mr-2 file:rounded file:border-0 file:bg-primary/10 file:px-3 file:py-1.5 file:text-primary" />
+              <Button size="sm" variant="outline" onClick={() => narrationMutation.mutate()} disabled={!fullAudio || narrationMutation.isPending}>
+                {narrationMutation.isPending ? <><Loader2 className="h-4 w-4 animate-spin" /> Upload...</> : 'Upload narasi'}
+              </Button>
+              {fullAudio && <span className="text-[11px] text-emerald-400 truncate">🔊 {fullAudio.name}</span>}
+            </div>
+          </div>
 
           {assembleStatus === 'done' && <FinalVideo projectId={project.id} />}
         </CardContent>
