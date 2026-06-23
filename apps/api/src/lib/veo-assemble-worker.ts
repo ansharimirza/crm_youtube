@@ -8,8 +8,13 @@ import { mkdir, writeFile } from 'node:fs/promises'
 import { join, extname } from 'node:path'
 import { db, veoProjects, veoScenes, users } from '../db'
 import { generateSpeechToFile, TTSError } from './tts'
+import { generateSpeechGCloudToFile } from './tts-gcloud'
 import { assembleVideo, type AssembleScene } from './video-assembler'
 import { notify } from './notifications'
+
+// Gemini (preview) TTS voice names. Anything else → Google Cloud TTS (free 1M chars/mo).
+const GEMINI_VOICES = new Set(['Kore', 'Puck', 'Charon', 'Aoede', 'Leda', 'Fenrir', 'Orus', 'Zephyr'])
+const isGeminiVoice = (v?: string | null): boolean => !!v && GEMINI_VOICES.has(v)
 
 const UPLOAD_DIR = process.env.UPLOAD_DIR || join(process.cwd(), 'uploads')
 const VEO_DIR = join(UPLOAD_DIR, 'veo')
@@ -43,16 +48,21 @@ export async function generateNarration(sceneId: number, voice?: string): Promis
   if (!scene.narrationText.trim()) throw new Error('Scene belum punya teks narasi')
 
   const apiKey = await getGeminiKey(scene.project.userId)
-  if (!apiKey) throw new TTSError('Gemini API key belum diatur (Settings → Gemini API Key)')
+  if (!apiKey) throw new TTSError('Google API key belum diatur (Settings → Gemini API Key)')
 
   await mkdir(NARRATION_DIR, { recursive: true })
-  const outPath = join(NARRATION_DIR, `scene_${sceneId}_${Date.now()}.wav`)
-  const { durationSec } = await generateSpeechToFile({
-    apiKey,
-    text: scene.narrationText,
-    outPath,
-    voice,
-  })
+
+  // Default: Google Cloud TTS (free 1M chars/mo, reliable). Gemini preview TTS only if a
+  // Gemini voice (Kore/Charon/…) is explicitly chosen.
+  let outPath: string
+  let durationSec: number
+  if (isGeminiVoice(voice)) {
+    outPath = join(NARRATION_DIR, `scene_${sceneId}_${Date.now()}.wav`)
+    ;({ durationSec } = await generateSpeechToFile({ apiKey, text: scene.narrationText, outPath, voice }))
+  } else {
+    outPath = join(NARRATION_DIR, `scene_${sceneId}_${Date.now()}.mp3`)
+    ;({ durationSec } = await generateSpeechGCloudToFile({ apiKey, text: scene.narrationText, outPath, voice: voice ?? undefined }))
+  }
 
   await db.update(veoScenes)
     .set({ narrationAudioPath: outPath, narrationDuration: durationSec, updatedAt: new Date() })
