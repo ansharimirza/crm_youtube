@@ -72,11 +72,11 @@ async function renderSegment(scene: AssembleScene, segPath: string, w: number, h
         `[0:v]scale=${w}:${h}:force_original_aspect_ratio=increase,crop=${w}:${h},setsar=1,` +
         `fps=${FPS},trim=duration=${d},setpts=PTS-STARTPTS,format=yuv420p[v]`
     } else {
-      // Ken Burns: scale to fill 2x target, slow center zoom-in over the duration.
+      // Ken Burns: scale to fill 2x target, GENTLE slow center zoom-in (subtle, not dizzying).
       const df = Math.max(1, Math.round(Math.max(0.1, scene.narrationDur) * FPS))
       vf =
         `[0:v]scale=${w * 2}:${h * 2}:force_original_aspect_ratio=increase,crop=${w * 2}:${h * 2},` +
-        `zoompan=z='min(zoom+0.0007,1.18)':d=${df}:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s=${w}x${h}:fps=${FPS},` +
+        `zoompan=z='min(zoom+0.0004,1.10)':d=${df}:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s=${w}x${h}:fps=${FPS},` +
         `trim=duration=${d},setpts=PTS-STARTPTS,format=yuv420p[v]`
     }
     const fc = silent ? vf : `${vf};[1:a]${NARR_FILTER(d)}[a]`
