@@ -76,6 +76,15 @@ export function FacelessProjectPage() {
     onError: (e: Error) => toast.error(e.message),
   })
 
+  const syncMutation = useMutation({
+    mutationFn: () => api.post<{ aligned: number }>(`/api/veo/projects/${id}/align-narration`, {}),
+    onSuccess: (r) => {
+      toast.success(`Sync presisi selesai — ${r.aligned} scene dicocokin ke audio. Sekarang klik Rakit.`)
+      qc.invalidateQueries({ queryKey: ['faceless-project', id] })
+    },
+    onError: (e: Error) => toast.error(e.message),
+  })
+
   const [fullAudio, setFullAudio] = useState<File | null>(null)
   const narrationMutation = useMutation({
     mutationFn: () => {
@@ -186,6 +195,16 @@ export function FacelessProjectPage() {
               </Button>
               {fullAudio && <span className="text-[11px] text-emerald-400 truncate">🔊 {fullAudio.name}</span>}
             </div>
+            {project.narrationFullPath && (
+              <div className="pt-2 border-t border-dashed mt-1">
+                <p className="text-xs text-muted-foreground mb-2">
+                  <b>Sync presisi</b> (disarankan): cocokin gambar ke audio pakai timestamp per-kata, biar tiap gambar pas sama narasinya. Jalanin ini <b>sebelum Rakit</b>.
+                </p>
+                <Button size="sm" onClick={() => syncMutation.mutate()} disabled={syncMutation.isPending}>
+                  {syncMutation.isPending ? <><Loader2 className="h-4 w-4 animate-spin" /> Nyocokin ke audio...</> : <><RotateCw className="h-4 w-4" /> Sync ke audio (presisi)</>}
+                </Button>
+              </div>
+            )}
           </div>
 
           {assembleStatus === 'done' && <FinalVideo projectId={project.id} />}

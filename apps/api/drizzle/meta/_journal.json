@@ -120,6 +120,13 @@
       "when": 1781589000000,
       "tag": "0016_faceless_mode",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1781590000000,
+      "tag": "0017_scene_aligned_duration",
+      "breakpoints": true
     }
   ]
 }

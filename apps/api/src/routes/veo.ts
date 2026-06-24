@@ -14,7 +14,7 @@ import {
   type ImageResolution,
 } from '../lib/geminigen'
 import { generateCaption, GeminiError, type Platform } from '../lib/gemini'
-import { assembleProject, generateNarration } from '../lib/veo-assemble-worker'
+import { assembleProject, generateNarration, alignProjectNarration } from '../lib/veo-assemble-worker'
 import { createFacelessProject, uploadProjectFinal, retryFailedScenes, type FacelessScene } from '../lib/faceless-orchestrator'
 
 const UPLOAD_DIR = process.env.UPLOAD_DIR || join(process.cwd(), 'uploads')
@@ -713,6 +713,21 @@ export const veoRoutes = new Elysia({ prefix: '/api/veo' })
     return { ok: true, duration }
   }, {
     body: t.Object({ audio: t.File() }),
+  })
+  // === FACELESS: forced-align the full narration to per-scene scripts (precise sync) ===
+  .post('/projects/:id/align-narration', async ({ params, user, set }) => {
+    const id = Number(params.id)
+    const project = await db.query.veoProjects.findFirst({
+      where: and(eq(veoProjects.id, id), eq(veoProjects.userId, user.id)),
+    })
+    if (!project) { set.status = 404; return { error: 'Not found' } }
+    try {
+      const { aligned } = await alignProjectNarration(id)
+      return { ok: true, aligned }
+    } catch (e) {
+      set.status = 400
+      return { error: e instanceof Error ? e.message : 'Gagal sync narasi' }
+    }
   })
   // === FACELESS: assemble whole project into 1 final video ===
   .post('/projects/:id/assemble', async ({ params, body, user, set }) => {

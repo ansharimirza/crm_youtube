@@ -10,6 +10,8 @@ import { db, veoProjects, veoScenes, users } from '../db'
 import { generateSpeechToFile, TTSError } from './tts'
 import { generateSpeechGCloudToFile } from './tts-gcloud'
 import { assembleVideo, type AssembleScene } from './video-assembler'
+import { transcribeWords } from './transcribe'
+import { alignBeats } from './align'
 import { notify } from './notifications'
 
 // Gemini (preview) TTS voice names. Anything else → Google Cloud TTS (free 1M chars/mo).
@@ -97,16 +99,20 @@ export async function assembleProject(projectId: number, opts: { captions?: bool
     const assembleScenes: AssembleScene[] = []
 
     if (fullNarration) {
-      // ONE voiceover for the whole video. Spread scenes across it: weight each
-      // scene's screen time by its narration text length (≈ speech time); equal if no text.
+      // ONE voiceover for the whole video. Screen time per scene comes from forced
+      // alignment (alignedDuration, precise) when available; otherwise it falls back to
+      // weighting by narration-text length (rough). Equal split if no text.
       const eligible = project.scenes.filter((s) => s.status === 'done' && (s.videoUrl || s.firstImagePath))
       if (eligible.length === 0) throw new Error('Tidak ada scene siap (butuh visual done)')
 
+      const useAligned = eligible.every((s) => (s.alignedDuration ?? 0) > 0)
       const weights = eligible.map((s) => Math.max(1, s.narrationText.trim().length))
       const totalW = weights.reduce((a, b) => a + b, 0)
       for (let i = 0; i < eligible.length; i++) {
         const s = eligible[i]
-        const dur = Math.max(0.5, (fullNarration.dur * weights[i]) / totalW)
+        const dur = useAligned
+          ? Math.max(0.5, s.alignedDuration!)
+          : Math.max(0.5, (fullNarration.dur * weights[i]) / totalW)
         const caption = opts.captions ? s.narrationText : undefined
         if (s.videoUrl) {
           const videoPath = await downloadToLocal(s.videoUrl, CLIPS_DIR, `scene${s.id}`)
@@ -190,6 +196,31 @@ export async function assembleProject(projectId: number, opts: { captions?: bool
   } finally {
     assembling.delete(projectId)
   }
+}
+
+// Forced-align the uploaded full narration to the per-scene scripts, storing the exact
+// screen-time (alignedDuration) for each scene so images line up with what's spoken.
+export async function alignProjectNarration(projectId: number): Promise<{ aligned: number }> {
+  const project = await db.query.veoProjects.findFirst({
+    where: eq(veoProjects.id, projectId),
+    with: { scenes: { orderBy: (s, { asc }) => [asc(s.sceneNumber)] } },
+  })
+  if (!project) throw new Error('Project tidak ditemukan')
+  if (!project.narrationFullPath || !project.narrationFullDuration) {
+    throw new Error('Belum ada narasi penuh — upload audio dulu')
+  }
+  // Same eligibility + order as full-narration assembly, so durations line up 1:1.
+  const eligible = project.scenes.filter((s) => s.status === 'done' && (s.videoUrl || s.firstImagePath))
+  if (eligible.length === 0) throw new Error('Tidak ada scene siap (butuh visual done)')
+
+  const words = await transcribeWords(project.narrationFullPath)
+  const durations = alignBeats(eligible.map((s) => ({ text: s.narrationText || '' })), words, project.narrationFullDuration)
+  for (let i = 0; i < eligible.length; i++) {
+    await db.update(veoScenes)
+      .set({ alignedDuration: durations[i], updatedAt: new Date() })
+      .where(eq(veoScenes.id, eligible[i].id))
+  }
+  return { aligned: eligible.length }
 }
 
 // On restart, reset any project stuck 'rendering' to error (the in-flight ffmpeg died).
