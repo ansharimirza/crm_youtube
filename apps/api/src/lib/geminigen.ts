@@ -4,7 +4,9 @@
 import { readFile } from 'node:fs/promises'
 import { basename } from 'node:path'
 
-const BASE_URL = 'https://api.geminigen.ai/uapi/v1'
+// GeminiGen migrated to snapgen.ai (same API, same key, same /uapi/v1 paths).
+// Override via env (GEMINIGEN_BASE_URL) to flip back if needed.
+const BASE_URL = process.env.GEMINIGEN_BASE_URL || 'https://api.snapgen.ai/uapi/v1'
 
 export type VeoModel = 'veo-3.1' | 'veo-3.1-fast' | 'veo-3.1-lite' | 'veo-2'
 export type VeoResolution = '720p' | '1080p'
@@ -330,7 +332,7 @@ export async function generateImage(params: GenerateImageParams): Promise<Genera
     await appendFileToForm(form, 'files', refPath)
   }
 
-  const res = await fetch('https://api.geminigen.ai/uapi/v1/generate_image', {
+  const res = await fetch(`${BASE_URL}/generate_image`, {
     method: 'POST',
     headers: { 'x-api-key': params.apiKey },
     body: form,
@@ -369,7 +371,7 @@ export interface ImageHistoryResponse {
 }
 
 export async function getImageHistory(uuid: string, apiKey: string): Promise<ImageHistoryResponse> {
-  const res = await fetch(`https://api.geminigen.ai/uapi/v1/history/${uuid}`, {
+  const res = await fetch(`${BASE_URL}/history/${uuid}`, {
     headers: { 'x-api-key': apiKey },
   })
   const data = await res.json().catch(() => null) as ImageHistoryResponse | { detail?: any } | null
