@@ -15,6 +15,24 @@ import { notify } from '../lib/notifications'
 const UPLOAD_DIR = process.env.UPLOAD_DIR || join(process.cwd(), 'uploads')
 await mkdir(UPLOAD_DIR, { recursive: true })
 
+// YouTube rejects tags whose TOTAL size exceeds ~500 chars — and it counts any tag
+// containing a space as length+2 (it wraps multi-word tags in quotes). Trim from the
+// end to fit (with margin), cap each tag at 100 chars, and drop invalid <> chars.
+function fitYoutubeTags(raw: string | null | undefined): string[] {
+  const LIMIT = 470
+  const out: string[] = []
+  let total = 0
+  for (const tag of (raw ?? '').split(',').map((t) => t.trim()).filter(Boolean)) {
+    const t = tag.slice(0, 100).replace(/[<>]/g, '').trim()
+    if (!t) continue
+    const cost = t.length + (/\s/.test(t) ? 2 : 0) + (out.length > 0 ? 1 : 0)
+    if (total + cost > LIMIT) break
+    out.push(t)
+    total += cost
+  }
+  return out
+}
+
 const MAX_RETRIES = 5            // auto-retry sampai 5x sebelum nyerah (upload YouTube tidak makan kredit AI)
 const RETRY_DELAY_MS = 30_000 // 30 detik
 
@@ -66,7 +84,7 @@ export async function runUpload(videoId: number, isRetry = false) {
       thumbnailPath: video.thumbnailPath,
       title: video.title,
       description: video.description,
-      tags: video.tags.split(',').map(t => t.trim()).filter(Boolean),
+      tags: fitYoutubeTags(video.tags),
       categoryId: video.categoryId,
       privacy: video.privacy as 'public' | 'private' | 'unlisted',
       language: video.language,
@@ -391,7 +409,7 @@ export const videoRoutes = new Elysia({ prefix: '/api/videos' })
       videoId: video.youtubeId,
       title: video.title,
       description: video.description,
-      tags: video.tags.split(',').map(t => t.trim()).filter(Boolean),
+      tags: fitYoutubeTags(video.tags),
       categoryId: video.categoryId,
       privacy: video.privacy as 'public' | 'private' | 'unlisted',
       language: video.language,
