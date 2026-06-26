@@ -26,18 +26,31 @@ async function downsample(srcPath: string): Promise<string> {
   return out
 }
 
-export async function transcribeWords(audioPath: string): Promise<TranscriptWord[]> {
+export interface TranscriptSegment {
+  text: string
+  start: number
+  end: number
+}
+
+interface GroqResult {
+  text: string
+  words: TranscriptWord[]
+  segments: TranscriptSegment[]
+}
+
+// One Groq call → full text + word timestamps + segment timestamps.
+async function groqTranscribe(audioPath: string): Promise<GroqResult> {
   const apiKey = process.env.GROQ_API_KEY
   if (!apiKey) throw new Error('GROQ_API_KEY belum diatur di server (untuk transcribe/sync)')
-
   if (!(await Bun.file(audioPath).exists())) throw new Error(`Audio tidak ditemukan: ${audioPath}`)
-  const smallPath = await downsample(audioPath)
 
+  const smallPath = await downsample(audioPath)
   const form = new FormData()
   form.append('file', Bun.file(smallPath), 'audio.mp3')
   form.append('model', 'whisper-large-v3-turbo')
   form.append('response_format', 'verbose_json')
   form.append('timestamp_granularities[]', 'word')
+  form.append('timestamp_granularities[]', 'segment')
   form.append('temperature', '0')
 
   try {
@@ -46,13 +59,37 @@ export async function transcribeWords(audioPath: string): Promise<TranscriptWord
       const body = await res.text().catch(() => '')
       throw new Error(`Groq transcribe HTTP ${res.status}: ${body.slice(0, 300)}`)
     }
-    const data = (await res.json()) as { words?: TranscriptWord[]; segments?: { words?: TranscriptWord[] }[] }
-    // Word timestamps live at top level (verbose_json + word granularity); fall back to segments.
+    const data = (await res.json()) as {
+      text?: string
+      words?: TranscriptWord[]
+      segments?: (TranscriptSegment & { words?: TranscriptWord[] })[]
+    }
     let words = data.words ?? []
     if (words.length === 0 && data.segments) words = data.segments.flatMap((s) => s.words ?? [])
-    if (words.length === 0) throw new Error('Transcribe sukses tapi tidak ada word timestamps')
-    return words.map((w) => ({ word: w.word, start: w.start, end: w.end }))
+    const segments = (data.segments ?? []).map((s) => ({ text: (s.text ?? '').trim(), start: s.start, end: s.end }))
+    return { text: (data.text ?? '').trim(), words, segments }
   } finally {
     await rm(smallPath, { force: true }).catch(() => {})
   }
+}
+
+export async function transcribeWords(audioPath: string): Promise<TranscriptWord[]> {
+  const { words } = await groqTranscribe(audioPath)
+  if (words.length === 0) throw new Error('Transcribe sukses tapi tidak ada word timestamps')
+  return words
+}
+
+function srtTime(sec: number): string {
+  const ms = Math.max(0, Math.round(sec * 1000))
+  const p = (n: number, l = 2) => String(n).padStart(l, '0')
+  return `${p(Math.floor(ms / 3_600_000))}:${p(Math.floor((ms % 3_600_000) / 60_000))}:${p(Math.floor((ms % 60_000) / 1000))},${p(ms % 1000, 3)}`
+}
+
+// For the standalone Transcribe tool: plain text + SRT (for YouTube captions/subtitles).
+export async function transcribeAudio(audioPath: string): Promise<{ text: string; srt: string }> {
+  const { text, segments } = await groqTranscribe(audioPath)
+  const srt = segments
+    .map((s, i) => `${i + 1}\n${srtTime(s.start)} --> ${srtTime(s.end)}\n${s.text}\n`)
+    .join('\n')
+  return { text, srt }
 }
