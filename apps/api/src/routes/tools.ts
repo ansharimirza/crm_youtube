@@ -16,8 +16,8 @@ export const toolsRoutes = new Elysia({ prefix: '/api/tools' })
     const tmp = join(tmpdir(), `tx_${Date.now()}_${Math.random().toString(36).slice(2, 8)}.${ext}`)
     await Bun.write(tmp, file)
     try {
-      const { text, srt } = await transcribeAudio(tmp)
-      return { ok: true, text, srt }
+      const { text, srt, segments } = await transcribeAudio(tmp)
+      return { ok: true, text, srt, segments }
     } catch (e) {
       set.status = 400
       return { error: e instanceof Error ? e.message : 'Gagal transcribe' }

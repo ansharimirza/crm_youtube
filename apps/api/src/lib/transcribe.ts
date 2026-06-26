@@ -85,11 +85,15 @@ function srtTime(sec: number): string {
   return `${p(Math.floor(ms / 3_600_000))}:${p(Math.floor((ms % 3_600_000) / 60_000))}:${p(Math.floor((ms % 60_000) / 1000))},${p(ms % 1000, 3)}`
 }
 
-// For the standalone Transcribe tool: plain text + SRT (for YouTube captions/subtitles).
-export async function transcribeAudio(audioPath: string): Promise<{ text: string; srt: string }> {
+// For the standalone Transcribe tool: plain text + SRT + timestamped segments.
+export async function transcribeAudio(audioPath: string): Promise<{
+  text: string
+  srt: string
+  segments: TranscriptSegment[]
+}> {
   const { text, segments } = await groqTranscribe(audioPath)
   const srt = segments
     .map((s, i) => `${i + 1}\n${srtTime(s.start)} --> ${srtTime(s.end)}\n${s.text}\n`)
     .join('\n')
-  return { text, srt }
+  return { text, srt, segments }
 }
