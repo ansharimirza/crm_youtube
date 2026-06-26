@@ -52,10 +52,13 @@ function cleanPrompt(s: string): string {
 
 // A line that starts a new beat. Two shapes the workflow produces:
 //  inline:  "B1 —", "1.", "2)", "#4 -"        (number + separator, content follows)
-//  header:  "### BEAT 1", "BEAT 1", "Scene 3"  (heading on its own line)
+//  header:   "### BEAT 1", "BEAT 1", "Scene 3"  (heading on its own line)
+//  bracket:  "[Beat 1]", "[Scene 1]", "[1]"     (the content/quote follows on same line)
+const BEAT_BRACKET = /^\s*\[\s*(?:beat|scene)?\s*#?\d+\s*\]\s*[:.\-–—]?\s*/i
 const BEAT_INLINE = /^\s*(?:scene|beat|b)?\s*#?\s*\d+\s*[^\w\s]{1,3}/i
 const BEAT_HEADER = /^\s*#{0,6}\s*(?:beat|scene)\s+#?\d+\b/i
-const isBeatHeader = (l: string): boolean => BEAT_HEADER.test(l) || BEAT_INLINE.test(l)
+const isBeatHeader = (l: string): boolean => BEAT_BRACKET.test(l) || BEAT_HEADER.test(l) || BEAT_INLINE.test(l)
+const stripBeatMarker = (l: string): string => l.replace(BEAT_BRACKET, '').replace(BEAT_HEADER, '').replace(BEAT_INLINE, '')
 
 // Section/structure lines that must NOT leak into a beat's prompt (else they get
 // drawn into the image, e.g. "ACT 3 / CHAPTER ONE" rendered as caption text).
@@ -82,7 +85,7 @@ function parseState8(text: string): { image: string; narration: string }[] {
   for (const line of lines) {
     if (isBeatHeader(line)) {
       if (cur) blocks.push({ inline: cur.inline, body: cur.body.join('\n') })
-      const inline = line.replace(BEAT_HEADER, '').replace(BEAT_INLINE, '').trim() // Format A: the hook quote
+      const inline = stripBeatMarker(line).trim() // Format A: the hook quote
       cur = { inline, body: [] }
     } else if (cur && !isNoiseLine(line)) {
       cur.body.push(line)
@@ -128,7 +131,7 @@ function parseList(text: string, clean = false): string[] {
     for (const line of lines) {
       if (isBeatHeader(line)) {
         if (started) items.push(cur.join('\n').trim())
-        cur = [line.replace(BEAT_HEADER, '').replace(BEAT_INLINE, '')]
+        cur = [stripBeatMarker(line)]
         started = true
       } else if (started && !isNoiseLine(line)) {
         cur.push(line)
