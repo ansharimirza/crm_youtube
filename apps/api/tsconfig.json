@@ -15,7 +15,7 @@
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
     "esModuleInterop": true,
-    "types": ["bun-types"],
+    "types": ["bun"],
     "paths": {
       "@/*": ["./src/*"]
     }

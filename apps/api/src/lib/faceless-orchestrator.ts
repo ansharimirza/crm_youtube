@@ -138,6 +138,55 @@ function needsRegen(mode: FacelessMode, s: { status: string; videoUrl: string | 
   return !s.firstImagePath // static / kenburns
 }
 
+// Create a faceless project from the user's OWN uploaded images (no generation, no
+// credits). Each scene = one image + its narration line. Then the normal flow applies:
+// upload full narration → Sync (align) → Rakit.
+export async function createFacelessFromUploads(
+  userId: number,
+  p: {
+    title: string
+    narrations: string[]
+    images: File[] // 1:1 with narrations, already in order
+    aspectRatio?: '16:9' | '9:16'
+    mode?: FacelessMode // 'static' (default) or 'kenburns'
+  },
+): Promise<{ projectId: number; sceneCount: number }> {
+  if (!p.narrations?.length) throw new Error('Minimal 1 narasi')
+  if (p.images.length !== p.narrations.length) {
+    throw new Error(`Jumlah gambar (${p.images.length}) tidak sama dengan narasi (${p.narrations.length})`)
+  }
+  const mode: FacelessMode = p.mode === 'kenburns' ? 'kenburns' : 'static'
+
+  const [project] = await db.insert(veoProjects)
+    .values({ userId, title: p.title, facelessMode: mode, facelessVoiceMode: 'single' })
+    .returning()
+
+  await mkdir(IMG_DIR, { recursive: true })
+  for (let i = 0; i < p.narrations.length; i++) {
+    const [scene] = await db.insert(veoScenes).values({
+      projectId: project.id,
+      sceneNumber: i + 1,
+      prompt: p.narrations[i].slice(0, 200),
+      imagePrompt: '',
+      model: 'veo-3.1-fast',
+      resolution: '1080p',
+      duration: 8,
+      aspectRatio: p.aspectRatio ?? '16:9',
+      modeImage: 'frame',
+      narrationText: p.narrations[i],
+      noZoom: mode === 'static',
+      status: 'done',
+      progress: 100,
+    }).returning()
+    const img = p.images[i]
+    const ext = (img.name.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '') || 'jpg'
+    const imgPath = join(IMG_DIR, `scene${scene.id}_up_${Date.now()}.${ext}`)
+    await writeFile(imgPath, Buffer.from(await img.arrayBuffer()))
+    await db.update(veoScenes).set({ firstImagePath: imgPath, updatedAt: new Date() }).where(eq(veoScenes.id, scene.id))
+  }
+  return { projectId: project.id, sceneCount: p.narrations.length }
+}
+
 // Re-generate scenes that failed/stuck (transient GeminiGen errors during a big batch,
 // or scenes accidentally sent through the wrong pipeline). Uses the stored mode.
 export async function retryFailedScenes(userId: number, projectId: number): Promise<{ retried: number }> {

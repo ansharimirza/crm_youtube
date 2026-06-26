@@ -158,6 +158,8 @@ export function FacelessStudioPage() {
   const [aspect, setAspect] = useState<Aspect>('16:9')
   const [voice, setVoice] = useState('Charon')
   const [fullAudio, setFullAudio] = useState<File | null>(null) // voiceMode='single'
+  const [imageSource, setImageSource] = useState<'generate' | 'upload'>('generate')
+  const [uploadImages, setUploadImages] = useState<File[]>([])
   const [submitting, setSubmitting] = useState(false)
   const [scenes, setScenes] = useState<SceneRow[]>([{ image_prompt: '', narration_text: '', video_prompt: '', audioFile: null }])
 
@@ -178,12 +180,14 @@ export function FacelessStudioPage() {
   const validScenes = useMemo(
     () =>
       scenes.filter((s) => {
+        // Upload-images mode: a scene just needs narration (image comes from uploads).
+        if (imageSource === 'upload') return !!s.narration_text.trim()
         if (!s.image_prompt.trim()) return false
         if (voiceMode === 'tts') return !!s.narration_text.trim()
         if (voiceMode === 'upload') return !!s.audioFile
         return true // single
       }),
-    [scenes, voiceMode],
+    [scenes, voiceMode, imageSource],
   )
 
   function applyBulk() {
@@ -234,6 +238,33 @@ export function FacelessStudioPage() {
 
   async function submit() {
     if (!title.trim()) return toast.error('Isi judul project')
+
+    // Upload-images mode: create scenes from the user's own images + narration (no gen).
+    if (imageSource === 'upload') {
+      if (validScenes.length === 0) return toast.error('Tempel/parse narasi dulu (minimal 1 scene)')
+      if (uploadImages.length !== validScenes.length) {
+        return toast.error(`Jumlah gambar (${uploadImages.length}) harus sama dengan narasi (${validScenes.length})`)
+      }
+      setSubmitting(true)
+      try {
+        const fd = new FormData()
+        fd.append('title', title.trim())
+        fd.append('mode', mode === 'kenburns' ? 'kenburns' : 'static')
+        fd.append('aspectRatio', aspect)
+        fd.append('narrations', JSON.stringify(validScenes.map((s) => s.narration_text.trim())))
+        for (const img of uploadImages) fd.append('images', img)
+        const res = await api.post<{ projectId: number; sceneCount: number }>('/api/veo/faceless-upload', fd)
+        toast.success(`Project dibuat — ${res.sceneCount} scene (gambar upload). Lanjut: upload audio → Sync → Rakit.`)
+        qc.invalidateQueries({ queryKey: ['veo-projects'] })
+        navigate(`/faceless/${res.projectId}`)
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : 'Gagal membuat project')
+      } finally {
+        setSubmitting(false)
+      }
+      return
+    }
+
     if (validScenes.length === 0) {
       const why = voiceMode === 'tts' ? 'image prompt + narasi' : voiceMode === 'upload' ? 'image prompt + file audio' : 'image prompt'
       return toast.error(`Minimal 1 scene dengan ${why}`)
@@ -320,6 +351,16 @@ export function FacelessStudioPage() {
               <Label>Judul</Label>
               <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Misal: 10 Fakta Luar Angkasa" maxLength={200} />
             </div>
+            <div className="space-y-1.5 lg:col-span-4">
+              <Label>Sumber Gambar</Label>
+              <Select value={imageSource} onValueChange={(v) => setImageSource(v as 'generate' | 'upload')}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="generate">Generate (Nano Banana — pakai kredit)</SelectItem>
+                  <SelectItem value="upload">Upload gambar sendiri (gratis)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
             <div className="space-y-1.5 lg:col-span-2">
               <Label>Mode</Label>
               <Select value={mode} onValueChange={(v) => setMode(v as Mode)}>
@@ -341,6 +382,28 @@ export function FacelessStudioPage() {
                 </SelectContent>
               </Select>
             </div>
+            {imageSource === 'upload' && (
+              <div className="space-y-1.5 lg:col-span-4 rounded-lg border border-dashed border-primary/30 bg-primary/[0.03] p-3">
+                <Label>Upload gambar kamu (urut sesuai narasi)</Label>
+                <input
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  onChange={(e) => setUploadImages(Array.from(e.target.files ?? []))}
+                  className="text-xs file:mr-2 file:rounded file:border-0 file:bg-primary/10 file:px-3 file:py-1.5 file:text-primary"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Pilih semua gambar sekaligus. Diurutkan otomatis by nama file (kasih nama <b>01, 02, 03…</b> biar urutannya pas). Jumlah gambar harus sama dengan jumlah scene/narasi.
+                  {uploadImages.length > 0 && (
+                    <span className={cn('ml-1 font-medium', uploadImages.length === validScenes.length ? 'text-emerald-400' : 'text-amber-400')}>
+                      {' '}{uploadImages.length} gambar dipilih{validScenes.length > 0 ? ` / ${validScenes.length} scene` : ''}.
+                    </span>
+                  )}
+                </p>
+                <p className="text-xs text-muted-foreground">Suara: nanti kamu <b>Upload narasi penuh + Sync</b> di halaman project (setelah ini).</p>
+              </div>
+            )}
+            {imageSource === 'generate' && (
             <div className="space-y-1.5">
               <Label>Sumber Suara</Label>
               <Select value={voiceMode} onValueChange={(v) => setVoiceMode(v as VoiceMode)}>
@@ -352,7 +415,8 @@ export function FacelessStudioPage() {
                 </SelectContent>
               </Select>
             </div>
-            {voiceMode === 'tts' && (
+            )}
+            {imageSource === 'generate' && voiceMode === 'tts' && (
               <div className="space-y-1.5 lg:col-span-4">
                 <Label>Suara (Gemini TTS)</Label>
                 <Select value={voice} onValueChange={setVoice}>
@@ -365,7 +429,7 @@ export function FacelessStudioPage() {
                 </Select>
               </div>
             )}
-            {voiceMode === 'single' && (
+            {imageSource === 'generate' && voiceMode === 'single' && (
               <div className="space-y-1.5 lg:col-span-4">
                 <Label>File narasi penuh (1 audio untuk seluruh video)</Label>
                 <div className="flex items-center gap-2">
@@ -382,7 +446,7 @@ export function FacelessStudioPage() {
                 </p>
               </div>
             )}
-            {voiceMode === 'upload' && (
+            {imageSource === 'generate' && voiceMode === 'upload' && (
               <p className="text-xs text-muted-foreground lg:col-span-4">
                 Mode per-scene: tiap scene unggah file audio (.mp3/.wav/.m4a) sendiri. Durasi tiap klip otomatis menyesuaikan panjang audionya. Teks narasi opsional (buat subtitle).
               </p>
@@ -474,10 +538,15 @@ export function FacelessStudioPage() {
 
           <div className="flex items-center gap-2 pt-1">
             <Button onClick={submit} disabled={submitting || validScenes.length === 0}>
-              {submitting ? <><Loader2 className="h-4 w-4 animate-spin" /> {voiceMode === 'tts' ? 'Membuat...' : 'Upload audio...'}</> : <><Wand2 className="h-4 w-4" /> Generate {validScenes.length} Scene</>}
+              {submitting
+                ? <><Loader2 className="h-4 w-4 animate-spin" /> {imageSource === 'upload' ? 'Upload gambar...' : voiceMode === 'tts' ? 'Membuat...' : 'Upload audio...'}</>
+                : <><Wand2 className="h-4 w-4" /> {imageSource === 'upload' ? `Buat project (${validScenes.length} scene)` : `Generate ${validScenes.length} Scene`}</>}
             </Button>
-            {mode === 'veo' && validScenes.length > 0 && (
+            {imageSource === 'generate' && mode === 'veo' && validScenes.length > 0 && (
               <span className="text-xs text-muted-foreground">≈ {validScenes.length * 3} kredit Veo</span>
+            )}
+            {imageSource === 'upload' && (
+              <span className="text-xs text-emerald-400">Gratis (gambar sendiri)</span>
             )}
           </div>
         </CardContent>

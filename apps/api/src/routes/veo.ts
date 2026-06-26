@@ -15,7 +15,7 @@ import {
 } from '../lib/geminigen'
 import { generateCaption, GeminiError, type Platform } from '../lib/gemini'
 import { assembleProject, generateNarration, alignProjectNarration } from '../lib/veo-assemble-worker'
-import { createFacelessProject, uploadProjectFinal, retryFailedScenes, type FacelessScene } from '../lib/faceless-orchestrator'
+import { createFacelessProject, createFacelessFromUploads, uploadProjectFinal, retryFailedScenes, type FacelessScene } from '../lib/faceless-orchestrator'
 
 const UPLOAD_DIR = process.env.UPLOAD_DIR || join(process.cwd(), 'uploads')
 const VEO_DIR = join(UPLOAD_DIR, 'veo')
@@ -121,6 +121,35 @@ export const veoRoutes = new Elysia({ prefix: '/api/veo' })
       voice: t.Optional(t.String()),
       voiceMode: t.Optional(t.Union([t.Literal('tts'), t.Literal('upload'), t.Literal('single')])),
       model: t.Optional(t.String()),
+    }),
+  })
+
+  // === FACELESS: create a project from the user's OWN uploaded images (no gen, free) ===
+  .post('/faceless-upload', async ({ body, user, set }) => {
+    try {
+      const narrations = JSON.parse(body.narrations) as string[]
+      const raw = Array.isArray(body.images) ? body.images : [body.images]
+      // Stable order by filename (numeric-aware) so "01.png, 02.png, …" map correctly.
+      const images = [...raw].sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }))
+      const { projectId, sceneCount } = await createFacelessFromUploads(user.id, {
+        title: body.title.trim(),
+        narrations,
+        images,
+        aspectRatio: body.aspectRatio as '16:9' | '9:16' | undefined,
+        mode: body.mode as 'static' | 'kenburns' | undefined,
+      })
+      return { projectId, sceneCount }
+    } catch (e) {
+      set.status = 400
+      return { error: e instanceof Error ? e.message : 'Gagal membuat project' }
+    }
+  }, {
+    body: t.Object({
+      title: t.String({ minLength: 1, maxLength: 200 }),
+      narrations: t.String(), // JSON array of per-scene narration lines
+      images: t.Files(),
+      aspectRatio: t.Optional(t.String()),
+      mode: t.Optional(t.String()),
     }),
   })
 
