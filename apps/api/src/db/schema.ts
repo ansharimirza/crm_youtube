@@ -27,6 +27,9 @@ export const veoProjects = pgTable('veo_projects', {
   // mode/voiceMode stored so recovery + retry use the right pipeline (not inference).
   facelessMode: varchar('faceless_mode', { length: 16 }), // 'veo' | 'kenburns' | 'static'
   facelessVoiceMode: varchar('faceless_voice_mode', { length: 16 }), // 'tts' | 'upload' | 'single'
+  // Image source for generated scenes: 'geminigen' (Nano Banana, paid) | 'pollinations' (free).
+  // Stored so retry/recover regenerate with the same provider.
+  imageProvider: varchar('image_provider', { length: 16 }).default('geminigen'),
   musicPath: text('music_path'),
   // Full-narration mode: one uploaded voiceover for the whole video (scenes spread across it)
   narrationFullPath: text('narration_full_path'),

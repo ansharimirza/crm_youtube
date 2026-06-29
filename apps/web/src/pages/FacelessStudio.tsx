@@ -158,7 +158,7 @@ export function FacelessStudioPage() {
   const [aspect, setAspect] = useState<Aspect>('16:9')
   const [voice, setVoice] = useState('Charon')
   const [fullAudio, setFullAudio] = useState<File | null>(null) // voiceMode='single'
-  const [imageSource, setImageSource] = useState<'generate' | 'upload'>('generate')
+  const [imageSource, setImageSource] = useState<'generate' | 'generate-free' | 'upload'>('generate')
   const [uploadImages, setUploadImages] = useState<File[]>([])
   const [submitting, setSubmitting] = useState(false)
   const [scenes, setScenes] = useState<SceneRow[]>([{ image_prompt: '', narration_text: '', video_prompt: '', audioFile: null }])
@@ -277,6 +277,7 @@ export function FacelessStudioPage() {
         mode,
         aspectRatio: aspect,
         voiceMode,
+        imageProvider: imageSource === 'generate-free' ? 'pollinations' : 'geminigen',
         ...(voiceMode === 'tts' ? { voice } : {}),
         scenes: validScenes.map((s) => ({
           image_prompt: s.image_prompt.trim(),
@@ -353,13 +354,17 @@ export function FacelessStudioPage() {
             </div>
             <div className="space-y-1.5 lg:col-span-4">
               <Label>Sumber Gambar</Label>
-              <Select value={imageSource} onValueChange={(v) => setImageSource(v as 'generate' | 'upload')}>
+              <Select value={imageSource} onValueChange={(v) => setImageSource(v as 'generate' | 'generate-free' | 'upload')}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="generate">Generate (Nano Banana — pakai kredit)</SelectItem>
+                  <SelectItem value="generate-free">Generate gratis (Pollinations — $0)</SelectItem>
                   <SelectItem value="upload">Upload gambar sendiri (gratis)</SelectItem>
                 </SelectContent>
               </Select>
+              {imageSource === 'generate-free' && (
+                <p className="text-xs text-muted-foreground">Gratis, tanpa kredit. Generate sekuensial (1 per 1) jadi agak lebih lama; resolusi 1024×576 lalu di-upscale ke 1080p saat rakit.</p>
+              )}
             </div>
             <div className="space-y-1.5 lg:col-span-2">
               <Label>Mode</Label>
@@ -403,7 +408,7 @@ export function FacelessStudioPage() {
                 <p className="text-xs text-muted-foreground">Suara: nanti kamu <b>Upload narasi penuh + Sync</b> di halaman project (setelah ini).</p>
               </div>
             )}
-            {imageSource === 'generate' && (
+            {imageSource !== 'upload' && (
             <div className="space-y-1.5">
               <Label>Sumber Suara</Label>
               <Select value={voiceMode} onValueChange={(v) => setVoiceMode(v as VoiceMode)}>
@@ -416,7 +421,7 @@ export function FacelessStudioPage() {
               </Select>
             </div>
             )}
-            {imageSource === 'generate' && voiceMode === 'tts' && (
+            {imageSource !== 'upload' && voiceMode === 'tts' && (
               <div className="space-y-1.5 lg:col-span-4">
                 <Label>Suara (Gemini TTS)</Label>
                 <Select value={voice} onValueChange={setVoice}>
@@ -429,7 +434,7 @@ export function FacelessStudioPage() {
                 </Select>
               </div>
             )}
-            {imageSource === 'generate' && voiceMode === 'single' && (
+            {imageSource !== 'upload' && voiceMode === 'single' && (
               <div className="space-y-1.5 lg:col-span-4">
                 <Label>File narasi penuh (1 audio untuk seluruh video)</Label>
                 <div className="flex items-center gap-2">
@@ -446,7 +451,7 @@ export function FacelessStudioPage() {
                 </p>
               </div>
             )}
-            {imageSource === 'generate' && voiceMode === 'upload' && (
+            {imageSource !== 'upload' && voiceMode === 'upload' && (
               <p className="text-xs text-muted-foreground lg:col-span-4">
                 Mode per-scene: tiap scene unggah file audio (.mp3/.wav/.m4a) sendiri. Durasi tiap klip otomatis menyesuaikan panjang audionya. Teks narasi opsional (buat subtitle).
               </p>
@@ -544,6 +549,9 @@ export function FacelessStudioPage() {
             </Button>
             {imageSource === 'generate' && mode === 'veo' && validScenes.length > 0 && (
               <span className="text-xs text-muted-foreground">≈ {validScenes.length * 3} kredit Veo</span>
+            )}
+            {imageSource === 'generate-free' && (
+              <span className="text-xs text-emerald-400">Gratis (Pollinations){mode === 'veo' ? ' — tapi Veo tetap pakai kredit' : ''}</span>
             )}
             {imageSource === 'upload' && (
               <span className="text-xs text-emerald-400">Gratis (gambar sendiri)</span>

@@ -99,6 +99,7 @@ export const veoRoutes = new Elysia({ prefix: '/api/veo' })
         voice: body.voice,
         voiceMode: body.voiceMode,
         model: body.model,
+        imageProvider: body.imageProvider,
       })
       return { projectId, sceneIds, sceneCount: sceneIds.length }
     } catch (e) {
@@ -121,6 +122,7 @@ export const veoRoutes = new Elysia({ prefix: '/api/veo' })
       voice: t.Optional(t.String()),
       voiceMode: t.Optional(t.Union([t.Literal('tts'), t.Literal('upload'), t.Literal('single')])),
       model: t.Optional(t.String()),
+      imageProvider: t.Optional(t.Union([t.Literal('geminigen'), t.Literal('pollinations')])),
     }),
   })
 

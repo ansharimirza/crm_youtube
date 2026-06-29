@@ -8,6 +8,7 @@ import { mkdir, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { db, users, veoProjects, veoScenes, videos, youtubeAccounts } from '../db'
 import { generateImageAndWait } from './geminigen'
+import { generatePollinationsImage } from './pollinations'
 import { enqueueScene } from './scene-worker'
 import { generateNarration } from './veo-assemble-worker'
 import { runUpload } from '../routes/videos'
@@ -32,6 +33,8 @@ export interface FacelessScene {
 export type FacelessMode = 'veo' | 'kenburns' | 'static'
 // tts = Gemini TTS per scene; upload = user audio per scene; single = one full voiceover for the whole video
 export type VoiceMode = 'tts' | 'upload' | 'single'
+// geminigen = Nano Banana (paid credits); pollinations = free, keyless (rate-limited → sequential)
+export type ImageProvider = 'geminigen' | 'pollinations'
 
 export async function createFacelessProject(
   userId: number,
@@ -43,14 +46,16 @@ export async function createFacelessProject(
     mode?: FacelessMode
     voice?: string // Gemini TTS voice (e.g. Kore, Puck, Charon)
     voiceMode?: VoiceMode // 'tts' (default) or 'upload' (skip TTS, audio added per scene)
+    imageProvider?: ImageProvider // 'geminigen' (default, paid) or 'pollinations' (free)
   },
 ): Promise<{ projectId: number; sceneIds: number[] }> {
   if (!p.scenes?.length) throw new Error('Minimal 1 scene')
   const mode: FacelessMode = p.mode ?? 'veo'
   const voiceMode: VoiceMode = p.voiceMode ?? 'tts'
+  const provider: ImageProvider = p.imageProvider === 'pollinations' ? 'pollinations' : 'geminigen'
 
   const [project] = await db.insert(veoProjects)
-    .values({ userId, title: p.title, facelessMode: mode, facelessVoiceMode: voiceMode })
+    .values({ userId, title: p.title, facelessMode: mode, facelessVoiceMode: voiceMode, imageProvider: provider })
     .returning()
   const sceneIds: number[] = []
 
@@ -77,7 +82,7 @@ export async function createFacelessProject(
 
   // Throttled background generation — never fire all image+TTS at once (a 126-scene
   // project would otherwise slam GeminiGen/Gemini with 250+ concurrent calls).
-  void runScenePool(userId, pending, mode, voiceMode, p.voice)
+  void runScenePool(userId, pending, mode, voiceMode, p.voice, provider)
 
   return { projectId: project.id, sceneIds }
 }
@@ -89,13 +94,16 @@ async function runScenePool(
   mode: FacelessMode,
   voiceMode: VoiceMode,
   voice?: string,
+  provider: ImageProvider = 'geminigen',
 ): Promise<void> {
+  // Pollinations' free tier allows ~1 concurrent request per IP → generate one at a time.
+  const concurrency = provider === 'pollinations' ? 1 : SCENE_GEN_CONCURRENCY
   let idx = 0
   const worker = async () => {
     while (idx < pending.length) {
       const { sceneId, imagePrompt } = pending[idx++]
       try {
-        await generateSceneVisual(userId, sceneId, imagePrompt, mode)
+        await generateSceneVisual(userId, sceneId, imagePrompt, mode, provider)
       } catch (e) {
         // Mark the scene 'error' (not leave it silently 'queued') so it's visible + retryable.
         console.error('[faceless-visual]', e)
@@ -111,7 +119,7 @@ async function runScenePool(
       }
     }
   }
-  await Promise.all(Array.from({ length: Math.min(SCENE_GEN_CONCURRENCY, pending.length) }, worker))
+  await Promise.all(Array.from({ length: Math.min(concurrency, pending.length) }, worker))
 }
 
 // Resolve a project's faceless mode/voiceMode (stored on the row; fall back to
@@ -197,6 +205,7 @@ export async function retryFailedScenes(userId: number, projectId: number): Prom
   if (!project) throw new Error('Project tidak ditemukan')
 
   const { mode, voiceMode } = resolveFacelessMode(project)
+  const provider: ImageProvider = project.imageProvider === 'pollinations' ? 'pollinations' : 'geminigen'
   const failed = project.scenes.filter((s) => needsRegen(mode, s))
   if (failed.length === 0) return { retried: 0 }
 
@@ -207,7 +216,7 @@ export async function retryFailedScenes(userId: number, projectId: number): Prom
       .where(eq(veoScenes.id, s.id))
   }
   const pending = failed.map((s) => ({ sceneId: s.id, imagePrompt: s.imagePrompt || s.prompt }))
-  void runScenePool(userId, pending, mode, voiceMode)
+  void runScenePool(userId, pending, mode, voiceMode, undefined, provider)
 
   return { retried: failed.length }
 }
@@ -222,6 +231,7 @@ export async function recoverFacelessScenes(): Promise<void> {
   let total = 0
   for (const project of projects) {
     const { mode, voiceMode } = resolveFacelessMode(project)
+    const provider: ImageProvider = project.imageProvider === 'pollinations' ? 'pollinations' : 'geminigen'
     const failed = project.scenes.filter((s) => needsRegen(mode, s))
     if (failed.length === 0) continue
     for (const s of failed) {
@@ -230,7 +240,7 @@ export async function recoverFacelessScenes(): Promise<void> {
         .where(eq(veoScenes.id, s.id))
     }
     const pending = failed.map((s) => ({ sceneId: s.id, imagePrompt: s.imagePrompt || s.prompt }))
-    void runScenePool(project.userId, pending, mode, voiceMode)
+    void runScenePool(project.userId, pending, mode, voiceMode, undefined, provider)
     total += failed.length
   }
   if (total) console.log(`[faceless-recover] re-generating ${total} incomplete image scene(s)`)
@@ -250,31 +260,39 @@ function styleFixImagePrompt(p: string): string {
 
 // Nano Banana image -> firstImagePath. veo mode: enqueue Veo (image->video).
 // kenburns/static mode: the image IS the visual (assembler handles motion) -> mark done.
-async function generateSceneVisual(userId: number, sceneId: number, imagePrompt: string, mode: FacelessMode): Promise<void> {
-  const apiKey = await geminigenKey(userId)
-  if (!apiKey) {
-    await db.update(veoScenes)
-      .set({ status: 'error', errorMsg: 'GeminiGen API key belum diatur (Settings)', updatedAt: new Date() })
-      .where(eq(veoScenes.id, sceneId))
-    return
-  }
+async function generateSceneVisual(userId: number, sceneId: number, imagePrompt: string, mode: FacelessMode, provider: ImageProvider = 'geminigen'): Promise<void> {
   const scene = await db.query.veoScenes.findFirst({ where: eq(veoScenes.id, sceneId) })
   if (!scene) return
-
   const imageOnly = mode === 'kenburns' || mode === 'static'
-  const { imageUrl } = await generateImageAndWait({
-    apiKey,
-    prompt: styleFixImagePrompt(imagePrompt),
-    model: 'nano-banana-pro',
-    aspectRatio: scene.aspectRatio as '16:9' | '9:16',
-    resolution: imageOnly ? '2K' : undefined, // higher-res still for image-only modes
-  })
+  const aspect = scene.aspectRatio as '16:9' | '9:16'
+
+  let bytes: Buffer
+  if (provider === 'pollinations') {
+    // Free, keyless. Image-only modes ideal; veo mode still costs Veo credits downstream.
+    bytes = await generatePollinationsImage(styleFixImagePrompt(imagePrompt), aspect)
+  } else {
+    const apiKey = await geminigenKey(userId)
+    if (!apiKey) {
+      await db.update(veoScenes)
+        .set({ status: 'error', errorMsg: 'GeminiGen API key belum diatur (Settings)', updatedAt: new Date() })
+        .where(eq(veoScenes.id, sceneId))
+      return
+    }
+    const { imageUrl } = await generateImageAndWait({
+      apiKey,
+      prompt: styleFixImagePrompt(imagePrompt),
+      model: 'nano-banana-pro',
+      aspectRatio: aspect,
+      resolution: imageOnly ? '2K' : undefined, // higher-res still for image-only modes
+    })
+    const res = await fetch(imageUrl)
+    if (!res.ok) throw new Error(`Image download failed: HTTP ${res.status}`)
+    bytes = Buffer.from(await res.arrayBuffer())
+  }
 
   await mkdir(IMG_DIR, { recursive: true })
-  const res = await fetch(imageUrl)
-  if (!res.ok) throw new Error(`Image download failed: HTTP ${res.status}`)
   const imgPath = join(IMG_DIR, `scene${sceneId}_${Date.now()}.jpg`)
-  await writeFile(imgPath, Buffer.from(await res.arrayBuffer()))
+  await writeFile(imgPath, bytes)
 
   await db.update(veoScenes).set({ firstImagePath: imgPath, updatedAt: new Date() }).where(eq(veoScenes.id, sceneId))
 
