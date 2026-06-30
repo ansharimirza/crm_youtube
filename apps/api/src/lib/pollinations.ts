@@ -5,6 +5,12 @@
 
 const POLL_BASE = 'https://image.pollinations.ai/prompt'
 
+// The free tier serves the "sana" model, which defaults to polished COLOR illustrations
+// and ignores soft style hints. Force the channel's black-marker doodle look with a hard
+// style prefix on every prompt (verified: turns colored renders into clean B/W line art).
+const DOODLE_PREFIX =
+  'black ink marker doodle on plain white paper, pure black and white line art, bold clean outlines, no color, no shading, no gray fill, plain white background, simple childlike sketch: '
+
 // The free tier caps 16:9 output at ~1024x576 regardless of requested size; the
 // ffmpeg assembler scales each still up to the final video resolution anyway.
 export async function generatePollinationsImage(
@@ -21,7 +27,8 @@ export async function generatePollinationsImage(
     model: 'flux',
     seed: String(seed),
   })
-  const url = `${POLL_BASE}/${encodeURIComponent(prompt.slice(0, 1500))}?${params}`
+  const styled = DOODLE_PREFIX + prompt.slice(0, 1300)
+  const url = `${POLL_BASE}/${encodeURIComponent(styled)}?${params}`
 
   let lastErr = ''
   for (let attempt = 1; attempt <= 4; attempt++) {
