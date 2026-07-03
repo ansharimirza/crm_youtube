@@ -385,7 +385,7 @@ export async function getImageHistory(uuid: string, apiKey: string): Promise<Ima
 export async function generateImageAndWait(
   params: GenerateImageParams,
   pollIntervalMs = 3_000,
-  timeoutMs = 180_000
+  timeoutMs = 300_000 // 5 min — snapgen 2K images can take >3 min under load
 ): Promise<{ uuid: string; imageUrl: string }> {
   const initial = await generateImage(params)
 
