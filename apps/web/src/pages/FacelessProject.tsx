@@ -3,7 +3,7 @@ import { useParams, Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   ArrowLeft, Loader2, CheckCircle2, AlertCircle, Clock, Image as ImageIcon,
-  Film, Wand2, Package, Youtube, Download, RotateCw,
+  Film, Wand2, Package, Youtube, Download, RotateCw, Scissors,
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -211,6 +211,9 @@ export function FacelessProjectPage() {
         </CardContent>
       </Card>
 
+      {/* Shorts */}
+      {assembleStatus === 'done' && <ShortsCard projectId={project.id} />}
+
       {/* Upload */}
       {assembleStatus === 'done' && <UploadCard projectId={project.id} defaultTitle={project.title} />}
 
@@ -289,6 +292,70 @@ function FinalVideo({ projectId }: { projectId: number }) {
       <Button asChild size="sm" variant="outline">
         <a href={url} download={`faceless_${projectId}.mp4`}><Download className="h-4 w-4" /> Download MP4</a>
       </Button>
+    </div>
+  )
+}
+
+interface ShortItem { id: number; title: string; startSec: number; endSec: number; status: string; error?: string | null; createdAt: string }
+
+function fmtT(sec: number) { const m = Math.floor(sec / 60), s = Math.floor(sec % 60); return `${m}:${String(s).padStart(2, '0')}` }
+
+function ShortsCard({ projectId }: { projectId: number }) {
+  const qc = useQueryClient()
+  const { data } = useQuery({
+    queryKey: ['veo-shorts', projectId],
+    queryFn: () => api.get<{ shorts: ShortItem[] }>(`/api/veo/projects/${projectId}/shorts`),
+    refetchInterval: (q) => (q.state.data?.shorts?.some((s) => s.status === 'rendering') ? 3000 : false),
+  })
+  const shorts = data?.shorts ?? []
+  const make = useMutation({
+    mutationFn: () => api.post(`/api/veo/projects/${projectId}/short`, {}),
+    onSuccess: () => { toast.success('Bikin Short — AI lagi pilih bagian terbaik dari script'); qc.invalidateQueries({ queryKey: ['veo-shorts', projectId] }) },
+    onError: (e: Error) => toast.error(e.message),
+  })
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base flex items-center gap-2"><Scissors className="h-4 w-4 text-primary" /> Clip Short (9:16)</CardTitle>
+        <CardDescription>AI baca script → pilih bagian hook terbaik → potong jadi Short vertikal + caption. Tekan lagi buat variasi lain.</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <Button size="sm" onClick={() => make.mutate()} disabled={make.isPending}>
+          {make.isPending ? <><Loader2 className="h-4 w-4 animate-spin" /> Memproses...</> : <><Scissors className="h-4 w-4" /> Buat Short (auto-hook)</>}
+        </Button>
+        {shorts.length > 0 && (
+          <div className="grid sm:grid-cols-2 gap-3">
+            {shorts.map((s) => <ShortItemView key={s.id} short={s} />)}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  )
+}
+
+function ShortItemView({ short }: { short: ShortItem }) {
+  const [url, setUrl] = useState<string | null>(null)
+  useEffect(() => {
+    if (short.status !== 'done') return
+    let revoke: string | null = null
+    fetch(`/api/veo/shorts/${short.id}/video`, { headers: { Authorization: `Bearer ${getToken()}` } })
+      .then((r) => (r.ok ? r.blob() : Promise.reject()))
+      .then((b) => { revoke = URL.createObjectURL(b); setUrl(revoke) })
+      .catch(() => {})
+    return () => { if (revoke) URL.revokeObjectURL(revoke) }
+  }, [short.id, short.status])
+  return (
+    <div className="rounded-lg border p-2 space-y-1.5">
+      <p className="text-xs font-medium line-clamp-2">{short.title || 'Short'}</p>
+      <p className="text-[10px] text-muted-foreground">{fmtT(short.startSec)}–{fmtT(short.endSec)} · {Math.round(short.endSec - short.startSec)} dtk</p>
+      {short.status === 'rendering' && <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground py-6"><Loader2 className="h-4 w-4 animate-spin" /> Merender...</div>}
+      {short.status === 'error' && <p className="text-xs text-red-400">{short.error || 'Gagal'}</p>}
+      {short.status === 'done' && url && (
+        <>
+          <video src={url} controls className="w-full rounded bg-black aspect-[9/16] max-h-[50vh]" />
+          <Button asChild size="sm" variant="outline" className="w-full"><a href={url} download={`short_${short.id}.mp4`}><Download className="h-3.5 w-3.5" /> Download</a></Button>
+        </>
+      )}
     </div>
   )
 }

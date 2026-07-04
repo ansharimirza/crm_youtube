@@ -80,6 +80,19 @@ export const veoScenes = pgTable('veo_scenes', {
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
 })
 
+// Vertical Short clips cut from a project's final video (AI-picked hook segment, 9:16).
+export const veoShorts = pgTable('veo_shorts', {
+  id: serial('id').primaryKey(),
+  projectId: integer('project_id').references(() => veoProjects.id, { onDelete: 'cascade' }).notNull(),
+  title: varchar('title', { length: 200 }).default('').notNull(),
+  startSec: real('start_sec').notNull(),
+  endSec: real('end_sec').notNull(),
+  path: text('path'),
+  status: varchar('status', { length: 16, enum: ['rendering', 'done', 'error'] }).default('rendering').notNull(),
+  error: text('error'),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+})
+
 // Notifikasi untuk user (in-app)
 export const notifications = pgTable('notifications', {
   id: serial('id').primaryKey(),
@@ -322,6 +335,11 @@ export const usersRelations = relations(users, ({ many }) => ({
 export const veoProjectsRelations = relations(veoProjects, ({ one, many }) => ({
   user: one(users, { fields: [veoProjects.userId], references: [users.id] }),
   scenes: many(veoScenes),
+  shorts: many(veoShorts),
+}))
+
+export const veoShortsRelations = relations(veoShorts, ({ one }) => ({
+  project: one(veoProjects, { fields: [veoShorts.projectId], references: [veoProjects.id] }),
 }))
 
 export const veoScenesRelations = relations(veoScenes, ({ one }) => ({
@@ -371,6 +389,7 @@ export type UploadLog = typeof uploadLogs.$inferSelect
 export type Notification = typeof notifications.$inferSelect
 export type VeoProject = typeof veoProjects.$inferSelect
 export type VeoScene = typeof veoScenes.$inferSelect
+export type VeoShort = typeof veoShorts.$inferSelect
 export type TiktokCampaign = typeof tiktokCampaigns.$inferSelect
 export type TiktokScene = typeof tiktokScenes.$inferSelect
 export type TiktokFrame = typeof tiktokFrames.$inferSelect

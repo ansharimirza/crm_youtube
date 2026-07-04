@@ -830,6 +830,45 @@ export async function scoreVirality(
   }
 }
 
+export interface ShortPick { start_sec: number; end_sec: number; title: string; reason: string }
+
+const SHORT_PICK_SCHEMA = {
+  type: 'object',
+  properties: {
+    start_sec: { type: 'number' },
+    end_sec: { type: 'number' },
+    title: { type: 'string' },
+    reason: { type: 'string' },
+  },
+  required: ['start_sec', 'end_sec', 'title', 'reason'],
+}
+
+// Given a timed narration script (lines "[start-end] text" in seconds), pick the single
+// best self-contained hook segment to cut into a vertical Short.
+export async function pickShortSegment(timedScript: string, apiKey: string): Promise<ShortPick> {
+  const instruction = `You are a viral short-form video editor. Below is a timed narration script of a long video; each line is "[start-end] text" in seconds.
+Pick ONE contiguous segment that works as a standalone vertical Short (YouTube Shorts / TikTok):
+- Must open with a strong hook in the first ~3 seconds; be self-contained; emotionally gripping or curiosity-driving.
+- Duration between 20 and 55 seconds. Start and end on natural sentence/line boundaries from the script.
+- Return start_sec and end_sec (numbers, taken from the script timings), a catchy title (<=80 chars, no quotes), and a one-line reason.
+
+SCRIPT:
+${timedScript}`
+
+  const body = {
+    contents: [{ parts: [{ text: instruction }] }],
+    generationConfig: { response_mime_type: 'application/json', response_schema: SHORT_PICK_SCHEMA, temperature: 0.4 },
+  }
+  const res = await fetch(`${BASE_URL}/v1beta/models/${MODEL}:generateContent?key=${apiKey}`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+  })
+  if (!res.ok) throw new GeminiError(`Short pick failed: ${await res.text()}`, res.status)
+  const data = await res.json() as { candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }> }
+  const text = data.candidates?.[0]?.content?.parts?.[0]?.text
+  if (!text) throw new GeminiError('No text in Gemini response for short pick')
+  return JSON.parse(text) as ShortPick
+}
+
 export async function deleteGeminiFile(fileName: string, apiKey: string): Promise<void> {
   try {
     await fetch(`${BASE_URL}/v1beta/${fileName}?key=${apiKey}`, { method: 'DELETE' })

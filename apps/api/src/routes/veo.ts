@@ -3,7 +3,7 @@ import { and, desc, eq, max } from 'drizzle-orm'
 import { mkdir } from 'node:fs/promises'
 import { join } from 'node:path'
 import JSZip from 'jszip'
-import { db, users, veoProjects, veoScenes } from '../db'
+import { db, users, veoProjects, veoScenes, veoShorts } from '../db'
 import { authMiddleware } from '../middleware/auth'
 import { enqueueScene } from '../lib/scene-worker'
 import {
@@ -15,6 +15,7 @@ import {
 } from '../lib/geminigen'
 import { generateCaption, GeminiError, type Platform } from '../lib/gemini'
 import { assembleProject, generateNarration, alignProjectNarration } from '../lib/veo-assemble-worker'
+import { generateProjectShort } from '../lib/shorts'
 import { createFacelessProject, createFacelessFromUploads, uploadProjectFinal, retryFailedScenes, type FacelessScene } from '../lib/faceless-orchestrator'
 
 const UPLOAD_DIR = process.env.UPLOAD_DIR || join(process.cwd(), 'uploads')
@@ -794,6 +795,35 @@ export const veoRoutes = new Elysia({ prefix: '/api/veo' })
       return { error: 'Belum ada video final' }
     }
     return Bun.file(project.finalVideoPath)
+  })
+  // === FACELESS SHORTS: auto-pick a hook segment + cut a 9:16 Short from the final video ===
+  .post('/projects/:id/short', async ({ params, user, set }) => {
+    try {
+      const { id: shortId } = await generateProjectShort(user.id, Number(params.id))
+      return { id: shortId }
+    } catch (e) {
+      set.status = 400
+      return { error: e instanceof Error ? e.message : 'Gagal membuat Short' }
+    }
+  })
+  .get('/projects/:id/shorts', async ({ params, user }) => {
+    const id = Number(params.id)
+    const project = await db.query.veoProjects.findFirst({ where: and(eq(veoProjects.id, id), eq(veoProjects.userId, user.id)) })
+    if (!project) return { shorts: [] }
+    const shorts = await db.query.veoShorts.findMany({
+      where: eq(veoShorts.projectId, id),
+      orderBy: (s, { desc }) => [desc(s.createdAt)],
+    })
+    return { shorts: shorts.map((s) => ({ id: s.id, title: s.title, startSec: s.startSec, endSec: s.endSec, status: s.status, error: s.error, createdAt: s.createdAt })) }
+  })
+  .get('/shorts/:id/video', async ({ params, user, set }) => {
+    const short = await db.query.veoShorts.findFirst({ where: eq(veoShorts.id, Number(params.id)) })
+    if (short) {
+      const project = await db.query.veoProjects.findFirst({ where: and(eq(veoProjects.id, short.projectId), eq(veoProjects.userId, user.id)) })
+      if (project && short.path) return Bun.file(short.path)
+    }
+    set.status = 404
+    return { error: 'Short belum siap' }
   })
   .delete('/scenes/:id', async ({ params, user, set }) => {
     const id = Number(params.id)
