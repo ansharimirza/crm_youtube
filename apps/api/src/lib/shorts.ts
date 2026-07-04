@@ -49,9 +49,19 @@ export async function generateProjectShort(userId: number, projectId: number): P
   const timedScript = wins.map((w) => `[${w.start.toFixed(1)}-${w.end.toFixed(1)}] ${w.text}`).join('\n')
   const u = await db.query.users.findFirst({ where: eq(users.id, userId) })
   const apiKey = u?.geminiApiKey || process.env.GEMINI_API_KEY
-  if (!apiKey) throw new Error('Gemini API key belum diatur (Settings)')
 
-  const pick = await pickShortSegment(timedScript, apiKey)
+  // AI picks the best hook; if Gemini is unavailable (no key / out of credits), fall back
+  // to the opening ~45s — for these narrative videos the intro is almost always the hook.
+  let pick: { start_sec: number; end_sec: number; title: string; reason: string }
+  try {
+    if (!apiKey) throw new Error('Gemini API key belum diatur (Settings)')
+    pick = await pickShortSegment(timedScript, apiKey)
+  } catch (e) {
+    console.warn('[short] LLM pick unavailable, using opening fallback:', e instanceof Error ? e.message : e)
+    const target = Math.min(videoDur, 45)
+    const endGuess = wins.reduce((b, w) => (Math.abs(w.end - target) < Math.abs(b - target) ? w.end : b), wins[0].end)
+    pick = { start_sec: 0, end_sec: endGuess, title: project.title, reason: 'opening (auto, tanpa AI)' }
+  }
 
   // Snap to nearest scene boundaries, then clamp to a Short-friendly 15..59s.
   let start = wins.reduce((b, w) => (Math.abs(w.start - pick.start_sec) < Math.abs(b - pick.start_sec) ? w.start : b), wins[0].start)
