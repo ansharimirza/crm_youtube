@@ -206,9 +206,10 @@ export function FacelessStudioPage() {
 
   function applyBulk() {
     // Timestamp-locked doc ("[0:00] ...") → beats timed by their bracket, no voice script needed.
-    // Only used for upload mode (own images + own audio); the [m:ss] gives each scene its duration.
+    // Runs regardless of image source (harmless for generate; drives timing for upload) so the
+    // parse order/mode never matters. Header/footer lines without a [m:ss] are skipped.
     const ts = parseTimestampBeats(bulkImg)
-    if (imageSource === 'upload' && ts.length >= 2) {
+    if (ts.length >= 2) {
       const rows: SceneRow[] = ts.map((b) => ({
         image_prompt: b.rest, narration_text: '', video_prompt: '', audioFile: null, startSec: b.startSec,
       }))
