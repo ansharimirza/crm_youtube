@@ -26,6 +26,20 @@ interface SceneRow {
   narration_text: string // STATE 6 (voice script)
   video_prompt: string   // STATE 9 (optional)
   audioFile: File | null  // own-voice upload (voiceMode='upload')
+  startSec?: number       // timestamp mode ([m:ss] beat start) → per-scene timing on upload
+}
+
+// Timestamp-locked docs (e.g. image-prompt sheets): lines like "[0:04] <text>". Each is a
+// beat whose bracket time is its start — used to time uploaded images without a voice script.
+function parseTimestampBeats(text: string): { startSec: number; rest: string }[] {
+  const out: { startSec: number; rest: string }[] = []
+  for (const line of text.split('\n')) {
+    const m = line.match(/^\s*\[\s*(\d+):(\d{1,2})(?:\.(\d+))?\s*\]\s*(.*)$/)
+    if (!m) continue
+    const start = parseInt(m[1], 10) * 60 + parseInt(m[2], 10) + (m[3] ? parseFloat('0.' + m[3]) : 0)
+    out.push({ startSec: start, rest: m[4].trim() })
+  }
+  return out
 }
 
 const VOICES = [
@@ -180,8 +194,8 @@ export function FacelessStudioPage() {
   const validScenes = useMemo(
     () =>
       scenes.filter((s) => {
-        // Upload-images mode: a scene just needs narration (image comes from uploads).
-        if (imageSource === 'upload') return !!s.narration_text.trim()
+        // Upload-images mode: a scene needs narration OR a timestamp (image comes from uploads).
+        if (imageSource === 'upload') return !!s.narration_text.trim() || s.startSec != null
         if (!s.image_prompt.trim()) return false
         if (voiceMode === 'tts') return !!s.narration_text.trim()
         if (voiceMode === 'upload') return !!s.audioFile
@@ -191,6 +205,18 @@ export function FacelessStudioPage() {
   )
 
   function applyBulk() {
+    // Timestamp-locked doc ("[0:00] ...") → beats timed by their bracket, no voice script needed.
+    // Only used for upload mode (own images + own audio); the [m:ss] gives each scene its duration.
+    const ts = parseTimestampBeats(bulkImg)
+    if (imageSource === 'upload' && ts.length >= 2) {
+      const rows: SceneRow[] = ts.map((b) => ({
+        image_prompt: b.rest, narration_text: '', video_prompt: '', audioFile: null, startSec: b.startSec,
+      }))
+      setScenes(rows)
+      setShowBulk(false)
+      toast.success(`${rows.length} scene (mode timestamp). Upload ${rows.length} gambar + audio, lalu Rakit — timing dari timestamp.`)
+      return
+    }
     // STATE 8 yields image + (auto) narration per beat. Fall back to a plain list if no beats.
     const beats = parseState8(bulkImg)
     const imgs = beats.length ? beats.map((b) => b.image) : parseList(bulkImg, true)
@@ -239,22 +265,32 @@ export function FacelessStudioPage() {
   async function submit() {
     if (!title.trim()) return toast.error('Isi judul project')
 
-    // Upload-images mode: create scenes from the user's own images + narration (no gen).
+    // Upload-images mode: create scenes from the user's own images + narration/timestamp (no gen).
     if (imageSource === 'upload') {
-      if (validScenes.length === 0) return toast.error('Tempel/parse narasi dulu (minimal 1 scene)')
+      if (validScenes.length === 0) return toast.error('Tempel/parse narasi atau timestamp dulu (minimal 1 scene)')
       if (uploadImages.length !== validScenes.length) {
-        return toast.error(`Jumlah gambar (${uploadImages.length}) harus sama dengan narasi (${validScenes.length})`)
+        return toast.error(`Jumlah gambar (${uploadImages.length}) harus sama dengan scene (${validScenes.length})`)
       }
+      // Timestamp mode: every scene has a [m:ss] start → send per-scene durations (last holds to audio end).
+      const tsMode = validScenes.every((s) => s.startSec != null)
       setSubmitting(true)
       try {
         const fd = new FormData()
         fd.append('title', title.trim())
         fd.append('mode', mode === 'kenburns' ? 'kenburns' : 'static')
         fd.append('aspectRatio', aspect)
-        fd.append('narrations', JSON.stringify(validScenes.map((s) => s.narration_text.trim())))
+        if (tsMode) {
+          const starts = validScenes.map((s) => s.startSec as number)
+          const durations = starts.map((st, i) => (i < starts.length - 1 ? Math.max(0.3, +(starts[i + 1] - st).toFixed(2)) : 4))
+          fd.append('durations', JSON.stringify(durations))
+        } else {
+          fd.append('narrations', JSON.stringify(validScenes.map((s) => s.narration_text.trim())))
+        }
         for (const img of uploadImages) fd.append('images', img)
         const res = await api.post<{ projectId: number; sceneCount: number }>('/api/veo/faceless-upload', fd)
-        toast.success(`Project dibuat — ${res.sceneCount} scene (gambar upload). Lanjut: upload audio → Sync → Rakit.`)
+        toast.success(tsMode
+          ? `Project dibuat — ${res.sceneCount} scene (timing dari timestamp). Lanjut: upload audio → Rakit (tanpa Sync).`
+          : `Project dibuat — ${res.sceneCount} scene (gambar upload). Lanjut: upload audio → Sync → Rakit.`)
         qc.invalidateQueries({ queryKey: ['veo-projects'] })
         navigate(`/faceless/${res.projectId}`)
       } catch (e) {
@@ -398,14 +434,17 @@ export function FacelessStudioPage() {
                   className="text-xs file:mr-2 file:rounded file:border-0 file:bg-primary/10 file:px-3 file:py-1.5 file:text-primary"
                 />
                 <p className="text-xs text-muted-foreground">
-                  Pilih semua gambar sekaligus. Diurutkan otomatis by nama file (kasih nama <b>01, 02, 03…</b> biar urutannya pas). Jumlah gambar harus sama dengan jumlah scene/narasi.
+                  Pilih semua gambar sekaligus. Diurutkan otomatis by nama file (kasih nama <b>01, 02, 03…</b> atau <b>beat_01, beat_02…</b> biar urutannya pas). Jumlah gambar harus sama dengan jumlah scene.
                   {uploadImages.length > 0 && (
                     <span className={cn('ml-1 font-medium', uploadImages.length === validScenes.length ? 'text-emerald-400' : 'text-amber-400')}>
                       {' '}{uploadImages.length} gambar dipilih{validScenes.length > 0 ? ` / ${validScenes.length} scene` : ''}.
                     </span>
                   )}
                 </p>
-                <p className="text-xs text-muted-foreground">Suara: nanti kamu <b>Upload narasi penuh + Sync</b> di halaman project (setelah ini).</p>
+                <p className="text-xs text-muted-foreground">
+                  <b>Scene dari mana?</b> Tempel di kotak bawah salah satu: (a) naskah narasi per beat, atau (b) file <b>image-prompt "timestamp-locked"</b> (baris <b>[0:00] …</b>) — timing tiap gambar otomatis dari timestamp-nya, tanpa perlu naskah.
+                </p>
+                <p className="text-xs text-muted-foreground">Suara: nanti kamu <b>Upload narasi penuh</b> di halaman project. Mode timestamp <b>ga perlu Sync</b> (timing udah dari timestamp); mode naskah pakai <b>Sync</b>.</p>
               </div>
             )}
             {imageSource !== 'upload' && (

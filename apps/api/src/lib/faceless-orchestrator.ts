@@ -147,22 +147,32 @@ function needsRegen(mode: FacelessMode, s: { status: string; videoUrl: string | 
 }
 
 // Create a faceless project from the user's OWN uploaded images (no generation, no
-// credits). Each scene = one image + its narration line. Then the normal flow applies:
-// upload full narration → Sync (align) → Rakit.
+// credits). Scene count = number of images. Timing comes from one of:
+//  - narrations (spoken text): later upload full audio → Sync (align) → Rakit, or
+//  - durations (timestamp mode): per-scene screen time set now (alignedDuration) → Rakit,
+//    no Sync needed (the user's "[m:ss]" beat timings drive the cut).
 export async function createFacelessFromUploads(
   userId: number,
   p: {
     title: string
-    narrations: string[]
-    images: File[] // 1:1 with narrations, already in order
+    images: File[] // already in order
+    narrations?: string[] // optional per-scene text (captions + sync anchor)
+    durations?: number[] // optional per-scene seconds (timestamp mode) → alignedDuration
     aspectRatio?: '16:9' | '9:16'
     mode?: FacelessMode // 'static' (default) or 'kenburns'
   },
 ): Promise<{ projectId: number; sceneCount: number }> {
-  if (!p.narrations?.length) throw new Error('Minimal 1 narasi')
-  if (p.images.length !== p.narrations.length) {
-    throw new Error(`Jumlah gambar (${p.images.length}) tidak sama dengan narasi (${p.narrations.length})`)
+  const count = p.images.length
+  if (count === 0) throw new Error('Minimal 1 gambar')
+  const narrations = p.narrations ?? []
+  const durations = p.durations
+  if (narrations.length && narrations.length !== count) {
+    throw new Error(`Jumlah gambar (${count}) tidak sama dengan narasi (${narrations.length})`)
   }
+  if (durations && durations.length !== count) {
+    throw new Error(`Jumlah gambar (${count}) tidak sama dengan timestamp (${durations.length})`)
+  }
+  if (!narrations.length && !durations) throw new Error('Butuh narasi atau timestamp per scene')
   const mode: FacelessMode = p.mode === 'kenburns' ? 'kenburns' : 'static'
 
   const [project] = await db.insert(veoProjects)
@@ -170,18 +180,20 @@ export async function createFacelessFromUploads(
     .returning()
 
   await mkdir(IMG_DIR, { recursive: true })
-  for (let i = 0; i < p.narrations.length; i++) {
+  for (let i = 0; i < count; i++) {
+    const narr = narrations[i] ?? ''
     const [scene] = await db.insert(veoScenes).values({
       projectId: project.id,
       sceneNumber: i + 1,
-      prompt: p.narrations[i].slice(0, 200),
+      prompt: (narr || `scene ${i + 1}`).slice(0, 200),
       imagePrompt: '',
       model: 'veo-3.1-fast',
       resolution: '1080p',
       duration: 8,
       aspectRatio: p.aspectRatio ?? '16:9',
       modeImage: 'frame',
-      narrationText: p.narrations[i],
+      narrationText: narr,
+      alignedDuration: durations ? durations[i] : null,
       noZoom: mode === 'static',
       status: 'done',
       progress: 100,
@@ -192,7 +204,7 @@ export async function createFacelessFromUploads(
     await writeFile(imgPath, Buffer.from(await img.arrayBuffer()))
     await db.update(veoScenes).set({ firstImagePath: imgPath, updatedAt: new Date() }).where(eq(veoScenes.id, scene.id))
   }
-  return { projectId: project.id, sceneCount: p.narrations.length }
+  return { projectId: project.id, sceneCount: count }
 }
 
 // Re-generate scenes that failed/stuck (transient GeminiGen errors during a big batch,

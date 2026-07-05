@@ -130,13 +130,15 @@ export const veoRoutes = new Elysia({ prefix: '/api/veo' })
   // === FACELESS: create a project from the user's OWN uploaded images (no gen, free) ===
   .post('/faceless-upload', async ({ body, user, set }) => {
     try {
-      const narrations = JSON.parse(body.narrations) as string[]
+      const narrations = body.narrations ? (JSON.parse(body.narrations) as string[]) : []
+      const durations = body.durations ? (JSON.parse(body.durations) as number[]) : undefined
       const raw = Array.isArray(body.images) ? body.images : [body.images]
       // Stable order by filename (numeric-aware) so "01.png, 02.png, …" map correctly.
       const images = [...raw].sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }))
       const { projectId, sceneCount } = await createFacelessFromUploads(user.id, {
         title: body.title.trim(),
         narrations,
+        durations,
         images,
         aspectRatio: body.aspectRatio as '16:9' | '9:16' | undefined,
         mode: body.mode as 'static' | 'kenburns' | undefined,
@@ -149,7 +151,8 @@ export const veoRoutes = new Elysia({ prefix: '/api/veo' })
   }, {
     body: t.Object({
       title: t.String({ minLength: 1, maxLength: 200 }),
-      narrations: t.String(), // JSON array of per-scene narration lines
+      narrations: t.Optional(t.String()), // JSON array of per-scene narration lines
+      durations: t.Optional(t.String()), // JSON array of per-scene seconds (timestamp mode)
       images: t.Files(),
       aspectRatio: t.Optional(t.String()),
       mode: t.Optional(t.String()),
