@@ -17,6 +17,7 @@ import { aiInfluencerRoutes, recoverPendingInfluencers } from './routes/ai-influ
 import { motionRoutes, recoverPendingMotion } from './routes/motion'
 import { mcpRoutes, mcpKeyRoutes, veoServeRoutes } from './routes/mcp'
 import { toolsRoutes } from './routes/tools'
+import { clipperRoutes } from './routes/clipper'
 import { recoverPendingTiktokScenes } from './lib/tiktok-worker'
 import { recoverPendingScenes } from './lib/scene-worker'
 import { recoverStuckAssemblies } from './lib/veo-assemble-worker'
@@ -65,6 +66,7 @@ const app = new Elysia()
   .use(aiInfluencerRoutes)
   .use(motionRoutes)
   .use(toolsRoutes)
+  .use(clipperRoutes)
   .use(mcpKeyRoutes)
   .onError(({ code, error, set, path, request }) => {
     if (code === 'VALIDATION') {

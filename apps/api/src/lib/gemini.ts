@@ -869,6 +869,56 @@ ${timedScript}`
   return JSON.parse(text) as ShortPick
 }
 
+export interface ClipPick { start_sec: number; end_sec: number; title: string; reason: string }
+
+const CLIPS_SCHEMA = {
+  type: 'array',
+  items: {
+    type: 'object',
+    properties: {
+      start_sec: { type: 'number' },
+      end_sec: { type: 'number' },
+      title: { type: 'string' },
+      reason: { type: 'string' },
+    },
+    required: ['start_sec', 'end_sec', 'title', 'reason'],
+  },
+}
+
+// Pick up to `count` clip-worthy segments from a timed transcript that satisfy a set of
+// campaign REQUIREMENTS (rules that vary per campaign). Returns segments in seconds.
+export async function pickClips(timedTranscript: string, requirements: string, count: number, apiKey: string): Promise<ClipPick[]> {
+  const instruction = `You are a viral short-form video editor working on a paid clipping campaign.
+Below is a timed transcript of a source video (each line "[start-end] text" in seconds) and the campaign REQUIREMENTS the clips MUST satisfy.
+
+Pick up to ${count} of the BEST standalone vertical clips that each:
+- Fully comply with the campaign requirements below (this is mandatory — reject anything that violates them).
+- Open with a strong hook in the first ~3 seconds, are self-contained, and are emotionally gripping or curiosity-driving.
+- Are between 15 and 60 seconds, starting and ending on natural sentence boundaries from the transcript.
+
+Return a JSON array (max ${count} items). Each item: start_sec, end_sec (numbers from the transcript timings), a catchy title (<=80 chars, no quotes), and a one-line reason noting which requirement it satisfies.
+
+=== CAMPAIGN REQUIREMENTS ===
+${requirements || '(none specified — just pick the most viral moments)'}
+
+=== TRANSCRIPT ===
+${timedTranscript}`
+
+  const body = {
+    contents: [{ parts: [{ text: instruction }] }],
+    generationConfig: { response_mime_type: 'application/json', response_schema: CLIPS_SCHEMA, temperature: 0.4 },
+  }
+  const res = await fetch(`${BASE_URL}/v1beta/models/${MODEL}:generateContent?key=${apiKey}`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+  })
+  if (!res.ok) throw new GeminiError(`Clip pick failed: ${await res.text()}`, res.status)
+  const data = await res.json() as { candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }> }
+  const text = data.candidates?.[0]?.content?.parts?.[0]?.text
+  if (!text) throw new GeminiError('No text in Gemini response for clip pick')
+  const arr = JSON.parse(text) as ClipPick[]
+  return Array.isArray(arr) ? arr.slice(0, count) : []
+}
+
 export async function deleteGeminiFile(fileName: string, apiKey: string): Promise<void> {
   try {
     await fetch(`${BASE_URL}/v1beta/${fileName}?key=${apiKey}`, { method: 'DELETE' })

@@ -93,6 +93,34 @@ export const veoShorts = pgTable('veo_shorts', {
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
 })
 
+// Clipper: take a source video (uploaded) + campaign requirements, AI-pick segments that
+// satisfy the rules, cut them into vertical clips. Standalone (not tied to veo projects).
+export const clipJobs = pgTable('clip_jobs', {
+  id: serial('id').primaryKey(),
+  userId: integer('user_id').references(() => users.id, { onDelete: 'cascade' }).notNull(),
+  title: varchar('title', { length: 200 }).default('').notNull(),
+  sourceVideoPath: text('source_video_path'),
+  requirements: text('requirements').default('').notNull(), // campaign rules (varies per campaign)
+  clipCount: integer('clip_count').default(3).notNull(),
+  aspectRatio: varchar('aspect_ratio', { length: 8 }).default('9:16').notNull(),
+  status: varchar('status', { length: 16, enum: ['queued', 'transcribing', 'selecting', 'rendering', 'done', 'error'] }).default('queued').notNull(),
+  error: text('error'),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+})
+
+export const clips = pgTable('clips', {
+  id: serial('id').primaryKey(),
+  jobId: integer('job_id').references(() => clipJobs.id, { onDelete: 'cascade' }).notNull(),
+  title: varchar('title', { length: 200 }).default('').notNull(),
+  startSec: real('start_sec').notNull(),
+  endSec: real('end_sec').notNull(),
+  reason: text('reason').default('').notNull(),
+  path: text('path'),
+  status: varchar('status', { length: 16, enum: ['rendering', 'done', 'error'] }).default('rendering').notNull(),
+  error: text('error'),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+})
+
 // Notifikasi untuk user (in-app)
 export const notifications = pgTable('notifications', {
   id: serial('id').primaryKey(),
@@ -342,6 +370,15 @@ export const veoShortsRelations = relations(veoShorts, ({ one }) => ({
   project: one(veoProjects, { fields: [veoShorts.projectId], references: [veoProjects.id] }),
 }))
 
+export const clipJobsRelations = relations(clipJobs, ({ one, many }) => ({
+  user: one(users, { fields: [clipJobs.userId], references: [users.id] }),
+  clips: many(clips),
+}))
+
+export const clipsRelations = relations(clips, ({ one }) => ({
+  job: one(clipJobs, { fields: [clips.jobId], references: [clipJobs.id] }),
+}))
+
 export const veoScenesRelations = relations(veoScenes, ({ one }) => ({
   project: one(veoProjects, { fields: [veoScenes.projectId], references: [veoProjects.id] }),
 }))
@@ -390,6 +427,8 @@ export type Notification = typeof notifications.$inferSelect
 export type VeoProject = typeof veoProjects.$inferSelect
 export type VeoScene = typeof veoScenes.$inferSelect
 export type VeoShort = typeof veoShorts.$inferSelect
+export type ClipJob = typeof clipJobs.$inferSelect
+export type Clip = typeof clips.$inferSelect
 export type TiktokCampaign = typeof tiktokCampaigns.$inferSelect
 export type TiktokScene = typeof tiktokScenes.$inferSelect
 export type TiktokFrame = typeof tiktokFrames.$inferSelect
