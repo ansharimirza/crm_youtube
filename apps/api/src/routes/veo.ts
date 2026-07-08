@@ -154,9 +154,10 @@ export const veoRoutes = new Elysia({ prefix: '/api/veo' })
   }, {
     body: t.Object({
       title: t.String({ minLength: 1, maxLength: 200 }),
-      // Elysia parses JSON-looking form fields into arrays; accept both string and array.
-      narrations: t.Optional(t.Union([t.String(), t.Array(t.String())])),
-      durations: t.Optional(t.Union([t.String(), t.Array(t.Number())])),
+      // Accept anything (string JSON or Elysia-parsed array); the handler normalises both.
+      // A Union here makes Elysia's multipart coercion mis-validate the whole body.
+      narrations: t.Optional(t.Any()),
+      durations: t.Optional(t.Any()),
       images: t.Files(),
       aspectRatio: t.Optional(t.String()),
       mode: t.Optional(t.String()),
