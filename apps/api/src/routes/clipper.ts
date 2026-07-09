@@ -7,6 +7,7 @@ import { join } from 'node:path'
 import { db, clipJobs, clips } from '../db'
 import { authMiddleware } from '../middleware/auth'
 import { processClipJob } from '../lib/clipper'
+import { uploadLocalVideo } from './videos'
 
 const UPLOAD_DIR = process.env.UPLOAD_DIR || join(process.cwd(), 'uploads')
 const SRC_DIR = join(UPLOAD_DIR, 'clipper', 'src')
@@ -75,6 +76,37 @@ export const clipperRoutes = new Elysia({ prefix: '/api/clipper' })
     }
     set.status = 404
     return { error: 'Clip belum siap' }
+  })
+  // Upload a finished clip to YouTube (via the US worker).
+  .post('/clips/:id/upload', async ({ params, body, user, set }) => {
+    try {
+      const clip = await db.query.clips.findFirst({ where: eq(clips.id, Number(params.id)) })
+      if (!clip?.path || clip.status !== 'done') { set.status = 404; return { error: 'Clip belum siap' } }
+      const job = await db.query.clipJobs.findFirst({ where: and(eq(clipJobs.id, clip.jobId), eq(clipJobs.userId, user.id)) })
+      if (!job) { set.status = 404; return { error: 'Clip tidak ditemukan' } }
+      const title = body.title.trim().slice(0, 90)
+      const { videoId } = await uploadLocalVideo(user.id, {
+        filePath: clip.path,
+        fileName: `clip_${clip.id}.mp4`,
+        youtubeAccountId: body.youtubeAccountId,
+        title: job.aspectRatio === '9:16' ? `${title} #Shorts` : title,
+        description: body.description ?? '',
+        privacy: body.privacy,
+        scheduledAt: body.scheduledAt ?? null,
+      })
+      return { videoId }
+    } catch (e) {
+      set.status = 400
+      return { error: e instanceof Error ? e.message : 'Gagal upload' }
+    }
+  }, {
+    body: t.Object({
+      youtubeAccountId: t.Number(),
+      title: t.String({ minLength: 1 }),
+      description: t.Optional(t.String()),
+      privacy: t.Optional(t.Union([t.Literal('public'), t.Literal('private'), t.Literal('unlisted')])),
+      scheduledAt: t.Optional(t.Union([t.String(), t.Null()])),
+    }),
   })
   // Delete a job (cascades clips).
   .delete('/jobs/:id', async ({ params, user }) => {

@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { api, getToken } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
+import { YtUploadButton } from '@/components/YtUploadButton'
 
 interface Clip { id: number; title: string; startSec: number; endSec: number; reason: string; status: string; error?: string | null }
 interface Job { id: number; title: string; status: string; error?: string | null; clipCount: number; aspectRatio: string; createdAt: string; clips: Clip[] }
@@ -189,6 +190,7 @@ function ClipView({ clip, vertical }: { clip: Clip; vertical: boolean }) {
         <>
           <video src={url} controls className={cn('w-full rounded bg-black', vertical ? 'aspect-[9/16] max-h-[50vh]' : 'aspect-video')} />
           <Button asChild size="sm" variant="outline" className="w-full"><a href={url} download={`clip_${clip.id}.mp4`}><Download className="h-3.5 w-3.5" /> Download</a></Button>
+          <YtUploadButton uploadPath={`/api/clipper/clips/${clip.id}/upload`} defaultTitle={clip.title || 'Clip'} />
         </>
       )}
     </div>

@@ -48,6 +48,48 @@ async function log(videoId: number, message: string, level: 'info' | 'warn' | 'e
   await db.insert(uploadLogs).values({ videoId, message, level })
 }
 
+// Push an arbitrary local video file (a Short, a clip, etc.) to YouTube via the same
+// pipeline as normal uploads — i.e. through the US worker (YouTube sees a US IP).
+export async function uploadLocalVideo(
+  userId: number,
+  p: {
+    filePath: string
+    fileName: string
+    youtubeAccountId: number
+    title: string
+    description?: string
+    tags?: string
+    privacy?: 'public' | 'private' | 'unlisted'
+    scheduledAt?: string | null
+  },
+): Promise<{ videoId: number }> {
+  const acc = await db.query.youtubeAccounts.findFirst({
+    where: and(eq(youtubeAccounts.id, p.youtubeAccountId), eq(youtubeAccounts.userId, userId)),
+  })
+  if (!acc) throw new Error('Akun YouTube tidak valid')
+  if (!(await Bun.file(p.filePath).exists())) throw new Error('File video tidak ditemukan')
+
+  const scheduledAt = p.scheduledAt ? new Date(p.scheduledAt) : null
+  const [video] = await db.insert(videos).values({
+    userId,
+    youtubeAccountId: acc.id,
+    title: p.title.slice(0, 100),
+    description: p.description ?? '',
+    tags: p.tags ?? '',
+    privacy: p.privacy ?? 'public',
+    categoryId: '22',
+    language: 'en',
+    madeForKids: false,
+    videoPath: p.filePath,
+    fileName: p.fileName,
+    status: scheduledAt ? 'scheduled' : 'queued',
+    scheduledAt,
+  }).returning()
+
+  queueMicrotask(() => runUpload(video.id))
+  return { videoId: video.id }
+}
+
 export async function runUpload(videoId: number, isRetry = false) {
   const video = await db.query.videos.findFirst({
     where: eq(videos.id, videoId),

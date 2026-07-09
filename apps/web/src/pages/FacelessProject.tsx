@@ -15,6 +15,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { api, getToken } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
+import { YtUploadButton } from '@/components/YtUploadButton'
 import type { VeoProject, VeoScene, YoutubeAccount } from '@/lib/types'
 
 function sceneState(s: VeoScene): { label: string; color: string; icon: typeof CheckCircle2 } {
@@ -354,6 +355,7 @@ function ShortItemView({ short }: { short: ShortItem }) {
         <>
           <video src={url} controls className="w-full rounded bg-black aspect-[9/16] max-h-[50vh]" />
           <Button asChild size="sm" variant="outline" className="w-full"><a href={url} download={`short_${short.id}.mp4`}><Download className="h-3.5 w-3.5" /> Download</a></Button>
+          <YtUploadButton uploadPath={`/api/veo/shorts/${short.id}/upload`} defaultTitle={short.title || 'Short'} />
         </>
       )}
     </div>

@@ -16,6 +16,7 @@ import {
 import { generateCaption, GeminiError, type Platform } from '../lib/gemini'
 import { assembleProject, generateNarration, alignProjectNarration } from '../lib/veo-assemble-worker'
 import { generateProjectShort } from '../lib/shorts'
+import { uploadLocalVideo } from './videos'
 import { createFacelessProject, createFacelessFromUploads, uploadProjectFinal, retryFailedScenes, type FacelessScene } from '../lib/faceless-orchestrator'
 
 const UPLOAD_DIR = process.env.UPLOAD_DIR || join(process.cwd(), 'uploads')
@@ -832,6 +833,37 @@ export const veoRoutes = new Elysia({ prefix: '/api/veo' })
     }
     set.status = 404
     return { error: 'Short belum siap' }
+  })
+  // Upload a finished Short to YouTube (via the US worker). YouTube auto-detects Shorts.
+  .post('/shorts/:id/upload', async ({ params, body, user, set }) => {
+    try {
+      const short = await db.query.veoShorts.findFirst({ where: eq(veoShorts.id, Number(params.id)) })
+      if (!short?.path || short.status !== 'done') { set.status = 404; return { error: 'Short belum siap' } }
+      const project = await db.query.veoProjects.findFirst({ where: and(eq(veoProjects.id, short.projectId), eq(veoProjects.userId, user.id)) })
+      if (!project) { set.status = 404; return { error: 'Short tidak ditemukan' } }
+      const title = body.title.trim().slice(0, 90)
+      const { videoId } = await uploadLocalVideo(user.id, {
+        filePath: short.path,
+        fileName: `short_${short.id}.mp4`,
+        youtubeAccountId: body.youtubeAccountId,
+        title: `${title} #Shorts`,
+        description: body.description ?? '',
+        privacy: body.privacy,
+        scheduledAt: body.scheduledAt ?? null,
+      })
+      return { videoId }
+    } catch (e) {
+      set.status = 400
+      return { error: e instanceof Error ? e.message : 'Gagal upload' }
+    }
+  }, {
+    body: t.Object({
+      youtubeAccountId: t.Number(),
+      title: t.String({ minLength: 1 }),
+      description: t.Optional(t.String()),
+      privacy: t.Optional(t.Union([t.Literal('public'), t.Literal('private'), t.Literal('unlisted')])),
+      scheduledAt: t.Optional(t.Union([t.String(), t.Null()])),
+    }),
   })
   .delete('/scenes/:id', async ({ params, user, set }) => {
     const id = Number(params.id)
