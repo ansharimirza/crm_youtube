@@ -85,15 +85,16 @@ function srtTime(sec: number): string {
   return `${p(Math.floor(ms / 3_600_000))}:${p(Math.floor((ms % 3_600_000) / 60_000))}:${p(Math.floor((ms % 60_000) / 1000))},${p(ms % 1000, 3)}`
 }
 
-// For the standalone Transcribe tool: plain text + SRT + timestamped segments.
+// For the standalone Transcribe tool: plain text + SRT + timestamped segments (+ words).
 export async function transcribeAudio(audioPath: string): Promise<{
   text: string
   srt: string
   segments: TranscriptSegment[]
+  words: TranscriptWord[]
 }> {
-  const { text, segments } = await groqTranscribe(audioPath)
+  const { text, segments, words } = await groqTranscribe(audioPath)
   const srt = segments
     .map((s, i) => `${i + 1}\n${srtTime(s.start)} --> ${srtTime(s.end)}\n${s.text}\n`)
     .join('\n')
-  return { text, srt, segments }
+  return { text, srt, segments, words }
 }
