@@ -63,6 +63,7 @@ export function UploadPage({ embedded = false }: { embedded?: boolean } = {}) {
   const [thumbPreview, setThumbPreview] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [progress, setProgress] = useState(0)
+  const [isShort, setIsShort] = useState(false) // append #Shorts so YouTube treats it as a Short
   const [editVideo, setEditVideo] = useState<Video | null>(null)
 
   const pushMetadataMutation = useMutation({
@@ -155,11 +156,16 @@ export function UploadPage({ embedded = false }: { embedded?: boolean } = {}) {
       return
     }
 
+    // Short mode: ensure the title carries #Shorts so YouTube classifies it as a Short.
+    const effectiveTitle = isShort && !/#shorts/i.test(form.title)
+      ? `${form.title} #Shorts`.slice(0, 100)
+      : form.title
+
     setSubmitting(true)
     try {
       if (isEdit) {
         await api.patch(`/api/videos/${editId}`, {
-          title: form.title,
+          title: effectiveTitle,
           description: form.description,
           tags: form.tags,
           categoryId: form.category_id,
@@ -190,6 +196,7 @@ export function UploadPage({ embedded = false }: { embedded?: boolean } = {}) {
             fd.append(key, String(value))
           }
         })
+        fd.set('title', effectiveTitle)
 
         await uploadWithProgress('/api/videos', fd, (pct) => setProgress(pct))
         toast.success('Video diunggah ke server, upload ke YouTube dimulai')
@@ -388,6 +395,14 @@ export function UploadPage({ embedded = false }: { embedded?: boolean } = {}) {
                     required
                   />
                   <div className="text-xs text-muted-foreground text-right">{form.title.length}/100</div>
+                </div>
+
+                <div className="flex items-center justify-between rounded-lg border p-3">
+                  <div className="space-y-0.5">
+                    <Label htmlFor="isShort">Upload sebagai Short</Label>
+                    <p className="text-xs text-muted-foreground">Video vertikal &lt;3 menit. Otomatis tambah <b>#Shorts</b> di judul.</p>
+                  </div>
+                  <Switch id="isShort" checked={isShort} onCheckedChange={setIsShort} />
                 </div>
 
                 <div className="space-y-2">
