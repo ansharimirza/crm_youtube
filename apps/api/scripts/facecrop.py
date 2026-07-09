@@ -5,11 +5,14 @@
 # Usage: facecrop.py <video> <start_sec> <dur_sec> <ratio_w> <ratio_h> <out_cmds_path>
 # Prints JSON: {"cropW":..., "cropH":..., "startX":...} on success.
 
-import sys, json
+import sys, os, json
 import cv2
 
 video, start, dur = sys.argv[1], float(sys.argv[2]), float(sys.argv[3])
 rw, rh, out_cmds = float(sys.argv[4]), float(sys.argv[5]), sys.argv[6]
+
+# Cascade is bundled next to this script (Debian's python3-opencv ships no cascade data).
+CASCADE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'haarcascade_frontalface_default.xml')
 
 cap = cv2.VideoCapture(video)
 W = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)) or 1920
@@ -22,7 +25,7 @@ if cropW > W:
     cropW, cropH = W, int(round(W * rh / rw))
 maxX = max(0, W - cropW)
 
-cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
+cascade = cv2.CascadeClassifier(CASCADE_PATH)
 DETECT_W = 640.0
 scale = DETECT_W / W
 
