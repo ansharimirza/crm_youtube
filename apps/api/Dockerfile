@@ -1,7 +1,10 @@
 FROM oven/bun:1.3-slim AS base
 WORKDIR /app
-# ffmpeg: needed by the auto-edit pipeline (video-assembler.ts)
-RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg \
+# ffmpeg: auto-edit pipeline (video-assembler.ts). yt-dlp: download YouTube source
+# videos for the Clipper (standalone binary — no Python runtime needed).
+RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg curl ca-certificates \
+  && curl -fsSL https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_linux -o /usr/local/bin/yt-dlp \
+  && chmod a+rx /usr/local/bin/yt-dlp \
   && rm -rf /var/lib/apt/lists/*
 
 FROM base AS deps

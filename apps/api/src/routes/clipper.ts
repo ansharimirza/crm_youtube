@@ -17,18 +17,27 @@ export const clipperRoutes = new Elysia({ prefix: '/api/clipper' })
   // Create a job from an uploaded video + requirements; processing runs in the background.
   .post('/jobs', async ({ body, user, set }) => {
     try {
-      const file = body.video
-      await mkdir(SRC_DIR, { recursive: true })
-      const ext = (file.name.split('.').pop() || 'mp4').toLowerCase().replace(/[^a-z0-9]/g, '') || 'mp4'
-      const path = join(SRC_DIR, `src_${Date.now()}_${Math.random().toString(36).slice(2, 8)}.${ext}`)
-      await Bun.write(path, file)
+      const url = body.youtubeUrl?.trim()
+      let sourceVideoPath: string | null = null
+      let defaultTitle = url || 'Clip'
+      if (body.video) {
+        await mkdir(SRC_DIR, { recursive: true })
+        const ext = (body.video.name.split('.').pop() || 'mp4').toLowerCase().replace(/[^a-z0-9]/g, '') || 'mp4'
+        sourceVideoPath = join(SRC_DIR, `src_${Date.now()}_${Math.random().toString(36).slice(2, 8)}.${ext}`)
+        await Bun.write(sourceVideoPath, body.video)
+        defaultTitle = body.video.name
+      } else if (!url) {
+        set.status = 400
+        return { error: 'Butuh file video atau link YouTube' }
+      }
 
       const count = Math.min(10, Math.max(1, Number(body.count) || 3))
       const aspectRatio = body.aspectRatio === '16:9' ? '16:9' : '9:16'
       const [job] = await db.insert(clipJobs).values({
         userId: user.id,
-        title: (body.title?.trim() || file.name).slice(0, 200),
-        sourceVideoPath: path,
+        title: (body.title?.trim() || defaultTitle).slice(0, 200),
+        sourceVideoPath,
+        sourceUrl: url || null,
         requirements: body.requirements ?? '',
         clipCount: count,
         aspectRatio,
@@ -43,7 +52,8 @@ export const clipperRoutes = new Elysia({ prefix: '/api/clipper' })
     }
   }, {
     body: t.Object({
-      video: t.File(),
+      video: t.Optional(t.File()),
+      youtubeUrl: t.Optional(t.String()),
       requirements: t.Optional(t.String()),
       count: t.Optional(t.String()),
       aspectRatio: t.Optional(t.String()),

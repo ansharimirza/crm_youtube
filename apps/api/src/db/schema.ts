@@ -100,10 +100,11 @@ export const clipJobs = pgTable('clip_jobs', {
   userId: integer('user_id').references(() => users.id, { onDelete: 'cascade' }).notNull(),
   title: varchar('title', { length: 200 }).default('').notNull(),
   sourceVideoPath: text('source_video_path'),
+  sourceUrl: text('source_url'), // YouTube link (downloaded via yt-dlp before processing)
   requirements: text('requirements').default('').notNull(), // campaign rules (varies per campaign)
   clipCount: integer('clip_count').default(3).notNull(),
   aspectRatio: varchar('aspect_ratio', { length: 8 }).default('9:16').notNull(),
-  status: varchar('status', { length: 16, enum: ['queued', 'transcribing', 'selecting', 'rendering', 'done', 'error'] }).default('queued').notNull(),
+  status: varchar('status', { length: 16, enum: ['queued', 'downloading', 'transcribing', 'selecting', 'rendering', 'done', 'error'] }).default('queued').notNull(),
   error: text('error'),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
 })

@@ -10,6 +10,25 @@ import { transcribeAudio } from './transcribe'
 
 const UPLOAD_DIR = process.env.UPLOAD_DIR || join(process.cwd(), 'uploads')
 const CLIPS_DIR = join(UPLOAD_DIR, 'clipper')
+const SRC_DIR = join(UPLOAD_DIR, 'clipper', 'src')
+
+// Download a YouTube (or other yt-dlp-supported) URL to a local mp4. Returns the file path.
+export async function downloadYoutube(url: string, jobId: number): Promise<string> {
+  await mkdir(SRC_DIR, { recursive: true })
+  const out = join(SRC_DIR, `yt_${jobId}_${Date.now()}.mp4`)
+  const proc = Bun.spawn([
+    'yt-dlp',
+    '-f', 'bv*[height<=1080]+ba/b[height<=1080]/b', // cap at 1080p to keep files sane
+    '--merge-output-format', 'mp4',
+    '--no-playlist',
+    '-o', out,
+    url,
+  ], { stdout: 'ignore', stderr: 'pipe' })
+  const err = await new Response(proc.stderr).text()
+  if ((await proc.exited) !== 0) throw new Error(`Download YouTube gagal: ${err.slice(-300)}`)
+  if (!(await Bun.file(out).exists())) throw new Error('Download selesai tapi file tidak ada')
+  return out
+}
 
 interface Seg { start: number; end: number; text: string }
 
@@ -43,11 +62,20 @@ function buildAss(events: Seg[], aspect: '9:16' | '16:9'): string {
 // Full pipeline for one job. Runs in the background (fire-and-forget from the route).
 export async function processClipJob(jobId: number): Promise<void> {
   const job = await db.query.clipJobs.findFirst({ where: eq(clipJobs.id, jobId) })
-  if (!job || !job.sourceVideoPath) return
+  if (!job) return
   const aspect = (job.aspectRatio === '16:9' ? '16:9' : '9:16') as '9:16' | '16:9'
   try {
+    // URL job: download the source video first (yt-dlp).
+    let sourcePath = job.sourceVideoPath
+    if (!sourcePath) {
+      if (!job.sourceUrl) throw new Error('Tidak ada video sumber (upload atau link)')
+      await db.update(clipJobs).set({ status: 'downloading' }).where(eq(clipJobs.id, jobId))
+      sourcePath = await downloadYoutube(job.sourceUrl, jobId)
+      await db.update(clipJobs).set({ sourceVideoPath: sourcePath }).where(eq(clipJobs.id, jobId))
+    }
+
     await db.update(clipJobs).set({ status: 'transcribing' }).where(eq(clipJobs.id, jobId))
-    const { segments } = await transcribeAudio(job.sourceVideoPath)
+    const { segments } = await transcribeAudio(sourcePath)
     if (!segments.length) throw new Error('Transkrip kosong — audio tidak terbaca')
 
     await db.update(clipJobs).set({ status: 'selecting' }).where(eq(clipJobs.id, jobId))
@@ -68,7 +96,7 @@ export async function processClipJob(jobId: number): Promise<void> {
         reason: (p.reason || '').slice(0, 500), status: 'rendering',
       }).returning()
       try {
-        const out = await renderClip(row.id, job.sourceVideoPath, start, dur, segments, aspect)
+        const out = await renderClip(row.id, sourcePath, start, dur, segments, aspect)
         await db.update(clips).set({ status: 'done', path: out }).where(eq(clips.id, row.id))
       } catch (e) {
         await db.update(clips).set({ status: 'error', error: (e instanceof Error ? e.message : String(e)).slice(0, 500) }).where(eq(clips.id, row.id))

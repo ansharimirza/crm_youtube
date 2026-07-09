@@ -15,9 +15,9 @@ import { YtUploadButton } from '@/components/YtUploadButton'
 interface Clip { id: number; title: string; startSec: number; endSec: number; reason: string; status: string; error?: string | null }
 interface Job { id: number; title: string; status: string; error?: string | null; clipCount: number; aspectRatio: string; createdAt: string; clips: Clip[] }
 
-const RUNNING = ['queued', 'transcribing', 'selecting', 'rendering']
+const RUNNING = ['queued', 'downloading', 'transcribing', 'selecting', 'rendering']
 const STATUS_LABEL: Record<string, string> = {
-  queued: 'Antri', transcribing: 'Transkrip audio...', selecting: 'AI pilih klip...',
+  queued: 'Antri', downloading: 'Download video...', transcribing: 'Transkrip audio...', selecting: 'AI pilih klip...',
   rendering: 'Merender klip...', done: 'Selesai', error: 'Error',
 }
 
@@ -27,6 +27,7 @@ export function ClipperPage() {
   const qc = useQueryClient()
   const [title, setTitle] = useState('')
   const [video, setVideo] = useState<File | null>(null)
+  const [youtubeUrl, setYoutubeUrl] = useState('')
   const [requirements, setRequirements] = useState('')
   const [count, setCount] = useState('3')
   const [aspectRatio, setAspectRatio] = useState('9:16')
@@ -41,7 +42,8 @@ export function ClipperPage() {
   const create = useMutation({
     mutationFn: () => {
       const fd = new FormData()
-      fd.append('video', video!)
+      if (video) fd.append('video', video)
+      else fd.append('youtubeUrl', youtubeUrl.trim())
       if (title.trim()) fd.append('title', title.trim())
       fd.append('requirements', requirements)
       fd.append('count', count)
@@ -49,8 +51,8 @@ export function ClipperPage() {
       return api.post<{ jobId: number }>('/api/clipper/jobs', fd)
     },
     onSuccess: () => {
-      toast.success('Video diupload — AI mulai bikin klip. Bisa makan beberapa menit.')
-      setVideo(null); setTitle('')
+      toast.success(video ? 'Video diupload — AI mulai bikin klip.' : 'Link diterima — download + bikin klip jalan. Bisa beberapa menit.')
+      setVideo(null); setYoutubeUrl(''); setTitle('')
       qc.invalidateQueries({ queryKey: ['clip-jobs'] })
     },
     onError: (e: Error) => toast.error(e.message),
@@ -84,11 +86,18 @@ export function ClipperPage() {
               <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Misal: Podcast X - Episode 12" maxLength={200} />
             </div>
             <div className="space-y-1.5">
-              <Label>Video sumber</Label>
-              <input type="file" accept="video/*" onChange={(e) => setVideo(e.target.files?.[0] ?? null)}
+              <Label>Upload video</Label>
+              <input type="file" accept="video/*" onChange={(e) => { setVideo(e.target.files?.[0] ?? null); setYoutubeUrl('') }}
                 className="text-sm file:mr-3 file:rounded file:border-0 file:bg-primary/10 file:px-3 file:py-1.5 file:text-primary w-full" />
               {video && <span className="text-xs text-emerald-400 truncate block">🎬 {video.name}</span>}
             </div>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label>…atau tempel link YouTube</Label>
+            <Input value={youtubeUrl} onChange={(e) => { setYoutubeUrl(e.target.value); if (e.target.value) setVideo(null) }}
+              placeholder="https://youtube.com/watch?v=..." disabled={!!video} />
+            <p className="text-xs text-muted-foreground">Video-nya di-download otomatis di server (yt-dlp). Kalau upload file dipilih, link diabaikan.</p>
           </div>
 
           <div className="space-y-1.5">
@@ -118,8 +127,8 @@ export function ClipperPage() {
             </div>
           </div>
 
-          <Button onClick={() => create.mutate()} disabled={!video || create.isPending}>
-            {create.isPending ? <><Loader2 className="h-4 w-4 animate-spin" /> Mengupload...</> : <><Scissors className="h-4 w-4" /> Buat klip</>}
+          <Button onClick={() => create.mutate()} disabled={(!video && !youtubeUrl.trim()) || create.isPending}>
+            {create.isPending ? <><Loader2 className="h-4 w-4 animate-spin" /> Memproses...</> : <><Scissors className="h-4 w-4" /> Buat klip</>}
           </Button>
         </CardContent>
       </Card>
