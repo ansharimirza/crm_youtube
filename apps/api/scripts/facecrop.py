@@ -53,9 +53,22 @@ cap.release()
 if not samples:
     samples = [(0.0, center_x)]
 
-# 2) Interpolate onto a fine time grid, then exponentially smooth so the pan glides.
+# Median-filter the raw targets to reject single-frame detection outliers (jitter).
+if len(samples) >= 3:
+    ts = [s[0] for s in samples]
+    xs = [s[1] for s in samples]
+    med = []
+    for i in range(len(xs)):
+        lo, hi = max(0, i - 2), min(len(xs), i + 3)
+        win = sorted(xs[lo:hi])
+        med.append(win[len(win) // 2])
+    samples = list(zip(ts, med))
+
+# 2) Interpolate onto a fine grid, then ease toward it with a slow EMA + a deadzone so the
+# shot stays locked for small head movements and only pans for real motion.
 GRID = 1.0 / 15.0
-alpha = 0.14  # lower = smoother/slower follow
+alpha = 0.07                      # slow, calm follow
+deadzone = max(10.0, W * 0.05)    # px of face drift tolerated before the crop moves
 
 
 def interp(tt):
@@ -73,12 +86,15 @@ def interp(tt):
 
 n = max(1, int(dur / GRID) + 1)
 grid = [i * GRID for i in range(n)]
-sm = interp(0.0)
+cur = interp(0.0)
 lines = []
 prev = None
 for gt in grid:
-    sm = sm * (1 - alpha) + interp(gt) * alpha
-    x = int(max(0, min(maxX, round(sm))))
+    tgt = interp(gt)
+    err = tgt - cur
+    if abs(err) > deadzone:  # only chase when the face has really drifted
+        cur += (err - (deadzone if err > 0 else -deadzone)) * alpha
+    x = int(max(0, min(maxX, round(cur))))
     if x != prev:
         lines.append(f"{gt:.3f} crop x {x};")
         prev = x

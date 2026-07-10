@@ -125,6 +125,19 @@ export async function processClipJob(jobId: number): Promise<void> {
   }
 }
 
+// Re-render an existing clip in place (e.g. after tuning the reframe/captions). Re-transcribes
+// the source for word timings, re-runs face-tracking, and replaces the clip file.
+export async function rerenderClip(clipId: number): Promise<void> {
+  const clip = await db.query.clips.findFirst({ where: eq(clips.id, clipId) })
+  if (!clip) throw new Error('clip tidak ada')
+  const job = await db.query.clipJobs.findFirst({ where: eq(clipJobs.id, clip.jobId) })
+  if (!job?.sourceVideoPath) throw new Error('source video sudah tidak ada')
+  const aspect = (job.aspectRatio === '16:9' ? '16:9' : '9:16') as '9:16' | '16:9'
+  const { words } = await transcribeAudio(job.sourceVideoPath)
+  const out = await renderClip(clip.id, job.sourceVideoPath, clip.startSec, clip.endSec - clip.startSec, words, aspect)
+  await db.update(clips).set({ path: out, status: 'done' }).where(eq(clips.id, clip.id))
+}
+
 async function renderClip(clipId: number, src: string, start: number, dur: number, words: TranscriptWord[], aspect: '9:16' | '16:9'): Promise<string> {
   const end = start + dur
   // Words inside this clip, rebased so the clip starts at t=0.
