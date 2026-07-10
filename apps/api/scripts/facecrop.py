@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 # Auto-reframe helper: sample a clip, follow the largest face horizontally, and emit an
 # ffmpeg sendcmd file that pans a fixed-size crop box to keep the speaker centered.
+# The pan is interpolated onto a fine grid and exponentially smoothed so it glides
+# instead of stepping.
 #
 # Usage: facecrop.py <video> <start_sec> <dur_sec> <ratio_w> <ratio_h> <out_cmds_path>
 # Prints JSON: {"cropW":..., "cropH":..., "startX":...} on success.
@@ -11,7 +13,6 @@ import cv2
 video, start, dur = sys.argv[1], float(sys.argv[2]), float(sys.argv[3])
 rw, rh, out_cmds = float(sys.argv[4]), float(sys.argv[5]), sys.argv[6]
 
-# Cascade is bundled next to this script (Debian's python3-opencv ships no cascade data).
 CASCADE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'haarcascade_frontalface_default.xml')
 
 cap = cv2.VideoCapture(video)
@@ -24,15 +25,16 @@ cropW = int(round(H * rw / rh))
 if cropW > W:
     cropW, cropH = W, int(round(W * rh / rw))
 maxX = max(0, W - cropW)
+center_x = maxX / 2.0
 
 cascade = cv2.CascadeClassifier(CASCADE_PATH)
 DETECT_W = 640.0
 scale = DETECT_W / W
 
-SAMPLE = 0.4  # seconds between samples
-samples = []  # (t_rel, crop_x)
+# 1) Sample face centre-x only where a face is actually detected (gaps get bridged later).
+SAMPLE = 0.3
+samples = []  # (t_rel, crop_x_target)
 t = 0.0
-last_x = maxX // 2
 while t < dur:
     cap.set(cv2.CAP_PROP_POS_MSEC, (start + t) * 1000.0)
     ok, frame = cap.read()
@@ -40,27 +42,49 @@ while t < dur:
         break
     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
     small = cv2.resize(gray, (int(DETECT_W), int(H * scale)))
-    faces = cascade.detectMultiScale(small, 1.2, 5, minSize=(28, 28))
+    faces = cascade.detectMultiScale(small, 1.15, 4, minSize=(28, 28))
     if len(faces):
         x, y, w, h = max(faces, key=lambda f: f[2] * f[3])
         cx = (x + w / 2.0) / scale
-        last_x = int(max(0, min(maxX, round(cx - cropW / 2.0))))
-    samples.append((t, last_x))  # hold last position when no face this frame
+        samples.append((t, max(0.0, min(float(maxX), cx - cropW / 2.0))))
     t += SAMPLE
 cap.release()
 
 if not samples:
-    samples = [(0.0, maxX // 2)]
+    samples = [(0.0, center_x)]
 
-# Smooth with a moving average to avoid jitter.
-win = 3
-sm = []
-for i, (tt, _) in enumerate(samples):
-    lo, hi = max(0, i - win), min(len(samples), i + win + 1)
-    avg = sum(v for _, v in samples[lo:hi]) / (hi - lo)
-    sm.append((tt, int(round(avg))))
+# 2) Interpolate onto a fine time grid, then exponentially smooth so the pan glides.
+GRID = 1.0 / 15.0
+alpha = 0.14  # lower = smoother/slower follow
+
+
+def interp(tt):
+    if tt <= samples[0][0]:
+        return samples[0][1]
+    if tt >= samples[-1][0]:
+        return samples[-1][1]
+    for i in range(1, len(samples)):
+        if samples[i][0] >= tt:
+            t0, x0 = samples[i - 1]
+            t1, x1 = samples[i]
+            return x0 if t1 == t0 else x0 + (x1 - x0) * (tt - t0) / (t1 - t0)
+    return samples[-1][1]
+
+
+n = max(1, int(dur / GRID) + 1)
+grid = [i * GRID for i in range(n)]
+sm = interp(0.0)
+lines = []
+prev = None
+for gt in grid:
+    sm = sm * (1 - alpha) + interp(gt) * alpha
+    x = int(max(0, min(maxX, round(sm))))
+    if x != prev:
+        lines.append(f"{gt:.3f} crop x {x};")
+        prev = x
 
 with open(out_cmds, 'w') as f:
-    f.write("\n".join(f"{tt:.2f} crop x {x};" for tt, x in sm))
+    f.write("\n".join(lines))
 
-print(json.dumps({"cropW": cropW, "cropH": cropH, "startX": sm[0][1]}))
+start_x = int(lines[0].split()[-1].rstrip(';')) if lines else int(round(center_x))
+print(json.dumps({"cropW": cropW, "cropH": cropH, "startX": start_x}))
