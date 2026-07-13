@@ -79,6 +79,7 @@ export interface VeoScene {
   narrationText?: string | null
   narrationAudioPath?: string | null
   narrationDuration?: number | null
+  motion?: string | null // static | zoom | pan_left | pan_right | veo
 }
 
 export interface YoutubeAccount {

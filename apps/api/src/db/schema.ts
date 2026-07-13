@@ -76,6 +76,9 @@ export const veoScenes = pgTable('veo_scenes', {
   narrationDuration: real('narration_duration'), // exact seconds from TTS (or uploaded audio)
   alignedDuration: real('aligned_duration'), // exact screen-time from forced-alignment of full narration
   noZoom: boolean('no_zoom').default(false).notNull(), // static image mode (no Ken Burns pan/zoom)
+  // Per-scene motion override for assembly: static | zoom | pan_left | pan_right | veo.
+  // Null = fall back to the project mode (noZoom). 'veo' uses the generated clip (videoUrl).
+  motion: varchar('motion', { length: 12 }),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
 })

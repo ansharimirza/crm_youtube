@@ -247,11 +247,43 @@ export function FacelessProjectPage() {
                   </span>
                 </div>
                 {s.errorMsg && <p className="text-[11px] text-red-400 line-clamp-2">{s.errorMsg}</p>}
+                {s.firstImagePath && <SceneMotionPicker sceneId={s.id} value={s.motion} hasClip={!!s.videoUrl} />}
               </CardContent>
             </Card>
           )
         })}
       </div>
+    </div>
+  )
+}
+
+const MOTIONS = [
+  { v: 'static', label: 'Diam (statis)' },
+  { v: 'zoom', label: 'Zoom perlahan' },
+  { v: 'pan_left', label: 'Geser kiri' },
+  { v: 'pan_right', label: 'Geser kanan' },
+  { v: 'veo', label: 'Veo 3 (AI, pakai kredit)' },
+]
+
+// Per-scene motion for assembly. Still motions are free; 'veo' animates the image (credits).
+function SceneMotionPicker({ sceneId, value, hasClip }: { sceneId: number; value?: string | null; hasClip: boolean }) {
+  const qc = useQueryClient()
+  const set = useMutation({
+    mutationFn: (motion: string) => api.post<{ generating: boolean }>(`/api/veo/scenes/${sceneId}/motion`, { motion }),
+    onSuccess: (r, motion) => {
+      toast.success(motion === 'veo' && r.generating ? 'Veo mulai bikin klip untuk scene ini...' : 'Gerakan scene diatur — berlaku saat Rakit')
+      qc.invalidateQueries({ queryKey: ['faceless-project'] })
+    },
+    onError: (e: Error) => toast.error(e.message),
+  })
+  const current = value || (hasClip ? 'veo' : 'zoom')
+  return (
+    <div className="flex items-center gap-1.5">
+      <Film className="h-3 w-3 text-muted-foreground shrink-0" />
+      <Select value={current} onValueChange={(v) => set.mutate(v)} disabled={set.isPending}>
+        <SelectTrigger className="h-7 text-[11px]"><SelectValue placeholder="Gerakan" /></SelectTrigger>
+        <SelectContent>{MOTIONS.map((m) => <SelectItem key={m.v} value={m.v} className="text-xs">{m.label}</SelectItem>)}</SelectContent>
+      </Select>
     </div>
   )
 }

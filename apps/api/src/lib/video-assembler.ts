@@ -20,10 +20,13 @@ export class AssembleError extends Error {
   }
 }
 
+export type SceneMotion = 'static' | 'zoom' | 'pan_left' | 'pan_right'
+
 export interface AssembleScene {
   videoPath?: string // Veo clip (its own audio is dropped)
   imagePath?: string // still image → Ken Burns or static (used when no videoPath)
   noZoom?: boolean // still image held with NO motion (static mode)
+  motion?: SceneMotion // per-scene motion for still images (overrides noZoom when set)
   narrationPath?: string // per-scene narration audio (omitted in full-narration mode)
   narrationDur: number // exact seconds — drives the cut
   caption?: string // optional burned subtitle text
@@ -65,18 +68,25 @@ async function renderSegment(scene: AssembleScene, segPath: string, w: number, h
   ]
 
   if (scene.imagePath && !scene.videoPath) {
+    // Resolve the motion: explicit per-scene override, else project mode (noZoom → static).
+    const motion: SceneMotion = scene.motion ?? (scene.noZoom ? 'static' : 'zoom')
+    const df = Math.max(1, Math.round(Math.max(0.1, scene.narrationDur) * FPS))
     let vf: string
-    if (scene.noZoom) {
-      // Static: fill the frame (image is already at the right aspect), no motion.
+    if (motion === 'static') {
+      // Fill the frame (image is already at the right aspect), no motion.
       vf =
         `[0:v]scale=${w}:${h}:force_original_aspect_ratio=increase,crop=${w}:${h},setsar=1,` +
         `fps=${FPS},trim=duration=${d},setpts=PTS-STARTPTS,format=yuv420p[v]`
     } else {
-      // Ken Burns: scale to fill 2x target, GENTLE slow center zoom-in (subtle, not dizzying).
-      const df = Math.max(1, Math.round(Math.max(0.1, scene.narrationDur) * FPS))
+      // Ken Burns family — scale to fill 2x target, then zoom or pan across the extra room.
+      // pan uses a fixed slight zoom and slides x; zoom uses a gentle centre zoom-in.
+      const zExpr = motion === 'zoom' ? `z='min(zoom+0.0004,1.10)'` : `z='1.12'`
+      let xExpr = `x='iw/2-(iw/zoom/2)'` // centred (zoom)
+      if (motion === 'pan_right') xExpr = `x='(iw-iw/zoom)*on/${df}'`       // camera pans right
+      else if (motion === 'pan_left') xExpr = `x='(iw-iw/zoom)*(1-on/${df})'` // camera pans left
       vf =
         `[0:v]scale=${w * 2}:${h * 2}:force_original_aspect_ratio=increase,crop=${w * 2}:${h * 2},` +
-        `zoompan=z='min(zoom+0.0004,1.10)':d=${df}:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s=${w}x${h}:fps=${FPS},` +
+        `zoompan=${zExpr}:d=${df}:${xExpr}:y='ih/2-(ih/zoom/2)':s=${w}x${h}:fps=${FPS},` +
         `trim=duration=${d},setpts=PTS-STARTPTS,format=yuv420p[v]`
     }
     const fc = silent ? vf : `${vf};[1:a]${NARR_FILTER(d)}[a]`

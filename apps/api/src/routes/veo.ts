@@ -490,6 +490,29 @@ export const veoRoutes = new Elysia({ prefix: '/api/veo' })
     enqueueScene(id)
     return { ok: true }
   })
+  // Set a scene's motion for assembly. Still motions (static/zoom/pan) are free & applied at
+  // Rakit time. 'veo' animates the image into a clip (costs Veo credits) if not done yet.
+  .post('/scenes/:id/motion', async ({ params, body, user, set }) => {
+    const id = Number(params.id)
+    const scene = await db.query.veoScenes.findFirst({ where: eq(veoScenes.id, id), with: { project: true } })
+    if (!scene || scene.project.userId !== user.id) {
+      set.status = 404
+      return { error: 'Scene tidak ditemukan' }
+    }
+    const motion = body.motion
+    await db.update(veoScenes).set({ motion, updatedAt: new Date() }).where(eq(veoScenes.id, id))
+    // Veo: generate the clip from the scene image if we don't already have one.
+    if (motion === 'veo' && !scene.videoUrl) {
+      await db.update(veoScenes).set({ status: 'queued', progress: 0, attempts: 0, errorMsg: null, updatedAt: new Date() }).where(eq(veoScenes.id, id))
+      enqueueScene(id)
+      return { ok: true, generating: true }
+    }
+    return { ok: true, generating: false }
+  }, {
+    body: t.Object({
+      motion: t.Union([t.Literal('static'), t.Literal('zoom'), t.Literal('pan_left'), t.Literal('pan_right'), t.Literal('veo')]),
+    }),
+  })
   // Edit scene metadata (multipart, optional images)
   .patch('/scenes/:id', async ({ params, body, user, set }) => {
     const id = Number(params.id)

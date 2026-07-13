@@ -9,7 +9,12 @@ import { join, extname } from 'node:path'
 import { db, veoProjects, veoScenes, users } from '../db'
 import { generateSpeechToFile, TTSError } from './tts'
 import { generateSpeechGCloudToFile } from './tts-gcloud'
-import { assembleVideo, type AssembleScene } from './video-assembler'
+import { assembleVideo, type AssembleScene, type SceneMotion } from './video-assembler'
+
+// Only still-image motions apply to an image scene ('veo' needs a generated clip).
+const STILL_MOTIONS = ['static', 'zoom', 'pan_left', 'pan_right']
+const stillMotion = (m: string | null): SceneMotion | undefined =>
+  m && STILL_MOTIONS.includes(m) ? (m as SceneMotion) : undefined
 import { transcribeWords } from './transcribe'
 import { alignBeats } from './align'
 import { notify } from './notifications'
@@ -118,7 +123,7 @@ export async function assembleProject(projectId: number, opts: { captions?: bool
           const videoPath = await downloadToLocal(s.videoUrl, CLIPS_DIR, `scene${s.id}`)
           assembleScenes.push({ videoPath, narrationDur: dur, caption }) // silent segment
         } else if (s.firstImagePath) {
-          assembleScenes.push({ imagePath: s.firstImagePath, noZoom: s.noZoom, narrationDur: dur, caption })
+          assembleScenes.push({ imagePath: s.firstImagePath, noZoom: s.noZoom, motion: stillMotion(s.motion), narrationDur: dur, caption })
         }
       }
     } else {
@@ -147,7 +152,7 @@ export async function assembleProject(projectId: number, opts: { captions?: bool
           const videoPath = await downloadToLocal(s.videoUrl, CLIPS_DIR, `scene${s.id}`)
           assembleScenes.push({ videoPath, narrationPath: audioPath, narrationDur: dur, caption })
         } else if (s.firstImagePath) {
-          assembleScenes.push({ imagePath: s.firstImagePath, noZoom: s.noZoom, narrationPath: audioPath, narrationDur: dur, caption })
+          assembleScenes.push({ imagePath: s.firstImagePath, noZoom: s.noZoom, motion: stillMotion(s.motion), narrationPath: audioPath, narrationDur: dur, caption })
         } else {
           throw new Error(`Scene ${s.sceneNumber}: tidak ada visual (klip/gambar)`)
         }
