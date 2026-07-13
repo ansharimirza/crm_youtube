@@ -70,7 +70,9 @@ export async function generateProjectShort(userId: number, projectId: number): P
   let t = 0
   for (const s of eligible) {
     const d = (s.alignedDuration ?? s.narrationDuration ?? 0) || total / eligible.length
-    wins.push({ start: t, end: t + d, text: (s.narrationText || '').replace(/\s+/g, ' ').trim() })
+    // Strip leftover tags like "[Segmen]"/"[Beat 3]" from the pasted script so captions are clean.
+    const text = (s.narrationText || '').replace(/\[[^\]]*\]/g, '').replace(/\s+/g, ' ').trim()
+    wins.push({ start: t, end: t + d, text })
     t += d
   }
   const videoDur = t
