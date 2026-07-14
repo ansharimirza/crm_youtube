@@ -210,12 +210,14 @@ export function FacelessStudioPage() {
     // parse order/mode never matters. Header/footer lines without a [m:ss] are skipped.
     const ts = parseTimestampBeats(bulkImg)
     if (ts.length >= 2) {
-      const rows: SceneRow[] = ts.map((b) => ({
-        image_prompt: b.rest, narration_text: '', video_prompt: '', audioFile: null, startSec: b.startSec,
+      // STATE 9 (video prompts) is optional here — mapped 1:1 to beats for scenes that pick Veo.
+      const vids = parseList(bulkVid, true)
+      const rows: SceneRow[] = ts.map((b, i) => ({
+        image_prompt: b.rest, narration_text: '', video_prompt: vids[i] ?? '', audioFile: null, startSec: b.startSec,
       }))
       setScenes(rows)
       setShowBulk(false)
-      toast.success(`${rows.length} scene (mode timestamp). Upload ${rows.length} gambar + audio, lalu Rakit — timing dari timestamp.`)
+      toast.success(`${rows.length} scene (mode timestamp)${vids.length ? ` + ${vids.length} video prompt` : ''}. Upload ${rows.length} gambar + audio, lalu Rakit.`)
       return
     }
     // STATE 8 yields image + (auto) narration per beat. Fall back to a plain list if no beats.
@@ -287,6 +289,9 @@ export function FacelessStudioPage() {
         } else {
           fd.append('narrations', JSON.stringify(validScenes.map((s) => s.narration_text.trim())))
         }
+        // STATE 9 video prompts (for scenes that later pick Veo). Only send if any provided.
+        const vprompts = validScenes.map((s) => s.video_prompt.trim())
+        if (vprompts.some(Boolean)) fd.append('videoPrompts', JSON.stringify(vprompts))
         for (const img of uploadImages) fd.append('images', img)
         const res = await api.post<{ projectId: number; sceneCount: number }>('/api/veo/faceless-upload', fd)
         toast.success(tsMode
@@ -526,12 +531,12 @@ export function FacelessStudioPage() {
                   </div>
                   <div className="space-y-1.5">
                     <div className="flex items-center justify-between gap-2">
-                      <Label className="text-xs">STATE 9 — Video Prompt <span className="text-muted-foreground">(opsional, cuma mode Veo)</span></Label>
+                      <Label className="text-xs">STATE 9 — Video Prompt <span className="text-muted-foreground">(opsional — dipakai kalau scene pilih Veo 3)</span></Label>
                       <label className="text-[11px] text-primary cursor-pointer hover:underline shrink-0">
                         ⬆ file<input type="file" accept=".md,.txt,text/*" className="hidden" onChange={(e) => loadFile(e, setBulkVid)} />
                       </label>
                     </div>
-                    <Textarea value={bulkVid} onChange={(e) => setBulkVid(e.target.value)} rows={8} placeholder={'Cuma untuk mode Veo. Tempel STATE 9, atau ⬆ file.'} className="font-mono text-xs" />
+                    <Textarea value={bulkVid} onChange={(e) => setBulkVid(e.target.value)} rows={8} placeholder={'Tempel STATE 9 (1 prompt gerakan per scene), atau ⬆ file .md. Tersimpan per scene — dipakai saat kamu pilih Veo 3 di scene itu.'} className="font-mono text-xs" />
                   </div>
                 </div>
                 <Button type="button" size="sm" onClick={applyBulk}>

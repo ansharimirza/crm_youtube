@@ -158,6 +158,7 @@ export async function createFacelessFromUploads(
     images: File[] // already in order
     narrations?: string[] // optional per-scene text (captions + sync anchor)
     durations?: number[] // optional per-scene seconds (timestamp mode) → alignedDuration
+    videoPrompts?: string[] // optional STATE 9 motion prompt per scene (used if a scene picks Veo)
     aspectRatio?: '16:9' | '9:16'
     mode?: FacelessMode // 'static' (default) or 'kenburns'
   },
@@ -166,6 +167,7 @@ export async function createFacelessFromUploads(
   if (count === 0) throw new Error('Minimal 1 gambar')
   const narrations = p.narrations ?? []
   const durations = p.durations
+  const videoPrompts = p.videoPrompts ?? []
   if (narrations.length && narrations.length !== count) {
     throw new Error(`Jumlah gambar (${count}) tidak sama dengan narasi (${narrations.length})`)
   }
@@ -182,10 +184,12 @@ export async function createFacelessFromUploads(
   await mkdir(IMG_DIR, { recursive: true })
   for (let i = 0; i < count; i++) {
     const narr = narrations[i] ?? ''
+    // Veo motion prompt (STATE 9) if given, else fall back to the narration line.
+    const vprompt = (videoPrompts[i] || narr || `scene ${i + 1}`).slice(0, 1500)
     const [scene] = await db.insert(veoScenes).values({
       projectId: project.id,
       sceneNumber: i + 1,
-      prompt: (narr || `scene ${i + 1}`).slice(0, 200),
+      prompt: vprompt,
       imagePrompt: '',
       model: 'veo-3.1-fast',
       resolution: '1080p',

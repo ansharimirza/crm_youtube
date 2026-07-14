@@ -136,6 +136,7 @@ export const veoRoutes = new Elysia({ prefix: '/api/veo' })
         v == null ? undefined : Array.isArray(v) ? (v as T[]) : (JSON.parse(String(v)) as T[])
       const narrations = parseArr<string>(body.narrations) ?? []
       const durations = parseArr<number>(body.durations)
+      const videoPrompts = parseArr<string>(body.videoPrompts)
       const raw = Array.isArray(body.images) ? body.images : [body.images]
       // Stable order by filename (numeric-aware) so "01.png, 02.png, …" map correctly.
       const images = [...raw].sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }))
@@ -143,6 +144,7 @@ export const veoRoutes = new Elysia({ prefix: '/api/veo' })
         title: body.title.trim(),
         narrations,
         durations,
+        videoPrompts,
         images,
         aspectRatio: body.aspectRatio as '16:9' | '9:16' | undefined,
         mode: body.mode as 'static' | 'kenburns' | undefined,
@@ -159,6 +161,7 @@ export const veoRoutes = new Elysia({ prefix: '/api/veo' })
       // A Union here makes Elysia's multipart coercion mis-validate the whole body.
       narrations: t.Optional(t.Any()),
       durations: t.Optional(t.Any()),
+      videoPrompts: t.Optional(t.Any()),
       images: t.Files(),
       aspectRatio: t.Optional(t.String()),
       mode: t.Optional(t.String()),
