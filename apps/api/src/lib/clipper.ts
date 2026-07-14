@@ -21,6 +21,10 @@ export async function downloadYoutube(url: string, jobId: number): Promise<strin
     '-f', 'bv*[height<=1080]+ba/b[height<=1080]/b', // cap at 1080p to keep files sane
     '--merge-output-format', 'mp4',
     '--no-playlist',
+    // Non-web player clients usually dodge YouTube's "confirm you're not a bot" block on
+    // datacenter IPs (the web client needs a PO token/login). Falls back through the list.
+    '--extractor-args', 'youtube:player_client=android,web_safari,ios,web',
+    '--retries', '3',
     '-o', out,
     url,
   ], { stdout: 'ignore', stderr: 'pipe' })
