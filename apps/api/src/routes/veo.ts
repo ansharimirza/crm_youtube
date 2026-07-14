@@ -832,14 +832,16 @@ export const veoRoutes = new Elysia({ prefix: '/api/veo' })
     return Bun.file(project.finalVideoPath)
   })
   // === FACELESS SHORTS: auto-pick a hook segment + cut a 9:16 Short from the final video ===
-  .post('/projects/:id/short', async ({ params, user, set }) => {
+  .post('/projects/:id/short', async ({ params, body, user, set }) => {
     try {
-      const { id: shortId } = await generateProjectShort(user.id, Number(params.id))
+      const { id: shortId } = await generateProjectShort(user.id, Number(params.id), { captions: body?.captions !== false })
       return { id: shortId }
     } catch (e) {
       set.status = 400
       return { error: e instanceof Error ? e.message : 'Gagal membuat Short' }
     }
+  }, {
+    body: t.Optional(t.Object({ captions: t.Optional(t.Boolean()) })),
   })
   .get('/projects/:id/shorts', async ({ params, user }) => {
     const id = Number(params.id)

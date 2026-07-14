@@ -39,8 +39,8 @@ function buildAss(events: { start: number; end: number; text: string }[]): strin
     '',
     '[V4+ Styles]',
     'Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding',
-    // Black text, thick white outline (readable on any background), bottom-centre, in the lower band.
-    'Style: Cap,DejaVu Sans,46,&H00000000,&H000000FF,&H00FFFFFF,&H64000000,-1,0,0,0,100,100,0,0,1,4,0,2,70,70,320,1',
+    // Poppins Bold, WHITE text with a thick black outline (reads on the black canvas), bottom-centre.
+    'Style: Cap,Poppins,52,&H00FFFFFF,&H000000FF,&H00000000,&H64000000,-1,0,0,0,100,100,0,0,1,5,1,2,70,70,300,1',
     '',
     '[Events]',
     'Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text',
@@ -54,7 +54,8 @@ function buildAss(events: { start: number; end: number; text: string }[]): strin
 interface SceneWin { start: number; end: number; text: string }
 
 // Public: create a short (async render). Returns the new short row id immediately.
-export async function generateProjectShort(userId: number, projectId: number): Promise<{ id: number }> {
+export async function generateProjectShort(userId: number, projectId: number, opts: { captions?: boolean } = {}): Promise<{ id: number }> {
+  const withCaptions = opts.captions !== false
   const project = await db.query.veoProjects.findFirst({
     where: and(eq(veoProjects.id, projectId), eq(veoProjects.userId, userId)),
     with: { scenes: { orderBy: (s, { asc }) => [asc(s.sceneNumber)] } },
@@ -105,7 +106,7 @@ export async function generateProjectShort(userId: number, projectId: number): P
   const title = (pick.title || project.title).slice(0, 200)
   const [row] = await db.insert(veoShorts).values({ projectId, title, startSec: start, endSec: end, status: 'rendering' }).returning()
 
-  void renderShort(row.id, project.finalVideoPath, start, dur, wins).catch(async (e) => {
+  void renderShort(row.id, project.finalVideoPath, start, dur, wins, withCaptions).catch(async (e) => {
     await db.update(veoShorts)
       .set({ status: 'error', error: (e instanceof Error ? e.message : String(e)).slice(0, 500) })
       .where(eq(veoShorts.id, row.id))
@@ -113,24 +114,29 @@ export async function generateProjectShort(userId: number, projectId: number): P
   return { id: row.id }
 }
 
-async function renderShort(shortId: number, srcVideo: string, start: number, dur: number, wins: SceneWin[]): Promise<void> {
+const FONTS_DIR = join(process.cwd(), 'scripts', 'fonts') // bundled Poppins-Bold.ttf
+
+async function renderShort(shortId: number, srcVideo: string, start: number, dur: number, wins: SceneWin[], withCaptions: boolean): Promise<void> {
   await mkdir(SHORTS_DIR, { recursive: true })
   const end = start + dur
 
-  // Captions: each scene's line, timed relative to the clip start.
-  const events: { start: number; end: number; text: string }[] = []
-  for (const w of wins) {
-    const s = Math.max(w.start, start)
-    const e = Math.min(w.end, end)
-    if (e - s < 0.3 || !w.text) continue
-    events.push({ start: s - start, end: e - start, text: w.text })
+  // Fit the 16:9 source onto a 1080x1920 BLACK canvas.
+  let vf = `scale=1080:-2:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2:color=black`
+  let assPath: string | null = null
+  if (withCaptions) {
+    // Captions: each scene's line, timed relative to the clip start.
+    const events: { start: number; end: number; text: string }[] = []
+    for (const w of wins) {
+      const s = Math.max(w.start, start)
+      const e = Math.min(w.end, end)
+      if (e - s < 0.3 || !w.text) continue
+      events.push({ start: s - start, end: e - start, text: w.text })
+    }
+    assPath = join(SHORTS_DIR, `cap_${shortId}.ass`)
+    await writeFile(assPath, buildAss(events))
+    vf += `,subtitles='${escSub(assPath)}':fontsdir='${escSub(FONTS_DIR)}'`
   }
-  const assPath = join(SHORTS_DIR, `cap_${shortId}.ass`)
-  await writeFile(assPath, buildAss(events))
   const out = join(SHORTS_DIR, `short_${shortId}_${Date.now()}.mp4`)
-
-  // Fit the 16:9 source onto a 1080x1920 white canvas; captions sit in the lower white band.
-  const vf = `scale=1080:-2:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2:color=white,subtitles='${escSub(assPath)}'`
 
   const args = [
     '-y', '-ss', start.toFixed(2), '-i', srcVideo, '-t', dur.toFixed(2),
@@ -140,8 +146,8 @@ async function renderShort(shortId: number, srcVideo: string, start: number, dur
   ]
   const proc = Bun.spawn(['ffmpeg', ...args], { stdout: 'ignore', stderr: 'pipe' })
   const errText = await new Response(proc.stderr).text()
+  if (assPath) await rm(assPath, { force: true }).catch(() => {})
   if ((await proc.exited) !== 0) throw new Error(`ffmpeg short gagal: ${errText.slice(-400)}`)
 
-  await rm(assPath, { force: true }).catch(() => {})
   await db.update(veoShorts).set({ status: 'done', path: out }).where(eq(veoShorts.id, shortId))
 }

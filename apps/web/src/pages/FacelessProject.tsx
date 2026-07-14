@@ -335,6 +335,7 @@ function fmtT(sec: number) { const m = Math.floor(sec / 60), s = Math.floor(sec 
 
 function ShortsCard({ projectId }: { projectId: number }) {
   const qc = useQueryClient()
+  const [useSubtitle, setUseSubtitle] = useState(true)
   const { data } = useQuery({
     queryKey: ['veo-shorts', projectId],
     queryFn: () => api.get<{ shorts: ShortItem[] }>(`/api/veo/projects/${projectId}/shorts`),
@@ -342,7 +343,7 @@ function ShortsCard({ projectId }: { projectId: number }) {
   })
   const shorts = data?.shorts ?? []
   const make = useMutation({
-    mutationFn: () => api.post(`/api/veo/projects/${projectId}/short`, {}),
+    mutationFn: () => api.post(`/api/veo/projects/${projectId}/short`, { captions: useSubtitle }),
     onSuccess: () => { toast.success('Bikin Short — AI lagi pilih bagian terbaik dari script'); qc.invalidateQueries({ queryKey: ['veo-shorts', projectId] }) },
     onError: (e: Error) => toast.error(e.message),
   })
@@ -350,9 +351,16 @@ function ShortsCard({ projectId }: { projectId: number }) {
     <Card>
       <CardHeader>
         <CardTitle className="text-base flex items-center gap-2"><Scissors className="h-4 w-4 text-primary" /> Clip Short (9:16)</CardTitle>
-        <CardDescription>AI baca script → pilih bagian hook terbaik → potong jadi Short vertikal + caption. Tekan lagi buat variasi lain.</CardDescription>
+        <CardDescription>AI baca script → pilih bagian hook terbaik → potong jadi Short vertikal (latar hitam). Tekan lagi buat variasi lain.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
+        <div className="flex items-center justify-between rounded-lg border p-2.5">
+          <div className="space-y-0.5">
+            <Label className="text-sm">Pakai subtitle</Label>
+            <p className="text-xs text-muted-foreground">Teks putih (Poppins) di bawah. Matikan kalau mau tanpa caption.</p>
+          </div>
+          <Switch checked={useSubtitle} onCheckedChange={setUseSubtitle} />
+        </div>
         <Button size="sm" onClick={() => make.mutate()} disabled={make.isPending}>
           {make.isPending ? <><Loader2 className="h-4 w-4 animate-spin" /> Memproses...</> : <><Scissors className="h-4 w-4" /> Buat Short (auto-hook)</>}
         </Button>
