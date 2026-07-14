@@ -1,9 +1,9 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, type ChangeEvent } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   ArrowLeft, Loader2, CheckCircle2, AlertCircle, Clock, Image as ImageIcon,
-  Film, Wand2, Package, Youtube, Download, RotateCw, Scissors,
+  Film, Wand2, Package, Youtube, Download, RotateCw, Scissors, Upload,
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -233,7 +233,7 @@ export function FacelessProjectPage() {
                 </div>
                 <div className="aspect-video rounded bg-muted/40 overflow-hidden flex items-center justify-center">
                   {s.firstImagePath ? (
-                    <ScenedImg sceneId={s.id} />
+                    <ScenedImg sceneId={s.id} bust={s.firstImagePath} />
                   ) : (
                     <ImageIcon className="h-6 w-6 text-muted-foreground/40" />
                   )}
@@ -247,6 +247,7 @@ export function FacelessProjectPage() {
                   </span>
                 </div>
                 {s.errorMsg && <p className="text-[11px] text-red-400 line-clamp-2">{s.errorMsg}</p>}
+                <SceneImageUpload sceneId={s.id} hasImage={!!s.firstImagePath} />
                 {s.firstImagePath && <SceneMotionPicker sceneId={s.id} value={s.motion} hasClip={!!s.videoUrl} />}
               </CardContent>
             </Card>
@@ -288,8 +289,8 @@ function SceneMotionPicker({ sceneId, value, hasClip }: { sceneId: number; value
   )
 }
 
-// scene preview image (JWT-gated → fetch as blob)
-function ScenedImg({ sceneId }: { sceneId: number }) {
+// scene preview image (JWT-gated → fetch as blob). `bust` (image path) changes → refetch.
+function ScenedImg({ sceneId, bust }: { sceneId: number; bust?: string | null }) {
   const [url, setUrl] = useState<string | null>(null)
   useEffect(() => {
     let revoke: string | null = null
@@ -298,8 +299,39 @@ function ScenedImg({ sceneId }: { sceneId: number }) {
       .then((b) => { revoke = URL.createObjectURL(b); setUrl(revoke) })
       .catch(() => {})
     return () => { if (revoke) URL.revokeObjectURL(revoke) }
-  }, [sceneId])
+  }, [sceneId, bust])
   return url ? <img src={url} alt="" className="w-full h-full object-cover" /> : <Loader2 className="h-5 w-5 animate-spin text-muted-foreground/40" />
+}
+
+// Upload/replace this scene's image (PATCH /scenes/:id, multipart first_image).
+function SceneImageUpload({ sceneId, hasImage }: { sceneId: number; hasImage: boolean }) {
+  const qc = useQueryClient()
+  const [busy, setBusy] = useState(false)
+  async function onFile(e: ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (!file) return
+    setBusy(true)
+    try {
+      const fd = new FormData()
+      fd.append('first_image', file)
+      const res = await fetch(`/api/veo/scenes/${sceneId}`, { method: 'PATCH', headers: { Authorization: `Bearer ${getToken()}` }, body: fd })
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'Gagal upload')
+      toast.success('Gambar scene diganti')
+      qc.invalidateQueries({ queryKey: ['faceless-project'] })
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Gagal upload')
+    } finally {
+      setBusy(false)
+    }
+  }
+  return (
+    <label className="flex items-center justify-center gap-1.5 h-7 text-[11px] rounded border cursor-pointer hover:bg-muted/40 text-muted-foreground">
+      {busy ? <Loader2 className="h-3 w-3 animate-spin" /> : <Upload className="h-3 w-3" />}
+      {hasImage ? 'Ganti gambar' : 'Upload gambar'}
+      <input type="file" accept="image/*" className="hidden" onChange={onFile} disabled={busy} />
+    </label>
+  )
 }
 
 // final video (JWT-gated → fetch as blob for inline player + download)
