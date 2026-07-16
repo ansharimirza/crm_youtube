@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
+import { Switch } from '@/components/ui/switch'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { api, getToken } from '@/lib/api'
 import { cn } from '@/lib/utils'
@@ -31,6 +32,7 @@ export function ClipperPage() {
   const [requirements, setRequirements] = useState('')
   const [count, setCount] = useState('3')
   const [aspectRatio, setAspectRatio] = useState('9:16')
+  const [captions, setCaptions] = useState(true)
 
   const { data } = useQuery({
     queryKey: ['clip-jobs'],
@@ -48,6 +50,7 @@ export function ClipperPage() {
       fd.append('requirements', requirements)
       fd.append('count', count)
       fd.append('aspectRatio', aspectRatio)
+      fd.append('captions', String(captions))
       return api.post<{ jobId: number }>('/api/clipper/jobs', fd)
     },
     onSuccess: () => {
@@ -125,6 +128,14 @@ export function ClipperPage() {
                 </SelectContent>
               </Select>
             </div>
+          </div>
+
+          <div className="flex items-center justify-between rounded-lg border p-2.5">
+            <div className="space-y-0.5">
+              <Label className="text-sm">Pakai subtitle</Label>
+              <p className="text-xs text-muted-foreground">Caption per-kata (karaoke) di klip. Matikan kalau mau tanpa teks.</p>
+            </div>
+            <Switch checked={captions} onCheckedChange={setCaptions} />
           </div>
 
           <Button onClick={() => create.mutate()} disabled={(!video && !youtubeUrl.trim()) || create.isPending}>

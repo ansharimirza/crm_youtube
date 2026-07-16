@@ -107,6 +107,7 @@ export const clipJobs = pgTable('clip_jobs', {
   requirements: text('requirements').default('').notNull(), // campaign rules (varies per campaign)
   clipCount: integer('clip_count').default(3).notNull(),
   aspectRatio: varchar('aspect_ratio', { length: 8 }).default('9:16').notNull(),
+  captions: boolean('captions').default(true).notNull(), // burn word-by-word subtitles
   status: varchar('status', { length: 16, enum: ['queued', 'downloading', 'transcribing', 'selecting', 'rendering', 'done', 'error'] }).default('queued').notNull(),
   error: text('error'),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),

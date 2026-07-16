@@ -41,6 +41,7 @@ export const clipperRoutes = new Elysia({ prefix: '/api/clipper' })
         requirements: body.requirements ?? '',
         clipCount: count,
         aspectRatio,
+        captions: body.captions !== 'false',
         status: 'queued',
       }).returning()
 
@@ -57,6 +58,7 @@ export const clipperRoutes = new Elysia({ prefix: '/api/clipper' })
       requirements: t.Optional(t.String()),
       count: t.Optional(t.String()),
       aspectRatio: t.Optional(t.String()),
+      captions: t.Optional(t.String()),
       title: t.Optional(t.String()),
     }),
   })

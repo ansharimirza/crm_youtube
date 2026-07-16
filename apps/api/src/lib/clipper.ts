@@ -117,7 +117,7 @@ export async function processClipJob(jobId: number): Promise<void> {
         reason: (p.reason || '').slice(0, 500), status: 'rendering',
       }).returning()
       try {
-        const out = await renderClip(row.id, sourcePath, start, dur, words, aspect)
+        const out = await renderClip(row.id, sourcePath, start, dur, words, aspect, job.captions)
         await db.update(clips).set({ status: 'done', path: out }).where(eq(clips.id, row.id))
       } catch (e) {
         await db.update(clips).set({ status: 'error', error: (e instanceof Error ? e.message : String(e)).slice(0, 500) }).where(eq(clips.id, row.id))
@@ -138,18 +138,12 @@ export async function rerenderClip(clipId: number): Promise<void> {
   if (!job?.sourceVideoPath) throw new Error('source video sudah tidak ada')
   const aspect = (job.aspectRatio === '16:9' ? '16:9' : '9:16') as '9:16' | '16:9'
   const { words } = await transcribeAudio(job.sourceVideoPath)
-  const out = await renderClip(clip.id, job.sourceVideoPath, clip.startSec, clip.endSec - clip.startSec, words, aspect)
+  const out = await renderClip(clip.id, job.sourceVideoPath, clip.startSec, clip.endSec - clip.startSec, words, aspect, job.captions)
   await db.update(clips).set({ path: out, status: 'done' }).where(eq(clips.id, clip.id))
 }
 
-async function renderClip(clipId: number, src: string, start: number, dur: number, words: TranscriptWord[], aspect: '9:16' | '16:9'): Promise<string> {
+async function renderClip(clipId: number, src: string, start: number, dur: number, words: TranscriptWord[], aspect: '9:16' | '16:9', withCaptions = true): Promise<string> {
   const end = start + dur
-  // Words inside this clip, rebased so the clip starts at t=0.
-  const clipWords = words
-    .filter((x) => x.start >= start - 0.2 && x.start < end)
-    .map((x) => ({ word: x.word, start: Math.max(0, x.start - start), end: Math.min(dur, x.end - start) }))
-  const assPath = join(CLIPS_DIR, `cap_${clipId}.ass`)
-  await writeFile(assPath, buildAss(clipWords, aspect))
   const out = join(CLIPS_DIR, `clip_${clipId}_${Date.now()}.mp4`)
 
   // For a vertical clip from LANDSCAPE footage, follow the speaker's face; otherwise plain
@@ -164,7 +158,17 @@ async function renderClip(clipId: number, src: string, start: number, dur: numbe
       cropPart = `sendcmd=f='${escSub(face.cmdsPath)}',crop=${face.cropW}:${face.cropH}:${face.startX}:0,scale=1080:1920`
     }
   }
-  const vf = `${cropPart},subtitles='${escSub(assPath)}'`
+  // Optional burned word-by-word captions.
+  let assPath: string | null = null
+  let vf = cropPart
+  if (withCaptions) {
+    const clipWords = words
+      .filter((x) => x.start >= start - 0.2 && x.start < end)
+      .map((x) => ({ word: x.word, start: Math.max(0, x.start - start), end: Math.min(dur, x.end - start) }))
+    assPath = join(CLIPS_DIR, `cap_${clipId}.ass`)
+    await writeFile(assPath, buildAss(clipWords, aspect))
+    vf = `${cropPart},subtitles='${escSub(assPath)}'`
+  }
   const args = [
     '-y', '-ss', start.toFixed(2), '-i', src, '-t', dur.toFixed(2), '-vf', vf,
     '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '20', '-pix_fmt', 'yuv420p',
@@ -172,7 +176,7 @@ async function renderClip(clipId: number, src: string, start: number, dur: numbe
   ]
   const proc = Bun.spawn(['ffmpeg', ...args], { stdout: 'ignore', stderr: 'pipe' })
   const errText = await new Response(proc.stderr).text()
-  await rm(assPath, { force: true }).catch(() => {})
+  if (assPath) await rm(assPath, { force: true }).catch(() => {})
   if (cmdsPath) await rm(cmdsPath, { force: true }).catch(() => {})
   if ((await proc.exited) !== 0) throw new Error(`ffmpeg clip gagal: ${errText.slice(-400)}`)
   return out
