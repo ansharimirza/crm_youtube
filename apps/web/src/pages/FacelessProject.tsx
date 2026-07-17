@@ -303,7 +303,8 @@ function ScenedImg({ sceneId, bust }: { sceneId: number; bust?: string | null })
   return url ? <img src={url} alt="" className="w-full h-full object-cover" /> : <Loader2 className="h-5 w-5 animate-spin text-muted-foreground/40" />
 }
 
-// Upload/replace this scene's image (PATCH /scenes/:id, multipart first_image).
+// Upload/replace this scene's media. Image → PATCH /scenes/:id (first_image). Video →
+// POST /scenes/:id/video (assembler fits it to the scene's aligned screen-time).
 function SceneImageUpload({ sceneId, hasImage }: { sceneId: number; hasImage: boolean }) {
   const qc = useQueryClient()
   const [busy, setBusy] = useState(false)
@@ -311,13 +312,20 @@ function SceneImageUpload({ sceneId, hasImage }: { sceneId: number; hasImage: bo
     const file = e.target.files?.[0]
     e.target.value = ''
     if (!file) return
+    const isVideo = file.type.startsWith('video/')
     setBusy(true)
     try {
       const fd = new FormData()
-      fd.append('first_image', file)
-      const res = await fetch(`/api/veo/scenes/${sceneId}`, { method: 'PATCH', headers: { Authorization: `Bearer ${getToken()}` }, body: fd })
+      let res: Response
+      if (isVideo) {
+        fd.append('video', file)
+        res = await fetch(`/api/veo/scenes/${sceneId}/video`, { method: 'POST', headers: { Authorization: `Bearer ${getToken()}` }, body: fd })
+      } else {
+        fd.append('first_image', file)
+        res = await fetch(`/api/veo/scenes/${sceneId}`, { method: 'PATCH', headers: { Authorization: `Bearer ${getToken()}` }, body: fd })
+      }
       if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'Gagal upload')
-      toast.success('Gambar scene diganti')
+      toast.success(isVideo ? 'Video scene diupload — durasinya nanti dipas ke narasi saat Rakit' : 'Gambar scene diganti')
       qc.invalidateQueries({ queryKey: ['faceless-project'] })
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Gagal upload')
@@ -328,8 +336,8 @@ function SceneImageUpload({ sceneId, hasImage }: { sceneId: number; hasImage: bo
   return (
     <label className="flex items-center justify-center gap-1.5 h-7 text-[11px] rounded border cursor-pointer hover:bg-muted/40 text-muted-foreground">
       {busy ? <Loader2 className="h-3 w-3 animate-spin" /> : <Upload className="h-3 w-3" />}
-      {hasImage ? 'Ganti gambar' : 'Upload gambar'}
-      <input type="file" accept="image/*" className="hidden" onChange={onFile} disabled={busy} />
+      {hasImage ? 'Ganti gambar/video' : 'Upload gambar/video'}
+      <input type="file" accept="image/*,video/*" className="hidden" onChange={onFile} disabled={busy} />
     </label>
   )
 }

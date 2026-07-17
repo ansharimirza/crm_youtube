@@ -35,6 +35,11 @@ async function getGeminiKey(userId: number): Promise<string | null> {
 }
 
 async function downloadToLocal(url: string, dir: string, prefix: string): Promise<string> {
+  // Uploaded scene video: videoUrl is already a local file path — use it directly.
+  if (!/^https?:\/\//i.test(url)) {
+    if (await Bun.file(url).exists()) return url
+    throw new Error(`Video scene tidak ditemukan: ${url}`)
+  }
   const res = await fetch(url)
   if (!res.ok) throw new Error(`Download failed: HTTP ${res.status}`)
   const buf = Buffer.from(await res.arrayBuffer())

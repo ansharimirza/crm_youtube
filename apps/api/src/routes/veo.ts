@@ -741,6 +741,27 @@ export const veoRoutes = new Elysia({ prefix: '/api/veo' })
   }, {
     body: t.Object({ audio: t.File() }),
   })
+  // Upload the user's OWN video for a scene (replaces the still image). The assembler fits it
+  // to the scene's aligned screen-time (freezes last frame if shorter, trims if longer).
+  .post('/scenes/:id/video', async ({ params, body, user, set }) => {
+    const id = Number(params.id)
+    const scene = await db.query.veoScenes.findFirst({ where: eq(veoScenes.id, id), with: { project: true } })
+    if (!scene || scene.project.userId !== user.id) {
+      set.status = 404
+      return { error: 'Scene tidak ditemukan' }
+    }
+    const file = body.video
+    const dir = join(VEO_DIR, 'scene-videos')
+    await mkdir(dir, { recursive: true })
+    const ext = (file.name.split('.').pop() || 'mp4').toLowerCase().replace(/[^a-z0-9]/g, '') || 'mp4'
+    const path = join(dir, `scene_${id}_${Date.now()}.${ext}`)
+    await Bun.write(path, file)
+    // Store the LOCAL path in videoUrl; the assembler uses it directly (no download).
+    await db.update(veoScenes).set({ videoUrl: path, status: 'done', progress: 100, updatedAt: new Date() }).where(eq(veoScenes.id, id))
+    return { ok: true }
+  }, {
+    body: t.Object({ video: t.File() }),
+  })
   // === FACELESS: retry scenes that failed/stuck (transient GeminiGen errors) ===
   .post('/projects/:id/retry-failed', async ({ params, user, set }) => {
     try {
