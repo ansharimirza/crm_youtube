@@ -248,7 +248,7 @@ export function FacelessProjectPage() {
                 </div>
                 {s.errorMsg && <p className="text-[11px] text-red-400 line-clamp-2">{s.errorMsg}</p>}
                 <SceneImageUpload sceneId={s.id} hasImage={!!s.firstImagePath} />
-                {s.firstImagePath && <SceneMotionPicker sceneId={s.id} value={s.motion} hasClip={!!s.videoUrl} />}
+                {(s.firstImagePath || s.videoUrl) && <SceneMotionPicker sceneId={s.id} value={s.motion} videoUrl={s.videoUrl} />}
               </CardContent>
             </Card>
           )
@@ -266,9 +266,12 @@ const MOTIONS = [
   { v: 'veo', label: 'Veo 3 (AI, pakai kredit)' },
 ]
 
-// Per-scene motion for assembly. Still motions are free; 'veo' animates the image (credits).
-function SceneMotionPicker({ sceneId, value, hasClip }: { sceneId: number; value?: string | null; hasClip: boolean }) {
+// Per-scene motion for still images (free). If the scene has a VIDEO, we show a chip
+// instead — motion doesn't apply, and an uploaded video costs nothing.
+function SceneMotionPicker({ sceneId, value, videoUrl }: { sceneId: number; value?: string | null; videoUrl?: string | null }) {
   const qc = useQueryClient()
+  const hasVideo = !!videoUrl
+  const uploaded = hasVideo && !/^https?:/i.test(videoUrl!)
   const set = useMutation({
     mutationFn: (motion: string) => api.post<{ generating: boolean }>(`/api/veo/scenes/${sceneId}/motion`, { motion }),
     onSuccess: (r, motion) => {
@@ -277,7 +280,29 @@ function SceneMotionPicker({ sceneId, value, hasClip }: { sceneId: number; value
     },
     onError: (e: Error) => toast.error(e.message),
   })
-  const current = value || (hasClip ? 'veo' : 'zoom')
+  const clearVideo = useMutation<void, Error>({
+    mutationFn: async () => {
+      const fd = new FormData(); fd.append('clear_video', 'true')
+      const res = await fetch(`/api/veo/scenes/${sceneId}`, { method: 'PATCH', headers: { Authorization: `Bearer ${getToken()}` }, body: fd })
+      if (!res.ok) throw new Error('Gagal hapus video')
+    },
+    onSuccess: () => { toast.success('Video dihapus — pakai gambar + gerakan lagi'); qc.invalidateQueries({ queryKey: ['faceless-project'] }) },
+    onError: (e: Error) => toast.error(e.message),
+  })
+
+  if (hasVideo) {
+    return (
+      <div className="flex items-center justify-between gap-2 h-7 px-2 rounded border text-[11px]">
+        <span className="inline-flex items-center gap-1 text-emerald-400 truncate">
+          <Film className="h-3 w-3 shrink-0" /> {uploaded ? 'Video upload · gratis' : 'Klip Veo (sudah jadi)'}
+        </span>
+        <button className="text-red-400 hover:underline shrink-0" onClick={() => clearVideo.mutate()} disabled={clearVideo.isPending}>
+          {clearVideo.isPending ? '...' : 'Hapus video'}
+        </button>
+      </div>
+    )
+  }
+  const current = value || 'zoom'
   return (
     <div className="flex items-center gap-1.5">
       <Film className="h-3 w-3 text-muted-foreground shrink-0" />

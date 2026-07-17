@@ -548,6 +548,7 @@ export const veoRoutes = new Elysia({ prefix: '/api/veo' })
     }
     if (body.clear_first_image === 'true') updates.firstImagePath = null
     if (body.clear_last_image === 'true') updates.lastImagePath = null
+    if (body.clear_video === 'true') updates.videoUrl = null // revert to still image + motion
 
     await db.update(veoScenes).set(updates).where(eq(veoScenes.id, id))
 
@@ -587,6 +588,7 @@ export const veoRoutes = new Elysia({ prefix: '/api/veo' })
       last_image: t.Optional(t.File()),
       clear_first_image: t.Optional(t.String()),
       clear_last_image: t.Optional(t.String()),
+      clear_video: t.Optional(t.String()),
       regenerate: t.Optional(t.String()),
     }),
   })
