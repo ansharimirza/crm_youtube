@@ -28,31 +28,44 @@ export function alignBeats(
   }
 
   const beatToks = beats.map((b) => normTok(b.text))
-  const starts = new Array<number>(N).fill(0)
-  const WINDOW = 120 // forward search — wide enough to catch drift, narrow enough to avoid false far-matches
-  const K = 4 // opening words used to anchor
+  const wc = beatToks.map((t) => Math.max(1, t.length)) // word count per beat (for proportional fill)
+  const cum = [0]
+  for (let i = 0; i < N; i++) cum.push(cum[i] + wc[i]) // cum[i] = words before beat i
 
+  const K = 4 // opening words that must ALL match to trust a pin
+  const WINDOW = 400 // forward search; safe from false matches because we require a full K-gram
+
+  // Pass 1: pin only beats whose full opening K-gram matches ahead of a running pointer.
+  // These reliable anchors lock the timeline; a wrong wording just leaves a beat un-pinned.
+  const pinTime = new Array<number>(N).fill(-1)
   let p = 0
   for (let i = 0; i < N; i++) {
-    if (i === 0) {
-      starts[0] = TW[0].start
-      p = beatToks[0].length
-      continue
-    }
-    const opening = beatToks[i].slice(0, Math.min(K, beatToks[i].length))
-    let bestQ = Math.min(p, TW.length - 1)
-    let bestScore = -1
+    const opening = beatToks[i].slice(0, K)
+    if (opening.length < 2) continue // too short to anchor safely
     const hi = Math.min(TW.length - 1, p + WINDOW)
-    for (let q = Math.max(0, p - 3); q <= hi; q++) {
-      let score = 0
-      for (let j = 0; j < opening.length && q + j < TW.length; j++) {
-        if (TW[q + j].tok === opening[j]) score++
+    for (let q = p; q <= hi; q++) {
+      let ok = true
+      for (let j = 0; j < opening.length; j++) {
+        if (q + j >= TW.length || TW[q + j].tok !== opening[j]) { ok = false; break }
       }
-      if (score > bestScore) { bestScore = score; bestQ = q }
-      if (opening.length > 0 && score === opening.length) break
+      if (ok) { pinTime[i] = TW[q].start; p = q + wc[i]; break }
     }
-    starts[i] = TW[bestQ].start
-    p = Math.min(TW.length - 1, bestQ + Math.max(1, beatToks[i].length))
+  }
+  if (pinTime[0] < 0) pinTime[0] = TW[0].start
+
+  // Pass 2: interpolate un-pinned beats between neighbouring pins, weighted by word count
+  // (so a long beat gets proportionally more time). Sentinel end-pin = audioDuration.
+  const pins: { i: number; t: number }[] = []
+  for (let i = 0; i < N; i++) if (pinTime[i] >= 0) pins.push({ i, t: pinTime[i] })
+  pins.push({ i: N, t: audioDuration })
+
+  const starts = new Array<number>(N)
+  for (let i = 0; i < pins[0].i; i++) starts[i] = pins[0].t // any beats before the first pin
+  for (let s = 0; s < pins.length - 1; s++) {
+    const A = pins[s]
+    const B = pins[s + 1]
+    const denom = cum[B.i] - cum[A.i] || 1
+    for (let i = A.i; i < B.i; i++) starts[i] = A.t + ((B.t - A.t) * (cum[i] - cum[A.i])) / denom
   }
 
   // Enforce monotonic non-decreasing starts, then derive durations.
@@ -60,7 +73,7 @@ export function alignBeats(
   const durations = new Array<number>(N)
   for (let i = 0; i < N; i++) {
     const next = i + 1 < N ? starts[i + 1] : audioDuration
-    durations[i] = Math.max(0.5, next - starts[i])
+    durations[i] = Math.max(0.3, next - starts[i])
   }
   return durations
 }
