@@ -10,13 +10,16 @@ export const authMiddleware = new Elysia({ name: 'auth-middleware' })
       secret: process.env.JWT_SECRET!,
     })
   )
-  .derive({ as: 'global' }, async ({ headers, jwt, set }) => {
+  .derive({ as: 'global' }, async ({ headers, query, jwt, set }) => {
+    // Token from the Authorization header, or a ?token= query param (needed for media
+    // streaming via <video src>/<img src>, which can't set custom headers).
     const auth = headers.authorization
-    if (!auth?.startsWith('Bearer ')) {
+    const token = auth?.startsWith('Bearer ') ? auth.slice(7) : (query as { token?: string })?.token
+    if (!token) {
       set.status = 401
       throw new Error('Unauthorized')
     }
-    const payload = await jwt.verify(auth.slice(7))
+    const payload = await jwt.verify(token)
     if (!payload || typeof payload === 'boolean') {
       set.status = 401
       throw new Error('Invalid token')

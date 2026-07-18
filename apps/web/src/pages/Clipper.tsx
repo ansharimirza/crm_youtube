@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Scissors, Loader2, Download, Trash2, FileVideo, Clock, AlertCircle, CheckCircle2 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
@@ -189,16 +189,7 @@ function StatusBadge({ status }: { status: string }) {
 }
 
 function ClipView({ clip, vertical }: { clip: Clip; vertical: boolean }) {
-  const [url, setUrl] = useState<string | null>(null)
-  useEffect(() => {
-    if (clip.status !== 'done') return
-    let revoke: string | null = null
-    fetch(`/api/clipper/clips/${clip.id}/video`, { headers: { Authorization: `Bearer ${getToken()}` } })
-      .then((r) => (r.ok ? r.blob() : Promise.reject()))
-      .then((b) => { revoke = URL.createObjectURL(b); setUrl(revoke) })
-      .catch(() => {})
-    return () => { if (revoke) URL.revokeObjectURL(revoke) }
-  }, [clip.id, clip.status])
+  const src = `/api/clipper/clips/${clip.id}/video?token=${getToken()}`
   return (
     <div className="rounded-lg border p-2 space-y-1.5">
       <p className="text-xs font-medium line-clamp-2">{clip.title || 'Clip'}</p>
@@ -206,10 +197,10 @@ function ClipView({ clip, vertical }: { clip: Clip; vertical: boolean }) {
       {clip.reason && <p className="text-[10px] text-muted-foreground line-clamp-2 italic">{clip.reason}</p>}
       {clip.status === 'rendering' && <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground py-6"><Loader2 className="h-4 w-4 animate-spin" /> Merender...</div>}
       {clip.status === 'error' && <p className="text-xs text-red-400">{clip.error || 'Gagal'}</p>}
-      {clip.status === 'done' && url && (
+      {clip.status === 'done' && (
         <>
-          <video src={url} controls className={cn('w-full rounded bg-black', vertical ? 'aspect-[9/16] max-h-[50vh]' : 'aspect-video')} />
-          <Button asChild size="sm" variant="outline" className="w-full"><a href={url} download={`clip_${clip.id}.mp4`}><Download className="h-3.5 w-3.5" /> Download</a></Button>
+          <video src={src} controls preload="metadata" className={cn('w-full rounded bg-black', vertical ? 'aspect-[9/16] max-h-[50vh]' : 'aspect-video')} />
+          <Button asChild size="sm" variant="outline" className="w-full"><a href={src} download={`clip_${clip.id}.mp4`}><Download className="h-3.5 w-3.5" /> Download</a></Button>
           <YtUploadButton uploadPath={`/api/clipper/clips/${clip.id}/upload`} defaultTitle={clip.title || 'Clip'} />
         </>
       )}

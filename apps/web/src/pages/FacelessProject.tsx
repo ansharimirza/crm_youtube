@@ -369,26 +369,14 @@ function SceneImageUpload({ sceneId, hasImage }: { sceneId: number; hasImage: bo
 
 // final video (JWT-gated → fetch as blob for inline player + download)
 function FinalVideo({ projectId }: { projectId: number }) {
-  const [url, setUrl] = useState<string | null>(null)
-  const [loading, setLoading] = useState(true)
-  useEffect(() => {
-    let revoke: string | null = null
-    setLoading(true)
-    fetch(`/api/veo/projects/${projectId}/final-video`, { headers: { Authorization: `Bearer ${getToken()}` } })
-      .then((r) => (r.ok ? r.blob() : Promise.reject()))
-      .then((b) => { revoke = URL.createObjectURL(b); setUrl(revoke) })
-      .catch(() => {})
-      .finally(() => setLoading(false))
-    return () => { if (revoke) URL.revokeObjectURL(revoke) }
-  }, [projectId])
-
-  if (loading) return <div className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" /> Memuat video...</div>
-  if (!url) return <p className="text-sm text-red-400">Gagal memuat video final</p>
+  // Stream directly (token in the URL) so the browser range-loads instead of downloading the
+  // whole 30MB blob up front — the blob approach failed/stalled on longer videos.
+  const src = `/api/veo/projects/${projectId}/final-video?token=${getToken()}`
   return (
     <div className="space-y-2">
-      <video src={url} controls className="w-full rounded-lg bg-black max-h-[60vh]" />
+      <video src={src} controls preload="metadata" className="w-full rounded-lg bg-black max-h-[60vh]" />
       <Button asChild size="sm" variant="outline">
-        <a href={url} download={`faceless_${projectId}.mp4`}><Download className="h-4 w-4" /> Download MP4</a>
+        <a href={src} download={`faceless_${projectId}.mp4`}><Download className="h-4 w-4" /> Download MP4</a>
       </Button>
     </div>
   )
@@ -440,26 +428,17 @@ function ShortsCard({ projectId }: { projectId: number }) {
 }
 
 function ShortItemView({ short }: { short: ShortItem }) {
-  const [url, setUrl] = useState<string | null>(null)
-  useEffect(() => {
-    if (short.status !== 'done') return
-    let revoke: string | null = null
-    fetch(`/api/veo/shorts/${short.id}/video`, { headers: { Authorization: `Bearer ${getToken()}` } })
-      .then((r) => (r.ok ? r.blob() : Promise.reject()))
-      .then((b) => { revoke = URL.createObjectURL(b); setUrl(revoke) })
-      .catch(() => {})
-    return () => { if (revoke) URL.revokeObjectURL(revoke) }
-  }, [short.id, short.status])
+  const src = `/api/veo/shorts/${short.id}/video?token=${getToken()}`
   return (
     <div className="rounded-lg border p-2 space-y-1.5">
       <p className="text-xs font-medium line-clamp-2">{short.title || 'Short'}</p>
       <p className="text-[10px] text-muted-foreground">{fmtT(short.startSec)}–{fmtT(short.endSec)} · {Math.round(short.endSec - short.startSec)} dtk</p>
       {short.status === 'rendering' && <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground py-6"><Loader2 className="h-4 w-4 animate-spin" /> Merender...</div>}
       {short.status === 'error' && <p className="text-xs text-red-400">{short.error || 'Gagal'}</p>}
-      {short.status === 'done' && url && (
+      {short.status === 'done' && (
         <>
-          <video src={url} controls className="w-full rounded bg-black aspect-[9/16] max-h-[50vh]" />
-          <Button asChild size="sm" variant="outline" className="w-full"><a href={url} download={`short_${short.id}.mp4`}><Download className="h-3.5 w-3.5" /> Download</a></Button>
+          <video src={src} controls preload="metadata" className="w-full rounded bg-black aspect-[9/16] max-h-[50vh]" />
+          <Button asChild size="sm" variant="outline" className="w-full"><a href={src} download={`short_${short.id}.mp4`}><Download className="h-3.5 w-3.5" /> Download</a></Button>
           <YtUploadButton uploadPath={`/api/veo/shorts/${short.id}/upload`} defaultTitle={short.title || 'Short'} />
         </>
       )}
