@@ -28,42 +28,31 @@ export function alignBeats(
   }
 
   const beatToks = beats.map((b) => normTok(b.text))
-  const K = 5 // opening words used to anchor
-  const WINDOW = 500 // generous forward search so accumulated drift can still be caught
+  const starts = new Array<number>(N).fill(0)
+  const WINDOW = 120 // forward search — wide enough to catch drift, narrow enough to avoid false far-matches
+  const K = 4 // opening words used to anchor
 
-  // Pass 1: strongly anchor each beat whose opening words clearly match ahead of a running
-  // pointer. Weak/failed matches are left un-pinned (-1) to be interpolated — this stops a
-  // bad anchor from cascading and dumping the whole tail on the last scene.
-  const starts = new Array<number>(N).fill(-1)
   let p = 0
   for (let i = 0; i < N; i++) {
-    const opening = beatToks[i].slice(0, K)
-    if (opening.length === 0) continue
-    let bestScore = 0
-    let bestQ = -1
+    if (i === 0) {
+      starts[0] = TW[0].start
+      p = beatToks[0].length
+      continue
+    }
+    const opening = beatToks[i].slice(0, Math.min(K, beatToks[i].length))
+    let bestQ = Math.min(p, TW.length - 1)
+    let bestScore = -1
     const hi = Math.min(TW.length - 1, p + WINDOW)
-    for (let q = p; q <= hi; q++) {
+    for (let q = Math.max(0, p - 3); q <= hi; q++) {
       let score = 0
-      for (let j = 0; j < opening.length && q + j < TW.length; j++) if (TW[q + j].tok === opening[j]) score++
-      if (score > bestScore) { bestScore = score; bestQ = q; if (score === opening.length) break }
+      for (let j = 0; j < opening.length && q + j < TW.length; j++) {
+        if (TW[q + j].tok === opening[j]) score++
+      }
+      if (score > bestScore) { bestScore = score; bestQ = q }
+      if (opening.length > 0 && score === opening.length) break
     }
-    if (bestQ >= 0 && bestScore >= Math.min(2, opening.length)) {
-      starts[i] = TW[bestQ].start
-      p = bestQ + Math.max(1, beatToks[i].length)
-    }
-  }
-  if (starts[0] < 0) starts[0] = TW[0].start
-
-  // Pass 2: fill un-pinned beats by linear interpolation (by index) between neighbouring pins.
-  for (let i = 0; i < N; i++) {
-    if (starts[i] >= 0) continue
-    let j = i
-    while (j < N && starts[j] < 0) j++
-    const prev = i - 1 >= 0 ? starts[i - 1] : TW[0].start
-    const nextT = j < N ? starts[j] : audioDuration
-    const gaps = j - (i - 1)
-    for (let k = i; k < j; k++) starts[k] = prev + ((nextT - prev) * (k - (i - 1))) / gaps
-    i = j - 1
+    starts[i] = TW[bestQ].start
+    p = Math.min(TW.length - 1, bestQ + Math.max(1, beatToks[i].length))
   }
 
   // Enforce monotonic non-decreasing starts, then derive durations.
@@ -71,7 +60,7 @@ export function alignBeats(
   const durations = new Array<number>(N)
   for (let i = 0; i < N; i++) {
     const next = i + 1 < N ? starts[i + 1] : audioDuration
-    durations[i] = Math.max(0.3, next - starts[i])
+    durations[i] = Math.max(0.5, next - starts[i])
   }
   return durations
 }
