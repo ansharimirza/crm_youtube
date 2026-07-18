@@ -224,7 +224,13 @@ export async function alignProjectNarration(projectId: number): Promise<{ aligne
   if (eligible.length === 0) throw new Error('Tidak ada scene siap (butuh visual done)')
 
   const words = await transcribeWords(project.narrationFullPath)
-  const durations = alignBeats(eligible.map((s) => ({ text: s.narrationText || '' })), words, project.narrationFullDuration)
+  // Strip script tags like "[Segmen]"/"[Beat 3]" — they aren't spoken, so leaving them in
+  // breaks anchor matching (every beat's first word becomes "segmen") and the sync drifts.
+  const durations = alignBeats(
+    eligible.map((s) => ({ text: (s.narrationText || '').replace(/\[[^\]]*\]/g, ' ') })),
+    words,
+    project.narrationFullDuration,
+  )
   for (let i = 0; i < eligible.length; i++) {
     await db.update(veoScenes)
       .set({ alignedDuration: durations[i], updatedAt: new Date() })
