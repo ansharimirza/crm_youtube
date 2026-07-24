@@ -130,6 +130,40 @@ function parseState8(text: string): { image: string; narration: string }[] {
     .filter((x) => x.image)
 }
 
+// Newer STATE 8 shape: "## BEAT n" headers, each with a `> *narasi*` blockquote and a
+// fenced ```image prompt``` block. Kept separate from parseState8 so the older formats
+// are untouched. Returns [] unless the doc actually uses blockquotes + code fences.
+function parseBeatDoc(text: string): { image: string; narration: string }[] {
+  const raw = text.replace(/\r\n/g, '\n')
+  const lines = raw.split('\n')
+  if (!lines.some(isBeatHeader)) return []
+  if (!lines.some((l) => /^\s*>/.test(l)) || !lines.some((l) => /^\s*```/.test(l))) return []
+
+  const blocks: string[][] = []
+  let cur: string[] | null = null
+  for (const line of lines) {
+    if (isBeatHeader(line)) { if (cur) blocks.push(cur); cur = [] }
+    else if (cur) cur.push(line)
+  }
+  if (cur) blocks.push(cur)
+
+  return blocks
+    .map((bl) => {
+      const fence: string[] = []
+      const quote: string[] = []
+      let inFence = false
+      for (const l of bl) {
+        if (/^\s*```/.test(l)) { inFence = !inFence; continue }
+        if (inFence) { fence.push(l); continue }
+        if (/^\s*>/.test(l)) quote.push(l.replace(/^\s*>\s?/, ''))
+      }
+      const image = fence.join(' ').replace(/\*\*/g, '').replace(/\s+/g, ' ').trim()
+      const narration = quote.join(' ').replace(/[*""„"]/g, '').replace(/\s+/g, ' ').trim()
+      return { image, narration }
+    })
+    .filter((x) => x.image || x.narration)
+}
+
 // Split a STATE list (e.g. STATE 9 video prompts) into items. Primary: a beat marker
 // at line start (both formats). Fallbacks: blank-line paragraphs, then per-line.
 // clean=true extracts the "Prompt:" / "→" portion of each item.
@@ -220,8 +254,10 @@ export function FacelessStudioPage() {
       toast.success(`${rows.length} scene (mode timestamp)${vids.length ? ` + ${vids.length} video prompt` : ''}. Upload ${rows.length} gambar + audio, lalu Rakit.`)
       return
     }
-    // STATE 8 yields image + (auto) narration per beat. Fall back to a plain list if no beats.
-    const beats = parseState8(bulkImg)
+    // STATE 8 yields image + (auto) narration per beat. Try the newer blockquote+fence
+    // shape first; if the doc isn't that shape, fall back to the original parser untouched.
+    const beatDoc = parseBeatDoc(bulkImg)
+    const beats = beatDoc.length ? beatDoc : parseState8(bulkImg)
     const imgs = beats.length ? beats.map((b) => b.image) : parseList(bulkImg, true)
     const narrs = beats.length ? beats.map((b) => b.narration) : []
     const vids = parseList(bulkVid, true)
