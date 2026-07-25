@@ -136,14 +136,22 @@ function parseState8(text: string): { image: string; narration: string }[] {
 function parseBeatDoc(text: string): { image: string; narration: string }[] {
   const raw = text.replace(/\r\n/g, '\n')
   const lines = raw.split('\n')
-  if (!lines.some(isBeatHeader)) return []
+  // Strict beat header for this shape: must literally say BEAT/SCENE + number (or "[Beat n]").
+  // A bare numbered-list item like "4. Beat STATIC ..." in a "Cara pakai" section must NOT
+  // start a beat — otherwise it swallows the character-reference blocks into a phantom scene.
+  const isBeat = (l: string): boolean => BEAT_HEADER.test(l) || BEAT_BRACKET.test(l)
+  if (!lines.some(isBeat)) return []
   if (!lines.some((l) => /^\s*>/.test(l)) || !lines.some((l) => /^\s*```/.test(l))) return []
 
+  // Ignore beat-looking lines inside ``` fences (a prompt may mention "Scene 2", etc.).
   const blocks: string[][] = []
   let cur: string[] | null = null
+  let inFence = false
   for (const line of lines) {
-    if (isBeatHeader(line)) { if (cur) blocks.push(cur); cur = [] }
+    const fenceToggle = /^\s*```/.test(line)
+    if (!inFence && !fenceToggle && isBeat(line)) { if (cur) blocks.push(cur); cur = [] }
     else if (cur) cur.push(line)
+    if (fenceToggle) inFence = !inFence
   }
   if (cur) blocks.push(cur)
 
