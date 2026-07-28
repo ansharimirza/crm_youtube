@@ -504,9 +504,16 @@ export const veoRoutes = new Elysia({ prefix: '/api/veo' })
     }
     const motion = body.motion
     await db.update(veoScenes).set({ motion, updatedAt: new Date() }).where(eq(veoScenes.id, id))
-    // Veo: generate the clip from the scene image if we don't already have one.
+    // Veo: generate the clip from the scene image if we don't already have one. The picker
+    // sends the clip settings (duration/resolution/aspect/prompt) — save them onto the scene
+    // so scene-worker's generateVeo() picks them up.
     if (motion === 'veo' && !scene.videoUrl) {
-      await db.update(veoScenes).set({ status: 'queued', progress: 0, attempts: 0, errorMsg: null, updatedAt: new Date() }).where(eq(veoScenes.id, id))
+      const veoUpd: Partial<typeof veoScenes.$inferInsert> = { status: 'queued', progress: 0, attempts: 0, errorMsg: null, updatedAt: new Date() }
+      if (body.duration) veoUpd.duration = body.duration
+      if (body.resolution) veoUpd.resolution = body.resolution
+      if (body.aspectRatio) veoUpd.aspectRatio = body.aspectRatio
+      if (body.prompt !== undefined && body.prompt.trim()) veoUpd.prompt = body.prompt.trim().slice(0, 4000)
+      await db.update(veoScenes).set(veoUpd).where(eq(veoScenes.id, id))
       enqueueScene(id)
       return { ok: true, generating: true }
     }
@@ -514,6 +521,10 @@ export const veoRoutes = new Elysia({ prefix: '/api/veo' })
   }, {
     body: t.Object({
       motion: t.Union([t.Literal('static'), t.Literal('zoom'), t.Literal('pan_left'), t.Literal('pan_right'), t.Literal('veo')]),
+      duration: t.Optional(t.Union([t.Literal(4), t.Literal(6), t.Literal(8)])),
+      resolution: t.Optional(t.Union([t.Literal('720p'), t.Literal('1080p')])),
+      aspectRatio: t.Optional(t.Union([t.Literal('16:9'), t.Literal('9:16')])),
+      prompt: t.Optional(t.String({ maxLength: 4000 })),
     }),
   })
   // Edit scene metadata (multipart, optional images)

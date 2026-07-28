@@ -12,6 +12,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { api, getToken } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
@@ -248,7 +249,7 @@ export function FacelessProjectPage() {
                 </div>
                 {s.errorMsg && <p className="text-[11px] text-red-400 line-clamp-2">{s.errorMsg}</p>}
                 <SceneImageUpload sceneId={s.id} hasImage={!!s.firstImagePath} />
-                {(s.firstImagePath || s.videoUrl) && <SceneMotionPicker sceneId={s.id} value={s.motion} videoUrl={s.videoUrl} />}
+                {(s.firstImagePath || s.videoUrl) && <SceneMotionPicker sceneId={s.id} value={s.motion} videoUrl={s.videoUrl} veoPrompt={s.prompt} />}
               </CardContent>
             </Card>
           )
@@ -268,14 +269,21 @@ const MOTIONS = [
 
 // Per-scene motion for still images (free). If the scene has a VIDEO, we show a chip
 // instead — motion doesn't apply, and an uploaded video costs nothing.
-function SceneMotionPicker({ sceneId, value, videoUrl }: { sceneId: number; value?: string | null; videoUrl?: string | null }) {
+type MotionReq = { motion: string; duration?: number; resolution?: string; aspectRatio?: string; prompt?: string }
+function SceneMotionPicker({ sceneId, value, videoUrl, veoPrompt }: { sceneId: number; value?: string | null; videoUrl?: string | null; veoPrompt?: string | null }) {
   const qc = useQueryClient()
   const hasVideo = !!videoUrl
   const uploaded = hasVideo && !/^https?:/i.test(videoUrl!)
+  // Veo settings dialog (only shown when the user picks "Veo 3").
+  const [veoOpen, setVeoOpen] = useState(false)
+  const [vDur, setVDur] = useState('8')
+  const [vRes, setVRes] = useState('1080p')
+  const [vAsp, setVAsp] = useState('16:9')
+  const [vPrompt, setVPrompt] = useState('')
   const set = useMutation({
-    mutationFn: (motion: string) => api.post<{ generating: boolean }>(`/api/veo/scenes/${sceneId}/motion`, { motion }),
-    onSuccess: (r, motion) => {
-      toast.success(motion === 'veo' && r.generating ? 'Veo mulai bikin klip untuk scene ini...' : 'Gerakan scene diatur — berlaku saat Rakit')
+    mutationFn: (req: MotionReq) => api.post<{ generating: boolean }>(`/api/veo/scenes/${sceneId}/motion`, req),
+    onSuccess: (r, req) => {
+      toast.success(req.motion === 'veo' && r.generating ? 'Veo mulai bikin klip untuk scene ini...' : 'Gerakan scene diatur — berlaku saat Rakit')
       qc.invalidateQueries({ queryKey: ['faceless-project'] })
     },
     onError: (e: Error) => toast.error(e.message),
@@ -302,14 +310,65 @@ function SceneMotionPicker({ sceneId, value, videoUrl }: { sceneId: number; valu
       </div>
     )
   }
-  const current = value || 'zoom'
+  const current = value || 'static'
+  function onPick(v: string) {
+    if (v === 'veo') {
+      // Open the settings dialog instead of firing immediately (Veo costs credits).
+      setVDur('8'); setVRes('1080p'); setVAsp('16:9'); setVPrompt((veoPrompt || '').slice(0, 4000))
+      setVeoOpen(true)
+      return
+    }
+    set.mutate({ motion: v })
+  }
   return (
     <div className="flex items-center gap-1.5">
       <Film className="h-3 w-3 text-muted-foreground shrink-0" />
-      <Select value={current} onValueChange={(v) => set.mutate(v)} disabled={set.isPending}>
+      <Select value={current} onValueChange={onPick} disabled={set.isPending}>
         <SelectTrigger className="h-7 text-[11px]"><SelectValue placeholder="Gerakan" /></SelectTrigger>
         <SelectContent>{MOTIONS.map((m) => <SelectItem key={m.v} value={m.v} className="text-xs">{m.label}</SelectItem>)}</SelectContent>
       </Select>
+
+      <Dialog open={veoOpen} onOpenChange={setVeoOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader><DialogTitle>Animasikan dengan Veo 3 <span className="text-xs font-normal text-amber-400">· pakai kredit</span></DialogTitle></DialogHeader>
+          <div className="space-y-3">
+            <div className="grid grid-cols-3 gap-2">
+              <div className="space-y-1">
+                <Label className="text-xs">Durasi</Label>
+                <Select value={vDur} onValueChange={setVDur}>
+                  <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                  <SelectContent>{['4', '6', '8'].map((d) => <SelectItem key={d} value={d} className="text-xs">{d} detik</SelectItem>)}</SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Resolusi</Label>
+                <Select value={vRes} onValueChange={setVRes}>
+                  <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                  <SelectContent>{['720p', '1080p'].map((r) => <SelectItem key={r} value={r} className="text-xs">{r}</SelectItem>)}</SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Rasio</Label>
+                <Select value={vAsp} onValueChange={setVAsp}>
+                  <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                  <SelectContent>{['16:9', '9:16'].map((a) => <SelectItem key={a} value={a} className="text-xs">{a}</SelectItem>)}</SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">Prompt gerakan (Veo)</Label>
+              <Textarea value={vPrompt} onChange={(e) => setVPrompt(e.target.value)} rows={4} placeholder="Contoh: kamera dorong pelan, lentera bergoyang, kabut melayang..." className="text-xs" />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" size="sm" onClick={() => setVeoOpen(false)}>Batal</Button>
+            <Button size="sm" disabled={set.isPending || !vPrompt.trim()} onClick={() => {
+              set.mutate({ motion: 'veo', duration: Number(vDur), resolution: vRes, aspectRatio: vAsp, prompt: vPrompt.trim() })
+              setVeoOpen(false)
+            }}>{set.isPending ? 'Memproses...' : 'Generate klip Veo'}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

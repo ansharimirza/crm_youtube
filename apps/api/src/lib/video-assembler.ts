@@ -68,8 +68,9 @@ async function renderSegment(scene: AssembleScene, segPath: string, w: number, h
   ]
 
   if (scene.imagePath && !scene.videoPath) {
-    // Resolve the motion: explicit per-scene override, else project mode (noZoom → static).
-    const motion: SceneMotion = scene.motion ?? (scene.noZoom ? 'static' : 'zoom')
+    // Resolve the motion: explicit per-scene override, else default to static (no motion) —
+    // a still image that doesn't drift is the least-surprising default; users opt into zoom/pan.
+    const motion: SceneMotion = scene.motion ?? 'static'
     const df = Math.max(1, Math.round(Math.max(0.1, scene.narrationDur) * FPS))
     let vf: string
     if (motion === 'static') {
