@@ -87,6 +87,15 @@ export function FacelessProjectPage() {
     onError: (e: Error) => toast.error(e.message),
   })
 
+  const genVeoMutation = useMutation({
+    mutationFn: () => api.post<{ queued: number }>(`/api/veo/projects/${id}/generate-veo`, {}),
+    onSuccess: (r) => {
+      toast.success(r.queued > 0 ? `${r.queued} klip Veo mulai digenerate — pakai kredit...` : 'Tidak ada beat VIDEO yang perlu digenerate (sudah ada / belum ada gambar)')
+      qc.invalidateQueries({ queryKey: ['faceless-project', id] })
+    },
+    onError: (e: Error) => toast.error(e.message),
+  })
+
   const [fullAudio, setFullAudio] = useState<File | null>(null)
   const narrationMutation = useMutation({
     mutationFn: () => {
@@ -207,6 +216,20 @@ export function FacelessProjectPage() {
                 </Button>
               </div>
             )}
+            {(() => {
+              const pendingVeo = scenes.filter((s) => s.motion === 'veo' && !s.videoUrl && s.firstImagePath).length
+              if (pendingVeo === 0) return null
+              return (
+                <div className="pt-2 border-t border-dashed mt-1">
+                  <p className="text-xs text-muted-foreground mb-2">
+                    <b>{pendingVeo} beat VIDEO</b> siap dianimasikan Veo (gambarnya sudah ada). <span className="text-amber-400">Pakai kredit.</span>
+                  </p>
+                  <Button size="sm" variant="outline" onClick={() => genVeoMutation.mutate()} disabled={genVeoMutation.isPending}>
+                    {genVeoMutation.isPending ? <><Loader2 className="h-4 w-4 animate-spin" /> Mulai generate...</> : <><Film className="h-4 w-4" /> Generate semua Veo ({pendingVeo})</>}
+                  </Button>
+                </div>
+              )
+            })()}
           </div>
 
           {assembleStatus === 'done' && <FinalVideo projectId={project.id} />}

@@ -137,6 +137,8 @@ export const veoRoutes = new Elysia({ prefix: '/api/veo' })
       const narrations = parseArr<string>(body.narrations) ?? []
       const durations = parseArr<number>(body.durations)
       const videoPrompts = parseArr<string>(body.videoPrompts)
+      const motions = parseArr<string>(body.motions)
+      const clipDurations = parseArr<number>(body.clipDurations)
       const raw = Array.isArray(body.images) ? body.images : [body.images]
       // Stable order by filename (numeric-aware) so "01.png, 02.png, …" map correctly.
       const images = [...raw].sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }))
@@ -145,6 +147,8 @@ export const veoRoutes = new Elysia({ prefix: '/api/veo' })
         narrations,
         durations,
         videoPrompts,
+        motions,
+        clipDurations,
         images,
         aspectRatio: body.aspectRatio as '16:9' | '9:16' | undefined,
         mode: body.mode as 'static' | 'kenburns' | undefined,
@@ -162,6 +166,8 @@ export const veoRoutes = new Elysia({ prefix: '/api/veo' })
       narrations: t.Optional(t.Any()),
       durations: t.Optional(t.Any()),
       videoPrompts: t.Optional(t.Any()),
+      motions: t.Optional(t.Any()),
+      clipDurations: t.Optional(t.Any()),
       images: t.Files(),
       aspectRatio: t.Optional(t.String()),
       mode: t.Optional(t.String()),
@@ -526,6 +532,22 @@ export const veoRoutes = new Elysia({ prefix: '/api/veo' })
       aspectRatio: t.Optional(t.Union([t.Literal('16:9'), t.Literal('9:16')])),
       prompt: t.Optional(t.String({ maxLength: 4000 })),
     }),
+  })
+  // Batch-generate Veo clips for every scene marked motion='veo' that has an image but no clip yet.
+  // Used after uploading images to a project whose motions were auto-assigned from a "Motion:" doc.
+  .post('/projects/:id/generate-veo', async ({ params, user, set }) => {
+    const id = Number(params.id)
+    const project = await db.query.veoProjects.findFirst({
+      where: and(eq(veoProjects.id, id), eq(veoProjects.userId, user.id)),
+      with: { scenes: true },
+    })
+    if (!project) { set.status = 404; return { error: 'Project tidak ditemukan' } }
+    const targets = project.scenes.filter((s) => s.motion === 'veo' && !s.videoUrl && s.firstImagePath)
+    for (const s of targets) {
+      await db.update(veoScenes).set({ status: 'queued', progress: 0, attempts: 0, errorMsg: null, updatedAt: new Date() }).where(eq(veoScenes.id, s.id))
+      enqueueScene(s.id)
+    }
+    return { queued: targets.length }
   })
   // Edit scene metadata (multipart, optional images)
   .patch('/scenes/:id', async ({ params, body, user, set }) => {

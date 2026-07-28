@@ -24,9 +24,11 @@ type Aspect = '16:9' | '9:16'
 interface SceneRow {
   image_prompt: string   // STATE 8
   narration_text: string // STATE 6 (voice script)
-  video_prompt: string   // STATE 9 (optional)
+  video_prompt: string   // STATE 9 (optional) — for Veo beats = the Action text
   audioFile: File | null  // own-voice upload (voiceMode='upload')
   startSec?: number       // timestamp mode ([m:ss] beat start) → per-scene timing on upload
+  motion?: string         // auto from a "Motion:" doc line: veo | zoom | pan_left | pan_right | static
+  clipDuration?: number   // Veo clip length (4/6/8s) for motion=veo beats
 }
 
 // Timestamp-locked docs (e.g. image-prompt sheets): lines like "[0:04] <text>". Each is a
@@ -203,6 +205,54 @@ function parseList(text: string, clean = false): string[] {
   return out(raw.split('\n').map((l) => l.trim()).filter(Boolean))
 }
 
+// Beat sheets with an inline "Motion:" line per beat (e.g. "### BEAT n / [Segmen] "narasi" /
+// Prompt: … / Motion: VIDEO → Veo klip 8s · … · Action: …"). Reads the motion TYPE, the Veo
+// clip length, and (for VIDEO beats) the Action text as the Veo prompt — so 50+ scenes don't
+// have to be set by hand. Returns [] unless the doc actually uses "Motion:" lines.
+function parseEvolusiaBeats(text: string): {
+  image: string; narration: string; motion: string; clipDuration: number; videoPrompt: string
+}[] {
+  const raw = text.replace(/\r\n/g, '\n')
+  const lines = raw.split('\n')
+  if (!lines.some(isBeatHeader)) return []
+  if (!lines.some((l) => /^\s*Motion\s*:/i.test(l))) return []
+
+  const blocks: string[][] = []
+  let cur: string[] | null = null
+  for (const line of lines) {
+    if (isBeatHeader(line)) { if (cur) blocks.push(cur); cur = [] }
+    else if (cur) cur.push(line)
+  }
+  if (cur) blocks.push(cur)
+
+  return blocks
+    .map((bl) => {
+      const body = bl.join('\n')
+      const nm = body.match(/\[\s*segmen\s*\]\s*(.+)/i)          // narration: [Segmen] "…"
+      const pm = body.match(/^\s*Prompt\s*:\s*(.+)/im)           // image prompt: Prompt: …
+      const mm = body.match(/^\s*Motion\s*:\s*(.+)/im)           // Motion: … line
+      const motionLine = mm ? mm[1] : ''
+      let motion = 'static'
+      let clipDuration = 8
+      let videoPrompt = ''
+      if (/\bVIDEO\b/i.test(motionLine)) {
+        motion = 'veo'
+        const dm = motionLine.match(/klip\s*(\d+)\s*s/i)         // "Veo klip 8s" → clip length (not Durasi≈)
+        clipDuration = dm ? Number(dm[1]) : 8
+        const am = motionLine.match(/Action\s*:\s*(.+?)\s*$/i)   // Veo prompt = Action text
+        videoPrompt = am ? am[1].trim() : ''
+      } else if (/\bPAN\b/i.test(motionLine)) {
+        motion = /ke\s+kiri/i.test(motionLine) && !/ke\s+kanan/i.test(motionLine) ? 'pan_left' : 'pan_right'
+      } else if (/\bZOOM\b/i.test(motionLine)) {
+        motion = 'zoom'
+      }
+      const narration = (nm ? nm[1] : '').replace(/[*""„"]/g, '').replace(/\s+/g, ' ').trim()
+      const image = (pm ? pm[1] : '').replace(/\*\*/g, '').replace(/\s+/g, ' ').trim()
+      return { image, narration, motion, clipDuration, videoPrompt }
+    })
+    .filter((x) => x.narration || x.image)
+}
+
 export function FacelessStudioPage() {
   const { user } = useAuth()
   const qc = useQueryClient()
@@ -260,6 +310,19 @@ export function FacelessStudioPage() {
       setScenes(rows)
       setShowBulk(false)
       toast.success(`${rows.length} scene (mode timestamp)${vids.length ? ` + ${vids.length} video prompt` : ''}. Upload ${rows.length} gambar + audio, lalu Rakit.`)
+      return
+    }
+    // Beat sheets with inline "Motion:" lines → auto-assign per-scene motion + Veo clip
+    // length + Veo prompt (Action), so nothing is set by hand later.
+    const evo = parseEvolusiaBeats(bulkImg)
+    if (evo.length) {
+      setScenes(evo.map((b) => ({
+        image_prompt: b.image, narration_text: b.narration, video_prompt: b.videoPrompt,
+        audioFile: null, motion: b.motion, clipDuration: b.clipDuration,
+      })))
+      setShowBulk(false)
+      const veoCount = evo.filter((b) => b.motion === 'veo').length
+      toast.success(`${evo.length} scene — motion otomatis (${veoCount} Veo, sisanya zoom/geser/diam). Upload gambar + audio → Sync → Rakit${veoCount ? ' → Generate semua Veo' : ''}.`)
       return
     }
     // STATE 8 yields image + (auto) narration per beat. Try the newer blockquote+fence
@@ -336,6 +399,12 @@ export function FacelessStudioPage() {
         // STATE 9 video prompts (for scenes that later pick Veo). Only send if any provided.
         const vprompts = validScenes.map((s) => s.video_prompt.trim())
         if (vprompts.some(Boolean)) fd.append('videoPrompts', JSON.stringify(vprompts))
+        // Per-scene motion auto-assigned from a "Motion:" doc (veo/zoom/pan/static) + Veo clip length.
+        const motions = validScenes.map((s) => s.motion || '')
+        if (motions.some(Boolean)) {
+          fd.append('motions', JSON.stringify(motions))
+          fd.append('clipDurations', JSON.stringify(validScenes.map((s) => s.clipDuration || 8)))
+        }
         for (const img of uploadImages) fd.append('images', img)
         const res = await api.post<{ projectId: number; sceneCount: number }>('/api/veo/faceless-upload', fd)
         toast.success(tsMode

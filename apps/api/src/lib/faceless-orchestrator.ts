@@ -159,6 +159,8 @@ export async function createFacelessFromUploads(
     narrations?: string[] // optional per-scene text (captions + sync anchor)
     durations?: number[] // optional per-scene seconds (timestamp mode) → alignedDuration
     videoPrompts?: string[] // optional STATE 9 motion prompt per scene (used if a scene picks Veo)
+    motions?: string[] // optional per-scene motion auto-assigned from a "Motion:" doc (veo/zoom/pan_left/pan_right/static)
+    clipDurations?: number[] // optional Veo clip length (4/6/8s) per scene, for motion=veo beats
     aspectRatio?: '16:9' | '9:16'
     mode?: FacelessMode // 'static' (default) or 'kenburns'
   },
@@ -168,6 +170,9 @@ export async function createFacelessFromUploads(
   const narrations = p.narrations ?? []
   const durations = p.durations
   const videoPrompts = p.videoPrompts ?? []
+  const motions = p.motions ?? []
+  const clipDurations = p.clipDurations ?? []
+  const VALID_MOTIONS = new Set(['static', 'zoom', 'pan_left', 'pan_right', 'veo'])
   if (narrations.length && narrations.length !== count) {
     throw new Error(`Jumlah gambar (${count}) tidak sama dengan narasi (${narrations.length})`)
   }
@@ -186,6 +191,9 @@ export async function createFacelessFromUploads(
     const narr = narrations[i] ?? ''
     // Veo motion prompt (STATE 9) if given, else fall back to the narration line.
     const vprompt = (videoPrompts[i] || narr || `scene ${i + 1}`).slice(0, 1500)
+    // Per-scene motion auto-assigned from a "Motion:" doc, if valid; else leave null (default static).
+    const sceneMotion = VALID_MOTIONS.has(motions[i]) ? motions[i] as 'static' | 'zoom' | 'pan_left' | 'pan_right' | 'veo' : null
+    const clip = clipDurations[i]
     const [scene] = await db.insert(veoScenes).values({
       projectId: project.id,
       sceneNumber: i + 1,
@@ -193,9 +201,10 @@ export async function createFacelessFromUploads(
       imagePrompt: '',
       model: 'veo-3.1-fast',
       resolution: '1080p',
-      duration: 8,
+      duration: clip && [4, 6, 8].includes(clip) ? clip : 8,
       aspectRatio: p.aspectRatio ?? '16:9',
       modeImage: 'frame',
+      motion: sceneMotion,
       narrationText: narr,
       alignedDuration: durations ? durations[i] : null,
       noZoom: mode === 'static',
