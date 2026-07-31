@@ -509,7 +509,12 @@ export const veoRoutes = new Elysia({ prefix: '/api/veo' })
       return { error: 'Scene tidak ditemukan' }
     }
     const motion = body.motion
-    await db.update(veoScenes).set({ motion, updatedAt: new Date() }).where(eq(veoScenes.id, id))
+    // Switching a failed/stuck Veo scene to a still motion (pan/zoom/static) makes it usable as a
+    // held image — mark it done so it counts toward Rakit again (a failed Veo left status='error').
+    const revive = motion !== 'veo' && scene.status !== 'done' && !!scene.firstImagePath
+    await db.update(veoScenes)
+      .set({ motion, updatedAt: new Date(), ...(revive ? { status: 'done', progress: 100, errorMsg: null } : {}) })
+      .where(eq(veoScenes.id, id))
     // Veo: generate the clip from the scene image if we don't already have one. The picker
     // sends the clip settings (duration/resolution/aspect/prompt) — save them onto the scene
     // so scene-worker's generateVeo() picks them up.
