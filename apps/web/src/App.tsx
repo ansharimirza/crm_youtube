@@ -17,6 +17,7 @@ import { FacelessStudioPage } from '@/pages/FacelessStudio'
 import { FacelessProjectPage } from '@/pages/FacelessProject'
 import { TranscribePage } from '@/pages/Transcribe'
 import { ClipperPage } from '@/pages/Clipper'
+import { RakitKlipPage } from '@/pages/RakitKlip'
 import { AnalyzerPage } from '@/pages/Analyzer'
 import { ViralityPage } from '@/pages/Virality'
 import { ResumePage } from '@/pages/Resume'
@@ -89,6 +90,7 @@ export default function App() {
               <Route path="/faceless/:id" element={<FacelessProjectPage />} />
               <Route path="/transcribe" element={<TranscribePage />} />
             <Route path="/clipper" element={<ClipperPage />} />
+              <Route path="/rakit-klip" element={<RakitKlipPage />} />
               <Route path="/analyzer" element={<AnalyzerPage />} />
               <Route path="/virality" element={<ViralityPage />} />
               <Route path="/resume" element={<ResumePage />} />

@@ -174,6 +174,56 @@ export const veoRoutes = new Elysia({ prefix: '/api/veo' })
     }),
   })
 
+  // === RAKIT KLIP: several uploaded video clips + one narration → one assembled video ===
+  // Clips play in order (natural length), narration overlaid, clip audio muted, total trimmed to
+  // the narration duration (excess video cut). Free (ffmpeg), no Veo. Auto-assembles on create.
+  .post('/assemble-clips', async ({ body, user, set }) => {
+    try {
+      const rawClips = Array.isArray(body.clips) ? body.clips : [body.clips]
+      const clips = [...rawClips].sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }))
+      if (clips.length === 0) { set.status = 400; return { error: 'Minimal 1 klip video' } }
+      const [project] = await db.insert(veoProjects)
+        .values({ userId: user.id, title: (body.title?.trim() || 'Rakit Klip').slice(0, 200), facelessMode: 'static', facelessVoiceMode: 'single' })
+        .returning()
+      // narration audio → project.narrationFullPath (+ duration via ffprobe)
+      const nDir = join(VEO_DIR, 'narration')
+      await mkdir(nDir, { recursive: true })
+      const nExt = (body.narration.name.split('.').pop() || 'mp3').toLowerCase().replace(/[^a-z0-9]/g, '') || 'mp3'
+      const nPath = join(nDir, `project_${project.id}_full_${Date.now()}.${nExt}`)
+      await Bun.write(nPath, body.narration)
+      const nDur = await audioDurationSec(nPath)
+      await db.update(veoProjects).set({ narrationFullPath: nPath, narrationFullDuration: nDur, updatedAt: new Date() }).where(eq(veoProjects.id, project.id))
+      // each clip → a 'done' scene with videoUrl + its natural duration (alignedDuration)
+      const vDir = join(VEO_DIR, 'clips')
+      await mkdir(vDir, { recursive: true })
+      for (let i = 0; i < clips.length; i++) {
+        const c = clips[i]
+        const ext = (c.name.split('.').pop() || 'mp4').toLowerCase().replace(/[^a-z0-9]/g, '') || 'mp4'
+        const [scene] = await db.insert(veoScenes).values({
+          projectId: project.id, sceneNumber: i + 1, prompt: `clip ${i + 1}`, imagePrompt: '',
+          model: 'veo-3.1-fast', resolution: '1080p', duration: 8, aspectRatio: '16:9', modeImage: 'frame',
+          status: 'done', progress: 100,
+        }).returning()
+        const vPath = join(vDir, `scene${scene.id}_clip_${Date.now()}.${ext}`)
+        await Bun.write(vPath, c)
+        const dur = await audioDurationSec(vPath) // ffprobe format=duration works for video too
+        await db.update(veoScenes).set({ videoUrl: vPath, alignedDuration: dur, updatedAt: new Date() }).where(eq(veoScenes.id, scene.id))
+      }
+      await db.update(veoProjects).set({ assembleStatus: 'queued', assembleError: null, updatedAt: new Date() }).where(eq(veoProjects.id, project.id))
+      queueMicrotask(() => assembleProject(project.id, {}))
+      return { projectId: project.id, sceneCount: clips.length }
+    } catch (e) {
+      set.status = 400
+      return { error: e instanceof Error ? e.message : 'Gagal merakit klip' }
+    }
+  }, {
+    body: t.Object({
+      title: t.Optional(t.String()),
+      narration: t.File(),
+      clips: t.Files(),
+    }),
+  })
+
   // === FACELESS: upload the assembled final video to YouTube (multipart: optional thumbnail) ===
   .post('/faceless/:id/upload', async ({ params, body, user, set }) => {
     try {
