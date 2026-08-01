@@ -28,6 +28,7 @@ import { Label } from '@/components/ui/label'
 import { Progress } from '@/components/ui/progress'
 import { Badge } from '@/components/ui/badge'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Switch } from '@/components/ui/switch'
 import { api } from '@/lib/api'
 import { cn, formatRelativeTime } from '@/lib/utils'
 import { toast } from 'sonner'
@@ -145,6 +146,25 @@ export function VeoProjectPage() {
       toast.success('Scene di-retry')
       refetch()
     },
+    onError: (e: Error) => toast.error(e.message),
+  })
+
+  // Assemble into one video + optional full narration (upload audio, then Sync, then Rakit).
+  const [captions, setCaptions] = useState(false)
+  const [fullAudio, setFullAudio] = useState<File | null>(null)
+  const assembleMutation = useMutation({
+    mutationFn: () => api.post(`/api/veo/projects/${id}/assemble`, { captions }),
+    onSuccess: () => { toast.success('Mulai merakit jadi 1 video...'); qc.invalidateQueries({ queryKey: ['veo-project', id] }) },
+    onError: (e: Error) => toast.error(e.message),
+  })
+  const syncMutation = useMutation({
+    mutationFn: () => api.post<{ aligned: number }>(`/api/veo/projects/${id}/align-narration`, {}),
+    onSuccess: (r) => { toast.success(`Sync presisi selesai — ${r.aligned} scene dicocokin ke audio. Sekarang klik Rakit.`); qc.invalidateQueries({ queryKey: ['veo-project', id] }) },
+    onError: (e: Error) => toast.error(e.message),
+  })
+  const narrationMutation = useMutation({
+    mutationFn: () => { const fd = new FormData(); fd.append('audio', fullAudio!); return api.post<{ duration: number }>(`/api/veo/projects/${id}/narration-full`, fd) },
+    onSuccess: (r) => { toast.success(`Narasi penuh ke-upload (${Math.round(r.duration)} dtk) — sekarang klik Rakit`); setFullAudio(null); qc.invalidateQueries({ queryKey: ['veo-project', id] }) },
     onError: (e: Error) => toast.error(e.message),
   })
 
@@ -274,6 +294,59 @@ export function VeoProjectPage() {
         </DndContext>
       )}
 
+      {/* Rakit jadi 1 video + narasi penuh + Sync */}
+      {scenes.length > 0 && (() => {
+        const doneCount = scenes.filter((s) => s.status === 'done').length
+        const allDone = doneCount === scenes.length
+        const assembleStatus = project.assembleStatus ?? 'idle'
+        const rendering = assembleStatus === 'queued' || assembleStatus === 'rendering'
+        return (
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base flex items-center gap-2"><Package className="h-4 w-4 text-primary" /> Rakit Final Video</CardTitle>
+              <CardDescription>{allDone ? 'Semua scene selesai — siap dirakit.' : `Menunggu ${scenes.length - doneCount} scene lagi selesai...`}</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex flex-wrap items-center gap-3">
+                <Button onClick={() => assembleMutation.mutate()} disabled={rendering || assembleMutation.isPending || doneCount === 0}>
+                  {rendering ? <><Loader2 className="h-4 w-4 animate-spin" /> Merakit...</> : <><Package className="h-4 w-4" /> Rakit jadi 1 video</>}
+                </Button>
+                <label className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <Switch checked={captions} onCheckedChange={setCaptions} /> Subtitle (bakar narasi)
+                </label>
+                {!allDone && doneCount > 0 && <span className="text-xs text-amber-400">Bisa dirakit sebagian ({doneCount} scene done)</span>}
+              </div>
+              {assembleStatus === 'error' && (
+                <div className="text-sm text-red-400 flex items-start gap-2"><AlertCircle className="h-4 w-4 mt-0.5 shrink-0" /> {project.assembleError || 'Gagal merakit'}</div>
+              )}
+              <div className="rounded-lg border border-dashed p-3 space-y-2">
+                <p className="text-sm font-medium">Narasi penuh (opsional)</p>
+                <p className="text-xs text-muted-foreground">
+                  Upload 1 file audio buat seluruh video (mis. ElevenLabs). Gambar/klip nyebar otomatis mengikuti audio. {project.narrationFullPath ? '✅ Sudah ada narasi penuh — klik Rakit.' : ''}
+                </p>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <input type="file" accept="audio/*" onChange={(e) => setFullAudio(e.target.files?.[0] ?? null)}
+                    className="text-xs file:mr-2 file:rounded file:border-0 file:bg-primary/10 file:px-3 file:py-1.5 file:text-primary" />
+                  <Button size="sm" variant="outline" onClick={() => narrationMutation.mutate()} disabled={!fullAudio || narrationMutation.isPending}>
+                    {narrationMutation.isPending ? <><Loader2 className="h-4 w-4 animate-spin" /> Upload...</> : 'Upload narasi'}
+                  </Button>
+                  {fullAudio && <span className="text-[11px] text-emerald-400 truncate">🔊 {fullAudio.name}</span>}
+                </div>
+                {project.narrationFullPath && (
+                  <div className="pt-2 border-t border-dashed mt-1">
+                    <p className="text-xs text-muted-foreground mb-2"><b>Sync presisi</b> (disarankan): cocokin gambar/klip ke audio pakai timestamp per-kata. Jalanin <b>sebelum Rakit</b>.</p>
+                    <Button size="sm" onClick={() => syncMutation.mutate()} disabled={syncMutation.isPending}>
+                      {syncMutation.isPending ? <><Loader2 className="h-4 w-4 animate-spin" /> Nyocokin ke audio...</> : <><RotateCw className="h-4 w-4" /> Sync ke audio (presisi)</>}
+                    </Button>
+                  </div>
+                )}
+              </div>
+              {assembleStatus === 'done' && <VeoFinalVideo projectId={project.id} />}
+            </CardContent>
+          </Card>
+        )
+      })()}
+
       {/* AI Caption & Metadata Generator (bottom of project) */}
       <CaptionGenerator projectId={project.id} hasScenes={scenes.length > 0} />
 
@@ -283,6 +356,19 @@ export function VeoProjectPage() {
         onClose={() => setEditingScene(null)}
         projectId={project.id}
       />
+    </div>
+  )
+}
+
+// Streams the assembled final video (token in the URL → range-loading, no full blob download).
+function VeoFinalVideo({ projectId }: { projectId: number }) {
+  const src = `/api/veo/projects/${projectId}/final-video?token=${getToken()}`
+  return (
+    <div className="space-y-2">
+      <video src={src} controls preload="metadata" className="w-full rounded-lg bg-black max-h-[60vh]" />
+      <Button asChild size="sm" variant="outline">
+        <a href={src} download={`veo_${projectId}.mp4`}><Download className="h-4 w-4" /> Download MP4</a>
+      </Button>
     </div>
   )
 }
