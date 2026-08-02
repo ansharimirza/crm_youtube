@@ -18,6 +18,7 @@ import { FacelessProjectPage } from '@/pages/FacelessProject'
 import { TranscribePage } from '@/pages/Transcribe'
 import { ClipperPage } from '@/pages/Clipper'
 import { RakitKlipPage } from '@/pages/RakitKlip'
+import { TiktokFacelessPage } from '@/pages/TiktokFaceless'
 import { AnalyzerPage } from '@/pages/Analyzer'
 import { ViralityPage } from '@/pages/Virality'
 import { ResumePage } from '@/pages/Resume'
@@ -91,6 +92,7 @@ export default function App() {
               <Route path="/transcribe" element={<TranscribePage />} />
             <Route path="/clipper" element={<ClipperPage />} />
               <Route path="/rakit-klip" element={<RakitKlipPage />} />
+              <Route path="/tiktok-faceless" element={<TiktokFacelessPage />} />
               <Route path="/analyzer" element={<AnalyzerPage />} />
               <Route path="/virality" element={<ViralityPage />} />
               <Route path="/resume" element={<ResumePage />} />

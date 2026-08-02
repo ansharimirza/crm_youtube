@@ -18,6 +18,7 @@ const navItems: NavItem[] = [
   { to: '/faceless', icon: Clapperboard, label: 'Faceless Studio' },
   { to: '/clipper', icon: Scissors, label: 'Clipper' },
   { to: '/rakit-klip', icon: Package, label: 'Rakit Klip' },
+  { to: '/tiktok-faceless', icon: Video, label: 'TikTok Faceless' },
   { to: '/transcribe', icon: FileAudio, label: 'Transcribe' },
   { to: '/tiktok', icon: Video, label: 'TikTok Studio' },
   { to: '/influencer', icon: Sparkles, label: 'AI Influencer' },

@@ -44,6 +44,25 @@ async function audioDurationSec(path: string): Promise<number> {
   return d
 }
 
+// Parse a TikTok beat sheet: "BEAT n / [Segmen] "narasi" START:… END:… Motion: START+END → Veo 8s
+// · … · Tag: START+END · … · Action: …". Every beat is a Veo clip; START+END uses 2 frames.
+type TiktokBeat = { narration: string; clipDuration: number; action: string; tag: 'start_end' | 'single' }
+function parseTiktokBeats(md: string): TiktokBeat[] {
+  const raw = md.replace(/\r\n/g, '\n')
+  const beats: TiktokBeat[] = []
+  for (const m of raw.matchAll(/\bBEAT\s+(\d+)\b([\s\S]*?)(?=\bBEAT\s+\d+\b|$)/gi)) {
+    const body = m[2]
+    const narr = (body.match(/\[\s*segmen\s*\]\s*"([^"]+)"/i)
+      || body.match(/\[\s*segmen\s*\]\s*(.+?)(?=\s+START:|\s+Motion:|\n)/i))?.[1] || ''
+    const motionLine = (body.match(/Motion:\s*(.+)/i) || [])[1] || ''
+    const clipDuration = Number((motionLine.match(/Veo\s*(\d+)\s*s/i) || [])[1]) || 8
+    const tag: TiktokBeat['tag'] = /Tag:\s*START\s*\+\s*END/i.test(motionLine) || /\bSTART\s*\+\s*END\b/i.test(motionLine) ? 'start_end' : 'single'
+    const action = (motionLine.match(/Action:\s*(.+?)\s*$/i) || [])[1] || ''
+    beats.push({ narration: narr.trim(), clipDuration: [4, 6, 8].includes(clipDuration) ? clipDuration : 8, action: action.trim(), tag })
+  }
+  return beats
+}
+
 export const veoRoutes = new Elysia({ prefix: '/api/veo' })
   .use(authMiddleware)
 
@@ -221,6 +240,77 @@ export const veoRoutes = new Elysia({ prefix: '/api/veo' })
       title: t.Optional(t.String()),
       narration: t.File(),
       clips: t.Files(),
+    }),
+  })
+
+  // === TIKTOK FACELESS: MD beat sheet + own images (named 1a/1b) + narration → 9:16 Veo project ===
+  // Each beat = a Veo clip; START+END beats use 2 frames (Na=start, Nb=end), SINGLE uses 1 (Na).
+  // Creates the scenes (motion=veo); user then Sync + "Generate semua Veo" + Rakit on the page.
+  .post('/tiktok-upload', async ({ body, user, set }) => {
+    try {
+      const beats = parseTiktokBeats(String(body.md || ''))
+      if (beats.length === 0) { set.status = 400; return { error: 'MD tidak terbaca (butuh "BEAT n / [Segmen] / Motion:")' } }
+      const rawImgs = Array.isArray(body.images) ? body.images : [body.images]
+      // Map each uploaded image to a beat + slot from its filename: "01a"→beat1 start, "01b"→beat1 end.
+      const imgMap = new Map<number, { a?: (typeof rawImgs)[number]; b?: (typeof rawImgs)[number] }>()
+      for (const img of rawImgs) {
+        const base = img.name.replace(/\.[^.]+$/, '')
+        const mm = base.match(/(\d+)\s*([ab])?/i)
+        if (!mm) continue
+        const beat = Number(mm[1]); const slot = (mm[2] || 'a').toLowerCase()
+        const e = imgMap.get(beat) || {}
+        if (slot === 'b') e.b = img; else e.a = img
+        imgMap.set(beat, e)
+      }
+      for (let i = 0; i < beats.length; i++) {
+        const e = imgMap.get(i + 1)
+        if (!e?.a) { set.status = 400; return { error: `Beat ${i + 1}: gambar START (${i + 1}a) tidak ada` } }
+        if (beats[i].tag === 'start_end' && !e.b) { set.status = 400; return { error: `Beat ${i + 1}: gambar END (${i + 1}b) tidak ada` } }
+      }
+      const [project] = await db.insert(veoProjects)
+        .values({ userId: user.id, title: (body.title?.trim() || 'TikTok').slice(0, 200), facelessMode: 'static', facelessVoiceMode: 'single' })
+        .returning()
+      // narration
+      const nDir = join(VEO_DIR, 'narration')
+      await mkdir(nDir, { recursive: true })
+      const nExt = (body.narration.name.split('.').pop() || 'mp3').toLowerCase().replace(/[^a-z0-9]/g, '') || 'mp3'
+      const nPath = join(nDir, `project_${project.id}_full_${Date.now()}.${nExt}`)
+      await Bun.write(nPath, body.narration)
+      const nDur = await audioDurationSec(nPath)
+      await db.update(veoProjects).set({ narrationFullPath: nPath, narrationFullDuration: nDur, updatedAt: new Date() }).where(eq(veoProjects.id, project.id))
+      // scenes (9:16, motion=veo, start/end frames)
+      const iDir = join(VEO_DIR, 'images')
+      await mkdir(iDir, { recursive: true })
+      for (let i = 0; i < beats.length; i++) {
+        const b = beats[i]; const e = imgMap.get(i + 1)!
+        const [scene] = await db.insert(veoScenes).values({
+          projectId: project.id, sceneNumber: i + 1, prompt: (b.action || b.narration || `beat ${i + 1}`).slice(0, 1500), imagePrompt: '',
+          model: 'veo-3.1-fast', resolution: '1080p', duration: b.clipDuration, aspectRatio: '9:16', modeImage: 'frame',
+          motion: 'veo', narrationText: b.narration, status: 'done', progress: 100,
+        }).returning()
+        const aExt = (e.a!.name.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '') || 'jpg'
+        const aPath = join(iDir, `scene${scene.id}_a_${Date.now()}.${aExt}`)
+        await Bun.write(aPath, e.a!)
+        const upd: Partial<typeof veoScenes.$inferInsert> = { firstImagePath: aPath, updatedAt: new Date() }
+        if (b.tag === 'start_end' && e.b) {
+          const bExt = (e.b.name.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '') || 'jpg'
+          const bPath = join(iDir, `scene${scene.id}_b_${Date.now()}.${bExt}`)
+          await Bun.write(bPath, e.b)
+          upd.lastImagePath = bPath
+        }
+        await db.update(veoScenes).set(upd).where(eq(veoScenes.id, scene.id))
+      }
+      return { projectId: project.id, sceneCount: beats.length, veoCount: beats.length }
+    } catch (e) {
+      set.status = 400
+      return { error: e instanceof Error ? e.message : 'Gagal membuat project TikTok' }
+    }
+  }, {
+    body: t.Object({
+      title: t.Optional(t.String()),
+      md: t.String({ minLength: 1 }),
+      narration: t.File(),
+      images: t.Files(),
     }),
   })
 
