@@ -20,6 +20,7 @@ const navItems: NavItem[] = [
   { to: '/rakit-klip', icon: Package, label: 'Rakit Klip' },
   { to: '/tiktok-faceless', icon: Video, label: 'TikTok Faceless' },
   { to: '/nano', icon: Sparkles, label: 'Nano Banana (Gratis)' },
+  { to: '/tiktok-auto', icon: Video, label: 'TikTok Auto' },
   { to: '/transcribe', icon: FileAudio, label: 'Transcribe' },
   { to: '/tiktok', icon: Video, label: 'TikTok Studio' },
   { to: '/influencer', icon: Sparkles, label: 'AI Influencer' },

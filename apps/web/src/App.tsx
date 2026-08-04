@@ -20,6 +20,7 @@ import { ClipperPage } from '@/pages/Clipper'
 import { RakitKlipPage } from '@/pages/RakitKlip'
 import { TiktokFacelessPage } from '@/pages/TiktokFaceless'
 import { NanoBananaPage } from '@/pages/NanoBanana'
+import { TiktokAutoPage } from '@/pages/TiktokAuto'
 import { AnalyzerPage } from '@/pages/Analyzer'
 import { ViralityPage } from '@/pages/Virality'
 import { ResumePage } from '@/pages/Resume'
@@ -95,6 +96,7 @@ export default function App() {
               <Route path="/rakit-klip" element={<RakitKlipPage />} />
               <Route path="/tiktok-faceless" element={<TiktokFacelessPage />} />
               <Route path="/nano" element={<NanoBananaPage />} />
+              <Route path="/tiktok-auto" element={<TiktokAutoPage />} />
               <Route path="/analyzer" element={<AnalyzerPage />} />
               <Route path="/virality" element={<ViralityPage />} />
               <Route path="/resume" element={<ResumePage />} />
