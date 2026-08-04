@@ -27,6 +27,8 @@ export function NanoBananaPage() {
   const [ready, setReady] = useState(false)
   const [prompt, setPrompt] = useState('')
   const [model, setModel] = useState(MODELS[0].v)
+  const [quality, setQuality] = useState('2K')
+  const [aspect, setAspect] = useState('9:16')
   const [refUrl, setRefUrl] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [outUrl, setOutUrl] = useState<string | null>(null)
@@ -51,7 +53,8 @@ export function NanoBananaPage() {
     if (!prompt.trim()) { toast.error('Isi prompt dulu'); return }
     setBusy(true); setOutUrl(null)
     try {
-      const opts: Record<string, unknown> = { model }
+      const [w, h] = aspect.split(':').map(Number)
+      const opts: Record<string, unknown> = { model, quality, ratio: { w, h } } // quality 2K/4K = HD; ratio = aspect
       if (refUrl) opts.input_image = refUrl // reference for character consistency
       const img = await window.puter.ai.txt2img(prompt.trim(), opts)
       setOutUrl(img.src)
@@ -81,6 +84,22 @@ export function NanoBananaPage() {
               <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
               <SelectContent>{MODELS.map((m) => <SelectItem key={m.v} value={m.v} className="text-xs">{m.label}</SelectItem>)}</SelectContent>
             </Select>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label>Kualitas (HD)</Label>
+              <Select value={quality} onValueChange={setQuality}>
+                <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
+                <SelectContent>{['1K', '2K', '4K'].map((q) => <SelectItem key={q} value={q} className="text-xs">{q}</SelectItem>)}</SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Rasio</Label>
+              <Select value={aspect} onValueChange={setAspect}>
+                <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
+                <SelectContent>{['9:16', '16:9', '1:1'].map((a) => <SelectItem key={a} value={a} className="text-xs">{a}</SelectItem>)}</SelectContent>
+              </Select>
+            </div>
           </div>
           <div className="space-y-1.5">
             <Label>Reference image (opsional — biar karakter konsisten)</Label>
