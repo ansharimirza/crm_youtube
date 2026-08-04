@@ -115,12 +115,14 @@ export async function assembleProject(projectId: number, opts: { captions?: bool
       const eligible = project.scenes.filter((s) => s.status === 'done' && (s.videoUrl || s.firstImagePath))
       if (eligible.length === 0) throw new Error('Tidak ada scene siap (butuh visual done)')
 
-      const useAligned = eligible.every((s) => (s.alignedDuration ?? 0) > 0)
+      // Use precise forced-alignment PER SCENE where available; only the scenes actually missing
+      // it fall back to text-length weighting. (Previously a single un-aligned scene forced the
+      // WHOLE timeline onto rough text-weighting, so its video/image would overrun the next beat.)
       const weights = eligible.map((s) => Math.max(1, s.narrationText.trim().length))
       const totalW = weights.reduce((a, b) => a + b, 0)
       for (let i = 0; i < eligible.length; i++) {
         const s = eligible[i]
-        const dur = useAligned
+        const dur = (s.alignedDuration ?? 0) > 0
           ? Math.max(0.5, s.alignedDuration!)
           : Math.max(0.5, (fullNarration.dur * weights[i]) / totalW)
         const caption = opts.captions ? s.narrationText : undefined
