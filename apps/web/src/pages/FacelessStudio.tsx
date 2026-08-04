@@ -235,9 +235,10 @@ function parseEvolusiaBeats(text: string): {
       let motion = 'static'
       let clipDuration = 8
       let videoPrompt = ''
-      if (/\bVIDEO\b/i.test(motionLine)) {
+      if (/\bVIDEO\b/i.test(motionLine) || /\bVeo\b/i.test(motionLine)) {
         motion = 'veo'
-        const dm = motionLine.match(/klip\s*(\d+)\s*s/i)         // "Veo klip 8s" → clip length (not Durasi≈)
+        // clip length: "Veo klip 8s" (EVOLUSIA) or "Veo 4s" (TikTok single-image) — NOT Durasi≈.
+        const dm = motionLine.match(/(?:klip|Veo)\s*(\d+)\s*s/i)
         clipDuration = dm ? Number(dm[1]) : 8
         const am = motionLine.match(/Action\s*:\s*(.+?)\s*$/i)   // Veo prompt = Action text
         videoPrompt = am ? am[1].trim() : ''
