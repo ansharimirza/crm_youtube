@@ -250,22 +250,25 @@ export const veoRoutes = new Elysia({ prefix: '/api/veo' })
     try {
       const beats = parseTiktokBeats(String(body.md || ''))
       if (beats.length === 0) { set.status = 400; return { error: 'MD tidak terbaca (butuh "BEAT n / [Segmen] / Motion:")' } }
+      // No renaming needed: sort by filename (numeric) and consume in order — 2 images per
+      // START+END beat (first=start, second=end), 1 per SINGLE. Also accepts exactly one image
+      // per beat (then every beat animates a single frame, no morphing).
       const rawImgs = Array.isArray(body.images) ? body.images : [body.images]
-      // Map each uploaded image to a beat + slot from its filename: "01a"→beat1 start, "01b"→beat1 end.
-      const imgMap = new Map<number, { a?: (typeof rawImgs)[number]; b?: (typeof rawImgs)[number] }>()
-      for (const img of rawImgs) {
-        const base = img.name.replace(/\.[^.]+$/, '')
-        const mm = base.match(/(\d+)\s*([ab])?/i)
-        if (!mm) continue
-        const beat = Number(mm[1]); const slot = (mm[2] || 'a').toLowerCase()
-        const e = imgMap.get(beat) || {}
-        if (slot === 'b') e.b = img; else e.a = img
-        imgMap.set(beat, e)
-      }
-      for (let i = 0; i < beats.length; i++) {
-        const e = imgMap.get(i + 1)
-        if (!e?.a) { set.status = 400; return { error: `Beat ${i + 1}: gambar START (${i + 1}a) tidak ada` } }
-        if (beats[i].tag === 'start_end' && !e.b) { set.status = 400; return { error: `Beat ${i + 1}: gambar END (${i + 1}b) tidak ada` } }
+      const sortedImgs = [...rawImgs].sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }))
+      const expectedSE = beats.reduce((n, b) => n + (b.tag === 'start_end' ? 2 : 1), 0)
+      const beatImgs: { first: (typeof sortedImgs)[number]; last?: (typeof sortedImgs)[number] }[] = []
+      if (sortedImgs.length === beats.length) {
+        beats.forEach((_, i) => beatImgs.push({ first: sortedImgs[i] }))
+      } else if (sortedImgs.length === expectedSE) {
+        let idx = 0
+        for (const b of beats) {
+          const first = sortedImgs[idx++]
+          const last = b.tag === 'start_end' ? sortedImgs[idx++] : undefined
+          beatImgs.push({ first, last })
+        }
+      } else {
+        set.status = 400
+        return { error: `Jumlah gambar (${sortedImgs.length}) ga cocok. Butuh ${beats.length} (1 gambar/beat) ATAU ${expectedSE} (START+END). Upload urut: beat_01, beat_02, … (tiap beat START+END: START dulu, END sesudahnya).` }
       }
       const [project] = await db.insert(veoProjects)
         .values({ userId: user.id, title: (body.title?.trim() || 'TikTok').slice(0, 200), facelessMode: 'static', facelessVoiceMode: 'single' })
@@ -282,20 +285,20 @@ export const veoRoutes = new Elysia({ prefix: '/api/veo' })
       const iDir = join(VEO_DIR, 'images')
       await mkdir(iDir, { recursive: true })
       for (let i = 0; i < beats.length; i++) {
-        const b = beats[i]; const e = imgMap.get(i + 1)!
+        const b = beats[i]; const im = beatImgs[i]
         const [scene] = await db.insert(veoScenes).values({
           projectId: project.id, sceneNumber: i + 1, prompt: (b.action || b.narration || `beat ${i + 1}`).slice(0, 1500), imagePrompt: '',
           model: 'veo-3.1-fast', resolution: '1080p', duration: b.clipDuration, aspectRatio: '9:16', modeImage: 'frame',
           motion: 'veo', narrationText: b.narration, status: 'done', progress: 100,
         }).returning()
-        const aExt = (e.a!.name.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '') || 'jpg'
+        const aExt = (im.first.name.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '') || 'jpg'
         const aPath = join(iDir, `scene${scene.id}_a_${Date.now()}.${aExt}`)
-        await Bun.write(aPath, e.a!)
+        await Bun.write(aPath, im.first)
         const upd: Partial<typeof veoScenes.$inferInsert> = { firstImagePath: aPath, updatedAt: new Date() }
-        if (b.tag === 'start_end' && e.b) {
-          const bExt = (e.b.name.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '') || 'jpg'
+        if (im.last) {
+          const bExt = (im.last.name.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '') || 'jpg'
           const bPath = join(iDir, `scene${scene.id}_b_${Date.now()}.${bExt}`)
-          await Bun.write(bPath, e.b)
+          await Bun.write(bPath, im.last)
           upd.lastImagePath = bPath
         }
         await db.update(veoScenes).set(upd).where(eq(veoScenes.id, scene.id))

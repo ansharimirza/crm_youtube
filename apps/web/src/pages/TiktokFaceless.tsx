@@ -53,7 +53,7 @@ export function TiktokFacelessPage() {
         <CardHeader>
           <CardTitle className="text-base">Upload</CardTitle>
           <CardDescription>
-            Penamaan gambar: <b>1a</b>=frame START beat 1, <b>1b</b>=frame END beat 1, <b>2a</b>, <b>2b</b>… Beat SINGLE cukup <b>Na</b>. Parser cocokin ke MD.
+            Nama gambar urut aja (<b>beat_01, beat_02, …</b>) — <b>ga usah rename ke 1a/1b</b>. Sistem consume berurutan sesuai MD: beat START+END pakai 2 gambar (START dulu, END sesudahnya), beat SINGLE 1 gambar.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
