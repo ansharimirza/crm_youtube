@@ -291,14 +291,16 @@ export const veoRoutes = new Elysia({ prefix: '/api/veo' })
       const [project] = await db.insert(veoProjects)
         .values({ userId: user.id, title: (body.title?.trim() || 'TikTok').slice(0, 200), facelessMode: 'static', facelessVoiceMode: 'single' })
         .returning()
-      // narration
-      const nDir = join(VEO_DIR, 'narration')
-      await mkdir(nDir, { recursive: true })
-      const nExt = (body.narration.name.split('.').pop() || 'mp3').toLowerCase().replace(/[^a-z0-9]/g, '') || 'mp3'
-      const nPath = join(nDir, `project_${project.id}_full_${Date.now()}.${nExt}`)
-      await Bun.write(nPath, body.narration)
-      const nDur = await audioDurationSec(nPath)
-      await db.update(veoProjects).set({ narrationFullPath: nPath, narrationFullDuration: nDur, updatedAt: new Date() }).where(eq(veoProjects.id, project.id))
+      // narration is optional — if not given now, upload it later on the project page (like faceless).
+      if (body.narration) {
+        const nDir = join(VEO_DIR, 'narration')
+        await mkdir(nDir, { recursive: true })
+        const nExt = (body.narration.name.split('.').pop() || 'mp3').toLowerCase().replace(/[^a-z0-9]/g, '') || 'mp3'
+        const nPath = join(nDir, `project_${project.id}_full_${Date.now()}.${nExt}`)
+        await Bun.write(nPath, body.narration)
+        const nDur = await audioDurationSec(nPath)
+        await db.update(veoProjects).set({ narrationFullPath: nPath, narrationFullDuration: nDur, updatedAt: new Date() }).where(eq(veoProjects.id, project.id))
+      }
       // scenes (9:16, motion=veo, start/end frames)
       const iDir = join(VEO_DIR, 'images')
       await mkdir(iDir, { recursive: true })
@@ -330,7 +332,7 @@ export const veoRoutes = new Elysia({ prefix: '/api/veo' })
     body: t.Object({
       title: t.Optional(t.String()),
       md: t.String({ minLength: 1 }),
-      narration: t.File(),
+      narration: t.Optional(t.File()),
       images: t.Files(),
     }),
   })

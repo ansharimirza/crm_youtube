@@ -116,13 +116,12 @@ export function TiktokAutoPage() {
 
   async function createProject() {
     if (!doc.trim()) return toast.error('Tempel doc dulu')
-    if (!audio) return toast.error('Upload narasi (audio) dulu')
     setCreating(true)
     try {
       const fd = new FormData()
       fd.append('title', title.trim() || 'TikTok')
       fd.append('md', doc)
-      fd.append('narration', audio)
+      if (audio) fd.append('narration', audio)
       // Generated images in flat order → beat_01, beat_02, … (matches /tiktok-upload's ordered consume).
       for (let i = 0; i < imgs.length; i++) {
         const src = imgs[i].src!
@@ -167,7 +166,7 @@ export function TiktokAutoPage() {
               className="block w-full text-sm file:mr-2 file:rounded file:border-0 file:bg-primary/10 file:px-3 file:py-1.5 file:text-primary" />
             <Textarea value={doc} onChange={(e) => setDoc(e.target.value)} rows={5} placeholder="Upload file .md di atas, ATAU tempel manual di sini (SELURUH file — BAGIAN 1 + BAGIAN 2)." className="text-xs" />
             <p className="text-[11px] text-muted-foreground">Pakai file <b>.md</b> (Doc 4 — 2 bagian). File .txt all-in-one ga cocok.</p></div>
-          <div className="space-y-1.5"><Label>Narasi (audio)</Label>
+          <div className="space-y-1.5"><Label>Narasi (audio) — opsional, bisa nanti di halaman project</Label>
             <input type="file" accept="audio/*" onChange={(e) => setAudio(e.target.files?.[0] ?? null)}
               className="block w-full text-sm file:mr-2 file:rounded file:border-0 file:bg-primary/10 file:px-3 file:py-1.5 file:text-primary" />
             {audio && <span className="text-[11px] text-emerald-400">🔊 {audio.name}</span>}</div>
