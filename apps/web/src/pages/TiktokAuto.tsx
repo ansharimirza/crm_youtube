@@ -49,8 +49,7 @@ export function TiktokAutoPage() {
   const navigate = useNavigate()
   const [ready, setReady] = useState(false)
   const [title, setTitle] = useState('')
-  const [narrMd, setNarrMd] = useState('')
-  const [imgDoc, setImgDoc] = useState('')
+  const [doc, setDoc] = useState('') // whole Doc-4 (BEAT SHEET + IMAGE PROMPTS) — used for both parsers
   const [refUrl, setRefUrl] = useState<string | null>(null)
   const [audio, setAudio] = useState<File | null>(null)
   const [quality, setQuality] = useState('2K')
@@ -68,8 +67,8 @@ export function TiktokAutoPage() {
   }, [])
 
   function doParse() {
-    const s = parseImgDoc(imgDoc)
-    if (s.length === 0) return toast.error('Doc gambar ga kebaca (butuh "BEAT n … START: … END: …")')
+    const s = parseImgDoc(doc)
+    if (s.length === 0) return toast.error('Doc ga kebaca (butuh BAGIAN 2 IMAGE PROMPTS: "BEAT n … START: … END: …")')
     setSlots(s); setImgs(s.map(() => ({ status: 'pending' as const })))
     toast.success(`${s.length} gambar terdeteksi. Klik "Generate semua".`)
   }
@@ -104,13 +103,13 @@ export function TiktokAutoPage() {
   const allDone = slots.length > 0 && doneCount === slots.length
 
   async function createProject() {
-    if (!narrMd.trim()) return toast.error('Tempel MD narasi dulu')
+    if (!doc.trim()) return toast.error('Tempel doc dulu')
     if (!audio) return toast.error('Upload narasi (audio) dulu')
     setCreating(true)
     try {
       const fd = new FormData()
       fd.append('title', title.trim() || 'TikTok')
-      fd.append('md', narrMd)
+      fd.append('md', doc)
       fd.append('narration', audio)
       // Generated images in flat order → beat_01, beat_02, … (matches /tiktok-upload's ordered consume).
       for (let i = 0; i < imgs.length; i++) {
@@ -151,15 +150,14 @@ export function TiktokAutoPage() {
             <input type="file" accept="image/*" onChange={async (e: ChangeEvent<HTMLInputElement>) => { const f = e.target.files?.[0]; if (f) setRefUrl(await fileToDataUrl(f)) }}
               className="block w-full text-sm file:mr-2 file:rounded file:border-0 file:bg-primary/10 file:px-3 file:py-1.5 file:text-primary" />
             {refUrl && <img src={refUrl} alt="ref" className="h-16 rounded border" />}</div>
-          <div className="space-y-1.5"><Label>Doc PROMPT GAMBAR (START/END)</Label>
-            <Textarea value={imgDoc} onChange={(e) => setImgDoc(e.target.value)} rows={4} placeholder="Tempel doc VEO 3 PROMPTS (BEAT n | … | START+END, START: …, END: …)" className="text-xs" /></div>
-          <div className="space-y-1.5"><Label>MD NARASI (buat beat + narasi)</Label>
-            <Textarea value={narrMd} onChange={(e) => setNarrMd(e.target.value)} rows={3} placeholder="Tempel MD narasi ([Segmen] … Tag: …)" className="text-xs" /></div>
+          <div className="space-y-1.5"><Label>Doc lengkap (.md — BAGIAN 1 BEAT SHEET + BAGIAN 2 IMAGE PROMPTS)</Label>
+            <Textarea value={doc} onChange={(e) => setDoc(e.target.value)} rows={5} placeholder="Tempel SELURUH file .md (yang ada BAGIAN 1 [Segmen]/Motion + BAGIAN 2 START:/END:). Cukup 1x tempel." className="text-xs" />
+            <p className="text-[11px] text-muted-foreground">Pakai file <b>.md</b> (Doc 4). File .txt all-in-one ga cocok.</p></div>
           <div className="space-y-1.5"><Label>Narasi (audio)</Label>
             <input type="file" accept="audio/*" onChange={(e) => setAudio(e.target.files?.[0] ?? null)}
               className="block w-full text-sm file:mr-2 file:rounded file:border-0 file:bg-primary/10 file:px-3 file:py-1.5 file:text-primary" />
             {audio && <span className="text-[11px] text-emerald-400">🔊 {audio.name}</span>}</div>
-          <Button variant="outline" onClick={doParse} disabled={!imgDoc.trim()}>Deteksi gambar dari doc</Button>
+          <Button variant="outline" onClick={doParse} disabled={!doc.trim()}>Deteksi gambar dari doc</Button>
         </CardContent>
       </Card>
 

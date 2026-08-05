@@ -58,7 +58,9 @@ function parseTiktokBeats(md: string): TiktokBeat[] {
     const clipDuration = Number((motionLine.match(/Veo\s*(\d+)\s*s/i) || [])[1]) || 8
     const tag: TiktokBeat['tag'] = /Tag:\s*START\s*\+\s*END/i.test(motionLine) || /\bSTART\s*\+\s*END\b/i.test(motionLine) ? 'start_end' : 'single'
     const action = (motionLine.match(/Action:\s*(.+?)\s*$/i) || [])[1] || ''
-    beats.push({ narration: narr.trim(), clipDuration: [4, 6, 8].includes(clipDuration) ? clipDuration : 8, action: action.trim(), tag })
+    // Only real narration beats (have a [Segmen] line). Lets the whole doc be pasted — the
+    // image-prompt section (BEAT headers without [Segmen]) is ignored here.
+    if (narr.trim()) beats.push({ narration: narr.trim(), clipDuration: [4, 6, 8].includes(clipDuration) ? clipDuration : 8, action: action.trim(), tag })
   }
   return beats
 }
