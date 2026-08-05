@@ -50,6 +50,22 @@ type TiktokBeat = { narration: string; clipDuration: number; action: string; tag
 function parseTiktokBeats(md: string): TiktokBeat[] {
   const raw = md.replace(/\r\n/g, '\n')
   const beats: TiktokBeat[] = []
+  // KLIP storyboard format: "KLIP n (00:00–00:06) … COPY KE VEO ```…``` … VO ELEVENLABS: > "…"".
+  // Every clip is START+END (IMAGE 1 + IMAGE 2). Narration = VO, action = the VEO prompt.
+  if (/\bKLIP\s+\d+/i.test(raw) && /(VO\s*ELEVENLABS|IMAGE\s*1)/i.test(raw)) {
+    for (const m of raw.matchAll(/\bKLIP\s+(\d+)\b([^\n]*)\n([\s\S]*?)(?=\bKLIP\s+\d+\b|$)/gi)) {
+      const header = m[2]; const body = m[3]
+      const narr = (body.match(/VO\s*ELEVENLABS[^\n]*:?[\s\S]*?["“]([^"”]+)["”]/i)?.[1]
+        || body.match(/VO\s*ELEVENLABS[^\n]*:\s*\n?\s*>?\s*(.+)/i)?.[1] || '').trim()
+      const action = (body.match(/COPY KE VEO[\s\S]*?```[a-z]*\n?([\s\S]*?)```/i)?.[1] || '').trim()
+      const tr = header.match(/(\d+):(\d+)\s*[–\-—]\s*(\d+):(\d+)/)
+      let dur = 6
+      if (tr) dur = Math.max(1, (Number(tr[3]) * 60 + Number(tr[4])) - (Number(tr[1]) * 60 + Number(tr[2])))
+      const clip = dur <= 4 ? 4 : dur <= 6 ? 6 : 8
+      if (narr) beats.push({ narration: narr, clipDuration: clip, action, tag: 'start_end' })
+    }
+    if (beats.length) return beats
+  }
   for (const m of raw.matchAll(/\bBEAT\s+(\d+)\b([\s\S]*?)(?=\bBEAT\s+\d+\b|$)/gi)) {
     const body = m[2]
     const narr = (body.match(/\[\s*segmen\s*\]\s*"([^"]+)"/i)

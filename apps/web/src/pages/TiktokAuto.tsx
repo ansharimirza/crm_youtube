@@ -19,6 +19,18 @@ declare global {
 type Slot = { beat: number; kind: 'start' | 'end'; prompt: string }
 function parseImgDoc(text: string): Slot[] {
   const raw = text.replace(/\r\n/g, '\n')
+  // KLIP storyboard format: "KLIP n … IMAGE 1 (START): ```…``` IMAGE 2 (END): ```…```" (all start+end).
+  if (/\bKLIP\s+\d+/i.test(raw) && /IMAGE\s*1/i.test(raw)) {
+    const out: Slot[] = []
+    for (const m of raw.matchAll(/\bKLIP\s+(\d+)\b([\s\S]*?)(?=\bKLIP\s+\d+\b|$)/gi)) {
+      const beat = Number(m[1]); const body = m[2]
+      const img1 = body.match(/IMAGE\s*1[^\n]*:[^\n]*\n```[a-z]*\n?([\s\S]*?)```/i)?.[1]?.trim()
+      const img2 = body.match(/IMAGE\s*2[^\n]*:[^\n]*\n```[a-z]*\n?([\s\S]*?)```/i)?.[1]?.trim()
+      if (img1) out.push({ beat, kind: 'start', prompt: img1 })
+      if (img2) out.push({ beat, kind: 'end', prompt: img2 })
+    }
+    if (out.length) return out
+  }
   const blocks: { beat: number; header: string; body: string[] }[] = []
   let cur: { beat: number; header: string; body: string[] } | null = null
   for (const l of raw.split('\n')) {
@@ -151,8 +163,10 @@ export function TiktokAutoPage() {
               className="block w-full text-sm file:mr-2 file:rounded file:border-0 file:bg-primary/10 file:px-3 file:py-1.5 file:text-primary" />
             {refUrl && <img src={refUrl} alt="ref" className="h-16 rounded border" />}</div>
           <div className="space-y-1.5"><Label>Doc lengkap (.md — BAGIAN 1 BEAT SHEET + BAGIAN 2 IMAGE PROMPTS)</Label>
-            <Textarea value={doc} onChange={(e) => setDoc(e.target.value)} rows={5} placeholder="Tempel SELURUH file .md (yang ada BAGIAN 1 [Segmen]/Motion + BAGIAN 2 START:/END:). Cukup 1x tempel." className="text-xs" />
-            <p className="text-[11px] text-muted-foreground">Pakai file <b>.md</b> (Doc 4). File .txt all-in-one ga cocok.</p></div>
+            <input type="file" accept=".md,.txt" onChange={async (e: ChangeEvent<HTMLInputElement>) => { const f = e.target.files?.[0]; if (f) { setDoc(await f.text()); toast.success(`File "${f.name}" ke-load`) } }}
+              className="block w-full text-sm file:mr-2 file:rounded file:border-0 file:bg-primary/10 file:px-3 file:py-1.5 file:text-primary" />
+            <Textarea value={doc} onChange={(e) => setDoc(e.target.value)} rows={5} placeholder="Upload file .md di atas, ATAU tempel manual di sini (SELURUH file — BAGIAN 1 + BAGIAN 2)." className="text-xs" />
+            <p className="text-[11px] text-muted-foreground">Pakai file <b>.md</b> (Doc 4 — 2 bagian). File .txt all-in-one ga cocok.</p></div>
           <div className="space-y-1.5"><Label>Narasi (audio)</Label>
             <input type="file" accept="audio/*" onChange={(e) => setAudio(e.target.files?.[0] ?? null)}
               className="block w-full text-sm file:mr-2 file:rounded file:border-0 file:bg-primary/10 file:px-3 file:py-1.5 file:text-primary" />
