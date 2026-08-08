@@ -30,7 +30,7 @@ export function TiktokFacelessPage() {
       const fd = new FormData()
       fd.append('title', title.trim() || 'TikTok')
       fd.append('md', md)
-      fd.append('narration', narration!)
+      if (narration) fd.append('narration', narration) // optional — can upload later on project page
       for (const img of images) fd.append('images', img)
       return api.post<{ projectId: number; sceneCount: number; veoCount: number }>('/api/veo/tiktok-upload', fd)
     },
@@ -41,7 +41,7 @@ export function TiktokFacelessPage() {
     onError: (e: Error) => toast.error(e.message),
   })
 
-  const canSubmit = md.trim().length > 0 && images.length > 0 && !!narration && !mut.isPending
+  const canSubmit = md.trim().length > 0 && images.length > 0 && !mut.isPending
 
   return (
     <div className="max-w-2xl mx-auto space-y-6 pb-20 md:pb-6">
@@ -68,13 +68,13 @@ export function TiktokFacelessPage() {
               className="text-xs file:mr-2 file:rounded file:border-0 file:bg-primary/10 file:px-3 file:py-1.5 file:text-primary" />
           </div>
           <div className="space-y-1.5">
-            <Label>Gambar (banyak, nama 1a/1b/2a/2b…)</Label>
+            <Label>Gambar (urut: beat_01, beat_02, …)</Label>
             <input type="file" accept="image/*" multiple onChange={(e) => setImages(Array.from(e.target.files ?? []))}
               className="block w-full text-sm file:mr-2 file:rounded file:border-0 file:bg-primary/10 file:px-3 file:py-1.5 file:text-primary" />
             {images.length > 0 && <p className="text-xs text-emerald-400">{images.length} gambar dipilih</p>}
           </div>
           <div className="space-y-1.5">
-            <Label>Narasi (1 file audio)</Label>
+            <Label>Narasi (opsional — bisa nanti di halaman project)</Label>
             <input type="file" accept="audio/*" onChange={(e) => setNarration(e.target.files?.[0] ?? null)}
               className="block w-full text-sm file:mr-2 file:rounded file:border-0 file:bg-primary/10 file:px-3 file:py-1.5 file:text-primary" />
             {narration && <p className="text-xs text-emerald-400">🔊 {narration.name}</p>}
