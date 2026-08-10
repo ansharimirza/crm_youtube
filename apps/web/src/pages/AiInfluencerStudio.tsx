@@ -1,10 +1,15 @@
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Plus, Sparkles, Trash2, Loader2, AlertCircle, UserCircle2 } from 'lucide-react'
+import { Plus, Sparkles, Trash2, Loader2, AlertCircle, UserCircle2, Upload } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { api } from '@/lib/api'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { api, getToken } from '@/lib/api'
 import { cn, formatRelativeTime } from '@/lib/utils'
 import { toast } from 'sonner'
 import type { AiInfluencer } from '@/lib/types'
@@ -28,6 +33,30 @@ export function AiInfluencerStudioPage() {
     onError: (e: Error) => toast.error(e.message),
   })
 
+  // Upload your own base photo → use it directly (no generation, no credits).
+  const [upOpen, setUpOpen] = useState(false)
+  const [upName, setUpName] = useState('')
+  const [upGender, setUpGender] = useState('female')
+  const [upPhoto, setUpPhoto] = useState<File | null>(null)
+  const uploadMutation = useMutation({
+    mutationFn: () => {
+      const fd = new FormData()
+      fd.append('name', upName.trim() || 'Influencer')
+      fd.append('gender', upGender)
+      fd.append('base_image', upPhoto!)
+      return api.post<{ influencer: AiInfluencer }>('/api/ai-influencer/from-photo', fd)
+    },
+    onSuccess: () => {
+      toast.success('Base foto ke-upload — sekarang bisa bikin varian dari sini')
+      setUpOpen(false); setUpName(''); setUpPhoto(null)
+      qc.invalidateQueries({ queryKey: ['ai-influencers'] })
+    },
+    onError: (e: Error) => toast.error(e.message),
+  })
+
+  const imgSrc = (inf: AiInfluencer) =>
+    inf.imageUrl || (inf.status === 'done' ? `/api/ai-influencer/${inf.id}/image?token=${getToken()}` : null)
+
   return (
     <div className="space-y-6 pb-20 md:pb-6">
       <div className="flex items-center justify-between flex-wrap gap-3">
@@ -43,13 +72,42 @@ export function AiInfluencerStudioPage() {
             Build a consistent AI persona for your content
           </p>
         </div>
-        <Button asChild className="bg-gradient-to-r from-pink-500 to-violet-500 hover:opacity-90">
-          <Link to="/influencer/new">
-            <Plus className="h-4 w-4" />
-            New Influencer
-          </Link>
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" onClick={() => setUpOpen(true)}>
+            <Upload className="h-4 w-4" /> Upload foto sendiri
+          </Button>
+          <Button asChild className="bg-gradient-to-r from-pink-500 to-violet-500 hover:opacity-90">
+            <Link to="/influencer/new">
+              <Plus className="h-4 w-4" /> New Influencer
+            </Link>
+          </Button>
+        </div>
       </div>
+
+      <Dialog open={upOpen} onOpenChange={setUpOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader><DialogTitle>Upload foto base sendiri</DialogTitle></DialogHeader>
+          <div className="space-y-3">
+            <p className="text-xs text-muted-foreground">Foto-mu dipakai <b>langsung</b> jadi karakter base (nol kredit). Habis itu bisa bikin varian (outfit/pose/background) dari foto ini.</p>
+            <div className="space-y-1.5"><Label>Nama</Label><Input value={upName} onChange={(e) => setUpName(e.target.value)} placeholder="Nama influencer" /></div>
+            <div className="space-y-1.5"><Label>Gender</Label>
+              <Select value={upGender} onValueChange={setUpGender}>
+                <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+                <SelectContent><SelectItem value="female">Female</SelectItem><SelectItem value="male">Male</SelectItem></SelectContent>
+              </Select></div>
+            <div className="space-y-1.5"><Label>Foto base</Label>
+              <input type="file" accept="image/*" onChange={(e) => setUpPhoto(e.target.files?.[0] ?? null)}
+                className="block w-full text-sm file:mr-2 file:rounded file:border-0 file:bg-primary/10 file:px-3 file:py-1.5 file:text-primary" />
+              {upPhoto && <img src={URL.createObjectURL(upPhoto)} alt="preview" className="h-24 rounded border mt-1" />}</div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" size="sm" onClick={() => setUpOpen(false)}>Batal</Button>
+            <Button size="sm" disabled={!upPhoto || uploadMutation.isPending} onClick={() => uploadMutation.mutate()}>
+              {uploadMutation.isPending ? <><Loader2 className="h-4 w-4 animate-spin" /> Upload…</> : 'Pakai foto ini'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {influencers.length === 0 ? (
         <Card>
@@ -70,8 +128,8 @@ export function AiInfluencerStudioPage() {
             <Card key={inf.id} className="hover:border-primary/40 transition-colors group overflow-hidden">
               <Link to={`/influencer/${inf.id}`} className="block">
                 <div className="relative aspect-[9/16] bg-gradient-to-br from-pink-500/10 to-violet-500/10">
-                  {inf.imageUrl ? (
-                    <img src={inf.imageUrl} className="w-full h-full object-cover" alt={inf.name} />
+                  {imgSrc(inf) ? (
+                    <img src={imgSrc(inf)!} className="w-full h-full object-cover" alt={inf.name} />
                   ) : (
                     <div className="w-full h-full flex items-center justify-center">
                       {inf.status === 'processing' || inf.status === 'queued' ? (

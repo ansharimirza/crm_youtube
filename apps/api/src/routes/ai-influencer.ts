@@ -365,6 +365,40 @@ export const aiInfluencerRoutes = new Elysia({ prefix: '/api/ai-influencer' })
     return { ok: true }
   })
 
+  // === UPLOAD OWN BASE PHOTO — use it directly (no generation, no credits) ===
+  // The photo becomes the influencer's base identity; variants can then be made from it.
+  .post('/from-photo', async ({ body, user, set }) => {
+    if (!body.base_image) { set.status = 400; return { error: 'Butuh foto base' } }
+    const imagePath = await saveUpload(body.base_image, 'base')
+    const [influencer] = await db.insert(aiInfluencers).values({
+      userId: user.id,
+      name: body.name.trim().slice(0, 100),
+      gender: body.gender === 'male' ? 'male' : 'female',
+      age: Number(body.age) || 25,
+      niches: body.niches ?? '',
+      backstory: '', personality: 50,
+      ethnicity: 'custom', skinTone: 'custom', hairColor: 'custom', hairLength: 'custom',
+      hairTexture: 'custom', eyeColor: 'custom', build: 'custom', customDescription: '',
+      imagePrompt: 'uploaded base photo', imagePath, imageUrl: null,
+      status: 'done',
+    }).returning()
+    return { ok: true, influencer }
+  }, {
+    body: t.Object({
+      name: t.String({ minLength: 1, maxLength: 100 }),
+      gender: t.Optional(t.String()),
+      age: t.Optional(t.String()),
+      niches: t.Optional(t.String()),
+      base_image: t.File(),
+    }),
+  })
+  // Serve a locally-stored influencer image (uploaded base, or the downloaded copy of a generated one).
+  .get('/:id/image', async ({ params, user, set }) => {
+    const inf = await db.query.aiInfluencers.findFirst({ where: and(eq(aiInfluencers.id, Number(params.id)), eq(aiInfluencers.userId, user.id)) })
+    if (!inf?.imagePath) { set.status = 404; return { error: 'No image' } }
+    return Bun.file(inf.imagePath)
+  })
+
 /* ==========================================================
    VARIANTS — same identity, different outfit / background
    ========================================================== */

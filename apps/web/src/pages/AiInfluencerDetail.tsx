@@ -59,6 +59,8 @@ export function AiInfluencerDetailPage() {
 
   const niches = inf.niches.split('|').filter(Boolean)
   const isProcessing = inf.status === 'processing' || inf.status === 'queued'
+  // Generated influencers have an R2 imageUrl; uploaded base photos are served locally.
+  const imgUrl = inf.imageUrl || (inf.status === 'done' ? `/api/ai-influencer/${inf.id}/image?token=${getToken()}` : null)
 
   return (
     <div className="max-w-4xl mx-auto space-y-6 pb-20 md:pb-6">
@@ -82,9 +84,9 @@ export function AiInfluencerDetailPage() {
             <div className="text-xs text-muted-foreground/60 mt-2">{formatRelativeTime(inf.createdAt)}</div>
           </div>
           <div className="flex gap-2">
-            {inf.imageUrl && (
+            {imgUrl && (
               <Button asChild variant="outline" size="sm">
-                <a href={inf.imageUrl} download={`${inf.name}.jpg`}>
+                <a href={imgUrl} download={`${inf.name}.jpg`}>
                   <Download className="h-4 w-4" />
                   Download
                 </a>
@@ -105,8 +107,8 @@ export function AiInfluencerDetailPage() {
         {/* Image */}
         <Card className="overflow-hidden">
           <div className="relative aspect-[9/16] bg-gradient-to-br from-pink-500/10 to-violet-500/10">
-            {inf.imageUrl ? (
-              <img src={inf.imageUrl} className="w-full h-full object-cover" alt={inf.name} />
+            {imgUrl ? (
+              <img src={imgUrl} className="w-full h-full object-cover" alt={inf.name} />
             ) : isProcessing ? (
               <div className="w-full h-full flex items-center justify-center">
                 <div className="text-center">
@@ -166,7 +168,7 @@ export function AiInfluencerDetailPage() {
             </CardContent>
           </Card>
 
-          {inf.status === 'done' && inf.imageUrl && (
+          {imgUrl && (
             <Card className="border-emerald-500/30 bg-emerald-500/5">
               <CardContent className="p-4 flex items-start gap-2">
                 <Lock className="h-4 w-4 text-emerald-400 shrink-0 mt-0.5" />
@@ -211,8 +213,8 @@ export function AiInfluencerDetailPage() {
         </div>
       </div>
 
-      {inf.status === 'done' && inf.imageUrl && (
-        <VariantsSection influencerId={inf.id} influencerImageUrl={inf.imageUrl} />
+      {imgUrl && (
+        <VariantsSection influencerId={inf.id} influencerImageUrl={imgUrl} />
       )}
     </div>
   )
