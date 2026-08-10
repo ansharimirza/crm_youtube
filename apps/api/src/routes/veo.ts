@@ -277,6 +277,10 @@ export const veoRoutes = new Elysia({ prefix: '/api/veo' })
       const beatImgs: { first: (typeof sortedImgs)[number]; last?: (typeof sortedImgs)[number] }[] = []
       if (sortedImgs.length === beats.length) {
         beats.forEach((_, i) => beatImgs.push({ first: sortedImgs[i] }))
+      } else if (sortedImgs.length === beats.length * 2) {
+        // 2 images per beat uniformly (even for SINGLE-tagged beats) — treat all as start+end morph.
+        let idx = 0
+        for (let i = 0; i < beats.length; i++) beatImgs.push({ first: sortedImgs[idx++], last: sortedImgs[idx++] })
       } else if (sortedImgs.length === expectedSE) {
         let idx = 0
         for (const b of beats) {
@@ -286,7 +290,7 @@ export const veoRoutes = new Elysia({ prefix: '/api/veo' })
         }
       } else {
         set.status = 400
-        return { error: `Jumlah gambar (${sortedImgs.length}) ga cocok. Butuh ${beats.length} (1 gambar/beat) ATAU ${expectedSE} (START+END). Upload urut: beat_01, beat_02, … (tiap beat START+END: START dulu, END sesudahnya).` }
+        return { error: `Jumlah gambar (${sortedImgs.length}) ga cocok. Butuh ${beats.length} (1/beat), ${beats.length * 2} (2/beat), ATAU ${expectedSE} (START+END per tag). Upload urut beat_01, beat_02, … (tiap beat: START dulu, END sesudahnya).` }
       }
       const [project] = await db.insert(veoProjects)
         .values({ userId: user.id, title: (body.title?.trim() || 'TikTok').slice(0, 200), facelessMode: 'static', facelessVoiceMode: 'single' })
